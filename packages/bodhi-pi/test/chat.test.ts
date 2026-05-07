@@ -1,6 +1,13 @@
 import type { SessionConfigOption, SessionNotification } from "@agentclientprotocol/sdk";
 import { LLMock } from "@copilotkit/aimock";
-import { getModel } from "@mariozechner/pi-ai";
+import {
+	type Api,
+	type FauxProviderRegistration,
+	fauxAssistantMessage,
+	getModel,
+	type Model,
+	registerFauxProvider,
+} from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
 	createBodhiPiAgent,
@@ -39,15 +46,25 @@ function asSelectOption(opt: SessionConfigOption | undefined): SelectOption {
 }
 
 let mocks: LLMock[] = [];
+let fauxProviders: FauxProviderRegistration[] = [];
 
 beforeEach(() => {
 	mocks = [];
+	fauxProviders = [];
 });
 
 afterEach(async () => {
 	await Promise.all(mocks.map((m) => m.stop()));
 	mocks = [];
+	for (const p of fauxProviders) p.unregister();
+	fauxProviders = [];
 });
+
+function newFaux(opts?: Parameters<typeof registerFauxProvider>[0]): FauxProviderRegistration {
+	const p = registerFauxProvider(opts);
+	fauxProviders.push(p);
+	return p;
+}
 
 async function startMock(): Promise<LLMock> {
 	const mock = new LLMock({ port: 0 });
@@ -417,4 +434,129 @@ test("permanent delete via _bodhi-pi/session/delete", async () => {
 	expect(list.sessions.some((s: { sessionId: string }) => s.sessionId === sessionId)).toBe(false);
 
 	await expect(clientConn.loadSession({ sessionId, cwd, mcpServers: [] })).rejects.toThrow(/unknown session/);
+});
+
+test("initialize advertises agentInfo with bodhi-pi name + version", async () => {
+	const mock = await startMock();
+	mock.onMessage(/.*/, { content: "ack" });
+
+	const baseModel = getModel("openai", "gpt-5-mini");
+	const { clientConn } = makeClient({
+		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
+		defaultModelId: baseModel.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+
+	const initResult = await clientConn.initialize(stdInitParams);
+	expect(initResult.agentInfo).toEqual({ name: "bodhi-pi", version: expect.any(String) });
+});
+
+test("listSessions.updatedAt bumps on each prompt", async () => {
+	const mock = await startMock();
+	mock.onMessage(/.*/, { content: "noted" });
+
+	const baseModel = getModel("openai", "gpt-5-mini");
+	const store = createInMemorySessionStore();
+	const cwd = "/test/updated-at";
+
+	const { clientConn } = makeClient({
+		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
+		defaultModelId: baseModel.id,
+		sessionStore: store,
+	});
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd, mcpServers: [] });
+
+	const beforeRecord = await store.load(sessionId);
+	expect(beforeRecord, "session record present").toBeDefined();
+	const initialUpdatedAt = (beforeRecord as { updatedAt: number }).updatedAt;
+	const initialCreatedAt = (beforeRecord as { createdAt: number }).createdAt;
+	expect(initialUpdatedAt).toBe(initialCreatedAt);
+
+	// Wait a moment so the prompt's updatedAt is strictly greater.
+	await new Promise((r) => setTimeout(r, 5));
+	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+	const list = await clientConn.listSessions({ cwd });
+	const entry = list.sessions.find((s: { sessionId: string }) => s.sessionId === sessionId);
+	expect(entry, "session present in list").toBeDefined();
+	const listedUpdatedAt = new Date((entry as { updatedAt: string }).updatedAt).getTime();
+	expect(listedUpdatedAt).toBeGreaterThan(initialUpdatedAt);
+});
+
+test("prompt echoes userMessageId from the request", async () => {
+	const faux = newFaux();
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	const model = faux.getModel() as Model<Api>;
+
+	const { clientConn } = makeClient({
+		models: [model],
+		defaultModelId: model.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: "/", mcpServers: [] });
+
+	const result = await clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "hi" }],
+		messageId: "msg-abc-123",
+	});
+	expect(result.userMessageId).toBe("msg-abc-123");
+});
+
+test("stopReason maps from pi-agent-core 'length' to ACP 'max_tokens'", async () => {
+	const faux = newFaux();
+	faux.setResponses([fauxAssistantMessage("truncated", { stopReason: "length" })]);
+	const model = faux.getModel() as Model<Api>;
+
+	const { clientConn } = makeClient({
+		models: [model],
+		defaultModelId: model.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: "/", mcpServers: [] });
+
+	const result = await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "x" }] });
+	expect(result.stopReason).toBe("max_tokens");
+});
+
+test("cancel during prompt yields stopReason 'cancelled'", async () => {
+	// Slow streaming so we can land a cancel between start and end.
+	const faux = newFaux({ tokensPerSecond: 30 });
+	faux.setResponses([fauxAssistantMessage("a long enough message to be interrupted by cancellation")]);
+	const model = faux.getModel() as Model<Api>;
+
+	const { clientConn } = makeClient({
+		models: [model],
+		defaultModelId: model.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: "/", mcpServers: [] });
+
+	const promptPromise = clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "stream" }] });
+	// Give the stream a tick or two to start.
+	await new Promise((r) => setTimeout(r, 30));
+	await clientConn.cancel({ sessionId });
+	const result = await promptPromise;
+	expect(result.stopReason).toBe("cancelled");
+});
+
+test("listSessions omits nextCursor when there's no next page", async () => {
+	const mock = await startMock();
+	mock.onMessage(/.*/, { content: "ack" });
+
+	const baseModel = getModel("openai", "gpt-5-mini");
+	const { clientConn } = makeClient({
+		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
+		defaultModelId: baseModel.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+	await clientConn.initialize(stdInitParams);
+	await clientConn.newSession({ cwd: "/x", mcpServers: [] });
+
+	const list = (await clientConn.listSessions({})) as Record<string, unknown>;
+	expect("nextCursor" in list).toBe(false);
 });

@@ -26,11 +26,14 @@ import {
 	type SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
 import type { AgentMessage, AgentTool, Agent as PiAgent } from "@mariozechner/pi-agent-core";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model, StopReason as PiStopReason } from "@mariozechner/pi-ai";
 import { createAgentSession } from "../core/agent-session.js";
 import type { Filesystem } from "../filesystem/filesystem.js";
 import type { SessionStore } from "../sessions/session-store.js";
 import { createBuiltinTools, toolKindFor } from "../tools/index.js";
+import { BODHI_PI_VERSION } from "../version.js";
+
+type AcpStopReason = PromptResponse["stopReason"];
 
 const MODEL_CONFIG_ID = "model";
 const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
@@ -53,6 +56,8 @@ interface SessionState {
 	currentModelId: string;
 	cwd: string;
 	tools: AgentTool[];
+	/** Set by `cancel()`; read by `prompt()` to return `stopReason: "cancelled"`. Reset before each prompt. */
+	cancelled: boolean;
 }
 
 /**
@@ -84,6 +89,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
 		return {
 			protocolVersion: 1,
+			agentInfo: { name: "bodhi-pi", version: BODHI_PI_VERSION },
 			agentCapabilities: {
 				loadSession: true,
 				sessionCapabilities: {
@@ -118,6 +124,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			currentModelId: this.config.defaultModelId,
 			cwd: record.cwd,
 			tools,
+			cancelled: false,
 		});
 		return {
 			sessionId: record.id,
@@ -217,9 +224,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: result.sessions.map((s) => ({
 				sessionId: s.sessionId,
 				cwd: s.cwd,
-				updatedAt: new Date(s.createdAt).toISOString(),
+				updatedAt: new Date(s.updatedAt).toISOString(),
 			})),
-			nextCursor: result.nextCursor ?? null,
+			...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
 		};
 	}
 
@@ -285,6 +292,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.map((b) => b.text)
 			.join("");
 
+		// Reset cancel flag at the start of every prompt so a previous cancel doesn't bleed in.
+		session.cancelled = false;
+		let lastAssistantStopReason: PiStopReason | undefined;
+		let lastAssistantErrorMessage: string | undefined;
+
 		const unsubscribeStream = session.piAgent.subscribe(async (event) => {
 			if (event.type !== "message_update") return;
 			const sub = event.assistantMessageEvent;
@@ -332,6 +344,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			if (event.type !== "message_end") return;
 			const role = event.message.role;
 			if (role !== "user" && role !== "assistant" && role !== "toolResult") return;
+			if (role === "assistant") {
+				const msg = event.message as { stopReason?: PiStopReason; errorMessage?: string };
+				lastAssistantStopReason = msg.stopReason;
+				lastAssistantErrorMessage = msg.errorMessage;
+			}
 			await this.config.sessionStore.append(params.sessionId, {
 				type: "message",
 				id: randomUUID(),
@@ -343,7 +360,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		try {
 			await session.piAgent.prompt(text);
 			await session.piAgent.waitForIdle();
-			return { stopReason: "end_turn" };
+			if (session.cancelled) {
+				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
+			}
+			if (lastAssistantStopReason === "error") {
+				throw new RequestError(-32603, lastAssistantErrorMessage ?? "model error");
+			}
+			const stopReason = mapStopReason(lastAssistantStopReason);
+			return { stopReason, userMessageId: params.messageId ?? null };
 		} finally {
 			unsubscribeStream();
 			unsubscribeTools();
@@ -352,7 +376,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	async cancel(params: CancelNotification): Promise<void> {
-		this.sessions.get(params.sessionId)?.piAgent.abort();
+		const session = this.sessions.get(params.sessionId);
+		if (!session) return;
+		session.cancelled = true;
+		session.piAgent.abort();
 	}
 
 	private findModel(id: string): Model<Api> {
@@ -396,7 +423,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			initialState: { model: restoredModel, messages, tools },
 			getApiKey: this.config.getApiKey,
 		});
-		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools });
+		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools, cancelled: false });
 		return { entries: record.entries, currentModelId: modelId };
 	}
 }
@@ -472,4 +499,27 @@ function formatLocationHint(args: unknown): string {
 	if (!args || typeof args !== "object") return "";
 	const path = (args as { path?: unknown }).path;
 	return typeof path === "string" ? path : "";
+}
+
+/**
+ * Map pi-agent-core's `StopReason` to ACP's `stopReason` enum.
+ *
+ *   - `"aborted"` → `"cancelled"`
+ *   - `"length"` → `"max_tokens"`
+ *   - `"stop"` / `"toolUse"` → `"end_turn"`
+ *   - `"error"` is handled separately by the caller (throws `RequestError`).
+ *   - undefined falls back to `"end_turn"`.
+ */
+function mapStopReason(sr: PiStopReason | undefined): AcpStopReason {
+	switch (sr) {
+		case "aborted":
+			return "cancelled";
+		case "length":
+			return "max_tokens";
+		case "stop":
+		case "toolUse":
+			return "end_turn";
+		default:
+			return "end_turn";
+	}
 }

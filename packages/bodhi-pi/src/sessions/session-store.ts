@@ -10,6 +10,8 @@ export interface SessionRecord {
 	id: string;
 	cwd: string;
 	createdAt: number;
+	/** Last-modified timestamp. Implementations MUST bump this on every `append()`. */
+	updatedAt: number;
 	entries: SessionEntry[];
 }
 
@@ -18,6 +20,8 @@ export interface SessionInfo {
 	sessionId: string;
 	cwd: string;
 	createdAt: number;
+	/** Last-modified timestamp. */
+	updatedAt: number;
 	messageCount: number;
 }
 

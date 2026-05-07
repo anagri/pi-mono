@@ -19,10 +19,12 @@ export function createInMemorySessionStore(): SessionStore {
 
 	return {
 		async create({ cwd }) {
+			const now = Date.now();
 			const record: SessionRecord = {
 				id: randomUUID(),
 				cwd,
-				createdAt: Date.now(),
+				createdAt: now,
+				updatedAt: now,
 				entries: [],
 			};
 			sessions.set(record.id, record);
@@ -38,16 +40,18 @@ export function createInMemorySessionStore(): SessionStore {
 			const record = sessions.get(sessionId);
 			if (!record) throw new Error(`session ${sessionId} not found (or deleted)`);
 			record.entries.push(entry);
+			record.updatedAt = Date.now();
 		},
 
 		async list({ cwd, cursor }: ListSessionsRequest): Promise<ListSessionsResult> {
 			const all = [...sessions.values()]
 				.filter((r) => (cwd ? r.cwd === cwd : true))
-				.sort((a, b) => b.createdAt - a.createdAt)
+				.sort((a, b) => b.updatedAt - a.updatedAt)
 				.map((r) => ({
 					sessionId: r.id,
 					cwd: r.cwd,
 					createdAt: r.createdAt,
+					updatedAt: r.updatedAt,
 					messageCount: r.entries.filter((e) => e.type === "message").length,
 				}));
 			// Single-page in-memory; cursor is not used.
