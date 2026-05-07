@@ -1,0 +1,94 @@
+import path from "node:path";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import picomatch from "picomatch";
+import { type Static, Type } from "typebox";
+import { resolvePath, type ToolDeps } from "./index.js";
+import { GREP_MAX_BYTES, GREP_MAX_LINE_LENGTH, GREP_MAX_MATCHES } from "./limits.js";
+import { walk } from "./walk.js";
+
+const grepSchema = Type.Object({
+	pattern: Type.String({ description: "Regex (or literal string when literal=true) to search for in file contents." }),
+	path: Type.String({ description: "Directory to search (relative or absolute)" }),
+	glob: Type.Optional(Type.String({ description: 'Optional file glob filter, e.g. "**/*.ts".' })),
+	ignoreCase: Type.Optional(Type.Boolean({ description: "Case-insensitive match" })),
+	literal: Type.Optional(Type.Boolean({ description: "Treat pattern as a literal string instead of regex" })),
+	limit: Type.Optional(Type.Number({ description: "Maximum number of matching lines to return" })),
+});
+
+type GrepInput = Static<typeof grepSchema>;
+
+function escapeRegex(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isLikelyBinary(content: string): boolean {
+	const sample = content.length > 512 ? content.slice(0, 512) : content;
+	for (let i = 0; i < sample.length; i++) {
+		if (sample.charCodeAt(i) === 0) return true;
+	}
+	return false;
+}
+
+function truncateLine(line: string): string {
+	if (line.length <= GREP_MAX_LINE_LENGTH) return line;
+	return `${line.slice(0, GREP_MAX_LINE_LENGTH)}...`;
+}
+
+export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
+	return {
+		name: "grep",
+		label: "grep",
+		description: `Search file contents for a regex (or literal string). Default limit ${GREP_MAX_MATCHES} matches; line text truncated at ${GREP_MAX_LINE_LENGTH} chars; output cap ${Math.floor(GREP_MAX_BYTES / 1024)}KB. Skips files containing NUL bytes.`,
+		parameters: grepSchema,
+		async execute(_toolCallId: string, { pattern, path: dirPath, glob, ignoreCase, literal, limit }: GrepInput) {
+			const root = resolvePath(deps.cwd, dirPath);
+			const cap = Math.min(limit ?? GREP_MAX_MATCHES, GREP_MAX_MATCHES);
+			const flags = ignoreCase ? "i" : "";
+			const re = new RegExp(literal ? escapeRegex(pattern) : pattern, flags);
+			const globMatcher = glob ? picomatch(glob, { dot: true }) : undefined;
+
+			const matches: string[] = [];
+			let bytes = 0;
+			let truncatedByBytes = false;
+			let truncatedByLimit = false;
+
+			outer: for await (const entry of walk(deps.filesystem, root, { maxEntries: 50_000 })) {
+				if (!entry.isFile) continue;
+				const rel = path.posix.relative(root, entry.absolutePath);
+				if (globMatcher && !globMatcher(rel) && !globMatcher(entry.absolutePath)) continue;
+				let content: string;
+				try {
+					content = await deps.filesystem.readTextFile(entry.absolutePath);
+				} catch {
+					continue;
+				}
+				if (isLikelyBinary(content)) continue;
+				const lines = content.split("\n");
+				for (let i = 0; i < lines.length; i++) {
+					if (!re.test(lines[i])) continue;
+					if (matches.length >= cap) {
+						truncatedByLimit = true;
+						break outer;
+					}
+					const line = `${entry.absolutePath}:${i + 1}:${truncateLine(lines[i])}`;
+					if (bytes + line.length + 1 > GREP_MAX_BYTES) {
+						truncatedByBytes = true;
+						break outer;
+					}
+					matches.push(line);
+					bytes += line.length + 1;
+				}
+			}
+
+			let output = matches.join("\n");
+			if (matches.length === 0) {
+				output = `No matches for ${pattern} under ${dirPath}${glob ? ` (glob: ${glob})` : ""}.`;
+			} else if (truncatedByLimit) {
+				output += `\n\n[Truncated at ${cap}-match limit. Refine the pattern for fewer hits.]`;
+			} else if (truncatedByBytes) {
+				output += `\n\n[Truncated by ${Math.floor(GREP_MAX_BYTES / 1024)}KB output limit.]`;
+			}
+			return { content: [{ type: "text", text: output }], details: undefined };
+		},
+	};
+}

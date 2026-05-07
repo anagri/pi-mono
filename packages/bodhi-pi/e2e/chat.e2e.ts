@@ -1,7 +1,7 @@
 import type { SessionConfigOption, SessionNotification } from "@agentclientprotocol/sdk";
 import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
 import { expect, test } from "vitest";
-import { createBodhiPiAgent, createInMemorySessionStore } from "../src/index.js";
+import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
 import { createInProcessAcpPair } from "../test/helpers/in-process-connection.js";
 
 type SelectOption = SessionConfigOption & { type: "select" };
@@ -56,6 +56,7 @@ async function runSingleTurn(opts: {
 			defaultModelId: opts.model.id,
 			getApiKey: (p) => (p === opts.provider ? opts.apiKey : undefined),
 			sessionStore: createInMemorySessionStore(),
+			filesystem: createInMemoryFilesystem(),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {
@@ -128,6 +129,7 @@ test("switching model mid-session changes provenance", async () => {
 				return undefined;
 			},
 			sessionStore: createInMemorySessionStore(),
+			filesystem: createInMemoryFilesystem(),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {
@@ -194,6 +196,7 @@ test("real LLM remembers context across two prompts in same session", async () =
 			defaultModelId: haiku.id,
 			getApiKey: (p) => (p === "anthropic" ? apiKey : undefined),
 			sessionStore: createInMemorySessionStore(),
+			filesystem: createInMemoryFilesystem(),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {

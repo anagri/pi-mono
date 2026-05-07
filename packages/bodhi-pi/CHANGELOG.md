@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- M3.1 — Filesystem interface + 6 built-in FS tools (`read`, `write`, `edit`, `ls`, `find`, `grep`). Adds mandatory host-injected `BodhiPiConfig.filesystem: Filesystem` (no default fallback) and ships `createInMemoryFilesystem()` as a public reference helper. Tools are always registered per session and route every FS call through the injected `Filesystem`. `find` and `grep` are pure-JS (no `fd` / `rg` shell-out) and use `picomatch` for glob matching. Tool execution surfaces over the wire as ACP `tool_call` (start) / `tool_call_update` (completion) `session/update` notifications. `session/load` now replays persisted tool calls inline with user/agent message chunks (resolves the deferred-from-M2.1 tool replay path). New deps: `typebox` (^1.1.24) and `picomatch` (^4.0.4). We deliberately do **not** implement ACP `fs/read_text_file` / `fs/write_text_file` — those are a separate client-mediated FS mechanism, orthogonal to bodhi-pi's host-injected `Filesystem`.
+  - 13 new integration tests in `test/fs.test.ts` driven via pi-ai's `registerFauxProvider` (in-process scripted assistant messages with `fauxToolCall`), plus 2 new e2e tests in `e2e/fs.e2e.ts` against real Haiku.
+
 - M2.1 — Basic session persistence (persist · load · resume · list · close) over ACP. Introduces a mandatory host-injected `BodhiPiConfig.sessionStore: SessionStore` (no default fallback). Ships `createInMemorySessionStore()` as a public reference helper. The agent now advertises `loadSession`, `sessionCapabilities.list`, `sessionCapabilities.resume`, `sessionCapabilities.close` capabilities, plus `_meta["bodhi-pi"].sessionDelete: true` for the custom extension.
   - `session/load` performs the full ACP-spec history replay via `user_message_chunk` / `agent_message_chunk` notifications, then returns the active model in `configOptions`.
   - `session/resume` rehydrates the session without replaying history (per ACP).

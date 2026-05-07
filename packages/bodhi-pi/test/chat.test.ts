@@ -2,7 +2,12 @@ import type { SessionConfigOption, SessionNotification } from "@agentclientproto
 import { LLMock } from "@copilotkit/aimock";
 import { getModel } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createBodhiPiAgent, createInMemorySessionStore, type SessionStore } from "../src/index.js";
+import {
+	createBodhiPiAgent,
+	createInMemoryFilesystem,
+	createInMemorySessionStore,
+	type SessionStore,
+} from "../src/index.js";
 import { createInProcessAcpPair } from "./helpers/in-process-connection.js";
 
 type SelectOption = SessionConfigOption & { type: "select" };
@@ -77,6 +82,7 @@ function makeClient(opts: {
 			defaultModelId: opts.defaultModelId,
 			getApiKey: opts.getApiKey ?? (() => "test-key"),
 			sessionStore: opts.sessionStore,
+			filesystem: createInMemoryFilesystem(),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {
