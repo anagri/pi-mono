@@ -1,70 +1,17 @@
-import type { SessionConfigOption, SessionNotification } from "@agentclientprotocol/sdk";
 import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
 import { expect, test } from "vitest";
-import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
-import { createInProcessAcpPair } from "../test/helpers/in-process-connection.js";
+import { stdInitParams } from "../test/helpers/acp-constants.js";
+import { asSelectOption } from "../test/helpers/acp-narrow.js";
+import { requireEnv } from "../test/helpers/env.js";
+import { createTestHarness } from "../test/helpers/harness.js";
+import { chunkedAgentText } from "../test/helpers/notifications.js";
 
-type SelectOption = SessionConfigOption & { type: "select" };
-
-function chunkedAgentText(updates: SessionNotification[]): string {
-	return updates
-		.filter((u) => u.update.sessionUpdate === "agent_message_chunk")
-		.map((u) => {
-			const content = (u.update as { content: { type: string; text?: string } }).content;
-			return content.type === "text" ? (content.text ?? "") : "";
-		})
-		.join("");
-}
-
-function asSelectOption(opt: SessionConfigOption | undefined): SelectOption {
-	expect(opt, "expected a SessionConfigOption").toBeDefined();
-	expect(opt?.type).toBe("select");
-	return opt as SelectOption;
-}
-
-function requireEnv(name: string): string {
-	const value = process.env[name];
-	expect(value, `${name} must be set in e2e/.env.test to run e2e tests`).toBeTruthy();
-	return value as string;
-}
-
-const stdInitParams = {
-	protocolVersion: 1,
-	clientCapabilities: {
-		fs: { readTextFile: false, writeTextFile: false },
-		terminal: false,
-	},
-} as const;
-
-interface SingleModelHarness {
-	stopReason: string;
-	chunks: SessionNotification[];
-	text: string;
-}
-
-async function runSingleTurn(opts: {
-	model: Model<Api>;
-	apiKey: string;
-	provider: string;
-	prompt: string;
-}): Promise<SingleModelHarness> {
-	const updates: SessionNotification[] = [];
-
-	const { clientConn } = createInProcessAcpPair(
-		createBodhiPiAgent({
-			models: [opts.model],
-			defaultModelId: opts.model.id,
-			getApiKey: (p) => (p === opts.provider ? opts.apiKey : undefined),
-			sessionStore: createInMemorySessionStore(),
-			filesystem: createInMemoryFilesystem(),
-		}),
-		() => ({
-			sessionUpdate: async (params) => {
-				updates.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-		}),
-	);
+async function runSingleTurn(opts: { model: Model<Api>; apiKey: string; provider: string; prompt: string }) {
+	const { clientConn, updates } = createTestHarness({
+		models: [opts.model],
+		defaultModelId: opts.model.id,
+		getApiKey: (p) => (p === opts.provider ? opts.apiKey : undefined),
+	});
 
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
@@ -117,27 +64,15 @@ test("switching model mid-session changes provenance", async () => {
 	const claude = getModel("anthropic", "claude-haiku-4-5");
 	const gpt = getModel("openai", "gpt-5-mini");
 
-	const updates: SessionNotification[] = [];
-
-	const { clientConn } = createInProcessAcpPair(
-		createBodhiPiAgent({
-			models: [claude, gpt],
-			defaultModelId: claude.id,
-			getApiKey: (p) => {
-				if (p === "anthropic") return anthropicKey;
-				if (p === "openai") return openaiKey;
-				return undefined;
-			},
-			sessionStore: createInMemorySessionStore(),
-			filesystem: createInMemoryFilesystem(),
-		}),
-		() => ({
-			sessionUpdate: async (params) => {
-				updates.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-		}),
-	);
+	const { clientConn, updates } = createTestHarness({
+		models: [claude, gpt],
+		defaultModelId: claude.id,
+		getApiKey: (p) => {
+			if (p === "anthropic") return anthropicKey;
+			if (p === "openai") return openaiKey;
+			return undefined;
+		},
+	});
 
 	await clientConn.initialize(stdInitParams);
 	const { sessionId, configOptions } = await clientConn.newSession({
@@ -158,6 +93,7 @@ test("switching model mid-session changes provenance", async () => {
 	});
 	expect(claudeResult.stopReason).toBe("end_turn");
 	const claudeText = chunkedAgentText(updates).toLowerCase();
+	// Substring match — real LLMs vary phrasing run-to-run.
 	expect(
 		claudeText.includes("anthropic") || claudeText.includes("claude"),
 		`expected anthropic provenance, got: ${JSON.stringify(claudeText)}`,
@@ -187,24 +123,12 @@ test("switching model mid-session changes provenance", async () => {
 test("real LLM remembers context across two prompts in same session", async () => {
 	const apiKey = requireEnv("ANTHROPIC_API_KEY");
 
-	const updates: SessionNotification[] = [];
 	const haiku = getModel("anthropic", "claude-haiku-4-5");
-
-	const { clientConn } = createInProcessAcpPair(
-		createBodhiPiAgent({
-			models: [haiku],
-			defaultModelId: haiku.id,
-			getApiKey: (p) => (p === "anthropic" ? apiKey : undefined),
-			sessionStore: createInMemorySessionStore(),
-			filesystem: createInMemoryFilesystem(),
-		}),
-		() => ({
-			sessionUpdate: async (params) => {
-				updates.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-		}),
-	);
+	const { clientConn, updates } = createTestHarness({
+		models: [haiku],
+		defaultModelId: haiku.id,
+		getApiKey: (p) => (p === "anthropic" ? apiKey : undefined),
+	});
 
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });

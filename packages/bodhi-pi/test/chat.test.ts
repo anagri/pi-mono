@@ -1,4 +1,3 @@
-import type { SessionConfigOption, SessionNotification } from "@agentclientprotocol/sdk";
 import { LLMock } from "@copilotkit/aimock";
 import {
 	type Api,
@@ -9,41 +8,11 @@ import {
 	registerFauxProvider,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import {
-	createBodhiPiAgent,
-	createInMemoryFilesystem,
-	createInMemorySessionStore,
-	type SessionStore,
-} from "../src/index.js";
-import { createInProcessAcpPair } from "./helpers/in-process-connection.js";
-
-type SelectOption = SessionConfigOption & { type: "select" };
-
-function chunkedAgentText(updates: SessionNotification[]): string {
-	return updates
-		.filter((u) => u.update.sessionUpdate === "agent_message_chunk")
-		.map((u) => {
-			const content = (u.update as { content: { type: string; text?: string } }).content;
-			return content.type === "text" ? (content.text ?? "") : "";
-		})
-		.join("");
-}
-
-function userChunkText(updates: SessionNotification[]): string {
-	return updates
-		.filter((u) => u.update.sessionUpdate === "user_message_chunk")
-		.map((u) => {
-			const content = (u.update as { content: { type: string; text?: string } }).content;
-			return content.type === "text" ? (content.text ?? "") : "";
-		})
-		.join("");
-}
-
-function asSelectOption(opt: SessionConfigOption | undefined): SelectOption {
-	expect(opt, "expected a SessionConfigOption").toBeDefined();
-	expect(opt?.type).toBe("select");
-	return opt as SelectOption;
-}
+import { createInMemorySessionStore } from "../src/index.js";
+import { stdInitParams } from "./helpers/acp-constants.js";
+import { asSelectOption } from "./helpers/acp-narrow.js";
+import { createTestHarness } from "./helpers/harness.js";
+import { chunkedAgentText, userChunkText } from "./helpers/notifications.js";
 
 let mocks: LLMock[] = [];
 let fauxProviders: FauxProviderRegistration[] = [];
@@ -60,12 +29,6 @@ afterEach(async () => {
 	fauxProviders = [];
 });
 
-function newFaux(opts?: Parameters<typeof registerFauxProvider>[0]): FauxProviderRegistration {
-	const p = registerFauxProvider(opts);
-	fauxProviders.push(p);
-	return p;
-}
-
 async function startMock(): Promise<LLMock> {
 	const mock = new LLMock({ port: 0 });
 	await mock.start();
@@ -73,42 +36,10 @@ async function startMock(): Promise<LLMock> {
 	return mock;
 }
 
-const stdInitParams = {
-	protocolVersion: 1,
-	clientCapabilities: {
-		fs: { readTextFile: false, writeTextFile: false },
-		terminal: false,
-	},
-} as const;
-
-interface ClientHarness {
-	clientConn: ReturnType<typeof createInProcessAcpPair>["clientConn"];
-	updates: SessionNotification[];
-}
-
-function makeClient(opts: {
-	models: Parameters<typeof createBodhiPiAgent>[0]["models"];
-	defaultModelId: string;
-	getApiKey?: (p: string) => string | undefined;
-	sessionStore: SessionStore;
-}): ClientHarness {
-	const updates: SessionNotification[] = [];
-	const { clientConn } = createInProcessAcpPair(
-		createBodhiPiAgent({
-			models: opts.models,
-			defaultModelId: opts.defaultModelId,
-			getApiKey: opts.getApiKey ?? (() => "test-key"),
-			sessionStore: opts.sessionStore,
-			filesystem: createInMemoryFilesystem(),
-		}),
-		() => ({
-			sessionUpdate: async (params) => {
-				updates.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-		}),
-	);
-	return { clientConn, updates };
+function newFaux(opts?: Parameters<typeof registerFauxProvider>[0]): FauxProviderRegistration {
+	const p = registerFauxProvider(opts);
+	fauxProviders.push(p);
+	return p;
 }
 
 test("simple chat round-trips via ACP through aimock", async () => {
@@ -116,7 +47,7 @@ test("simple chat round-trips via ACP through aimock", async () => {
 	mock.onMessage(/Monday/i, { content: "tuesday" });
 
 	const baseModel = getModel("openai", "gpt-5-mini");
-	const { clientConn, updates } = makeClient({
+	const { clientConn, updates } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: createInMemorySessionStore(),
@@ -163,7 +94,7 @@ test("switch model via setSessionConfigOption routes to second mock", async () =
 		baseUrl: `${mockB.url}/v1`,
 	};
 
-	const { clientConn, updates } = makeClient({
+	const { clientConn, updates } = createTestHarness({
 		models: [modelA, modelB],
 		defaultModelId: "model-a",
 		sessionStore: createInMemorySessionStore(),
@@ -203,7 +134,7 @@ test("persists messages and replays via session/load", async () => {
 	const store = createInMemorySessionStore();
 	const cwd = "/test/persist";
 
-	const writer = makeClient({
+	const writer = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -224,7 +155,7 @@ test("persists messages and replays via session/load", async () => {
 	expect((messageEntries[1] as { message: { role: string } }).message.role).toBe("assistant");
 
 	// Open a fresh client against the same store and load the session.
-	const reader = makeClient({
+	const reader = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -249,7 +180,7 @@ test("lists sessions filtered by cwd", async () => {
 
 	const baseModel = getModel("openai", "gpt-5-mini");
 	const store = createInMemorySessionStore();
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -276,7 +207,7 @@ test("close releases active resources but data persists", async () => {
 	const store = createInMemorySessionStore();
 	const cwd = "/test/close";
 
-	const { clientConn, updates } = makeClient({
+	const { clientConn, updates } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -334,7 +265,7 @@ test("model change persists across load", async () => {
 	const store = createInMemorySessionStore();
 	const cwd = "/test/model-persist";
 
-	const writer = makeClient({
+	const writer = createTestHarness({
 		models: [modelA, modelB],
 		defaultModelId: "model-a",
 		sessionStore: store,
@@ -355,7 +286,7 @@ test("model change persists across load", async () => {
 	expect(chunkedAgentText(writer.updates)).toBe("from-b");
 
 	// Fresh client, same store; load and verify model-b is restored.
-	const reader = makeClient({
+	const reader = createTestHarness({
 		models: [modelA, modelB],
 		defaultModelId: "model-a",
 		sessionStore: store,
@@ -378,7 +309,7 @@ test("resumeSession rehydrates without replaying history", async () => {
 	const store = createInMemorySessionStore();
 	const cwd = "/test/resume";
 
-	const writer = makeClient({
+	const writer = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -387,7 +318,7 @@ test("resumeSession rehydrates without replaying history", async () => {
 	const { sessionId } = await writer.clientConn.newSession({ cwd, mcpServers: [] });
 	await writer.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "first" }] });
 
-	const reader = makeClient({
+	const reader = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -414,7 +345,7 @@ test("permanent delete via _bodhi-pi/session/delete", async () => {
 	const store = createInMemorySessionStore();
 	const cwd = "/test/delete";
 
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -441,7 +372,7 @@ test("initialize advertises agentInfo with bodhi-pi name + version", async () =>
 	mock.onMessage(/.*/, { content: "ack" });
 
 	const baseModel = getModel("openai", "gpt-5-mini");
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: createInMemorySessionStore(),
@@ -459,7 +390,7 @@ test("listSessions.updatedAt bumps on each prompt", async () => {
 	const store = createInMemorySessionStore();
 	const cwd = "/test/updated-at";
 
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: store,
@@ -489,7 +420,7 @@ test("prompt echoes userMessageId from the request", async () => {
 	faux.setResponses([fauxAssistantMessage("ok")]);
 	const model = faux.getModel() as Model<Api>;
 
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [model],
 		defaultModelId: model.id,
 		sessionStore: createInMemorySessionStore(),
@@ -510,7 +441,7 @@ test("stopReason maps from pi-agent-core 'length' to ACP 'max_tokens'", async ()
 	faux.setResponses([fauxAssistantMessage("truncated", { stopReason: "length" })]);
 	const model = faux.getModel() as Model<Api>;
 
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [model],
 		defaultModelId: model.id,
 		sessionStore: createInMemorySessionStore(),
@@ -528,7 +459,7 @@ test("cancel during prompt yields stopReason 'cancelled'", async () => {
 	faux.setResponses([fauxAssistantMessage("a long enough message to be interrupted by cancellation")]);
 	const model = faux.getModel() as Model<Api>;
 
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [model],
 		defaultModelId: model.id,
 		sessionStore: createInMemorySessionStore(),
@@ -549,7 +480,7 @@ test("listSessions omits nextCursor when there's no next page", async () => {
 	mock.onMessage(/.*/, { content: "ack" });
 
 	const baseModel = getModel("openai", "gpt-5-mini");
-	const { clientConn } = makeClient({
+	const { clientConn } = createTestHarness({
 		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
 		defaultModelId: baseModel.id,
 		sessionStore: createInMemorySessionStore(),

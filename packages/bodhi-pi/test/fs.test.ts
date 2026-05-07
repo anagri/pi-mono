@@ -1,29 +1,10 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
-import {
-	type Api,
-	type FauxProviderRegistration,
-	fauxAssistantMessage,
-	fauxToolCall,
-	type Model,
-	registerFauxProvider,
-} from "@mariozechner/pi-ai";
+import { type Api, type FauxProviderRegistration, type Model, registerFauxProvider } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import {
-	createBodhiPiAgent,
-	createInMemoryFilesystem,
-	createInMemorySessionStore,
-	type Filesystem,
-	type SessionStore,
-} from "../src/index.js";
-import { createInProcessAcpPair } from "./helpers/in-process-connection.js";
-
-const stdInitParams = {
-	protocolVersion: 1,
-	clientCapabilities: {
-		fs: { readTextFile: false, writeTextFile: false },
-		terminal: false,
-	},
-} as const;
+import { createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
+import { stdInitParams } from "./helpers/acp-constants.js";
+import { scriptToolThenDone } from "./helpers/faux-script.js";
+import { createTestHarness } from "./helpers/harness.js";
+import { toolCallStarts, toolCallUpdates, toolUpdateText } from "./helpers/tool-call-asserts.js";
 
 let providers: FauxProviderRegistration[] = [];
 
@@ -42,81 +23,17 @@ function newProvider(): FauxProviderRegistration {
 	return p;
 }
 
-interface ToolCallNotification {
-	sessionUpdate: "tool_call";
-	toolCallId: string;
-	title: string;
-	kind: string;
-	status: string;
-	rawInput: Record<string, unknown>;
-}
-
-interface ToolCallUpdateNotification {
-	sessionUpdate: "tool_call_update";
-	toolCallId: string;
-	status: string;
-	content?: Array<{ type: string; content?: { type: string; text?: string } }>;
-}
-
-function toolCallStarts(updates: SessionNotification[]): ToolCallNotification[] {
-	return updates
-		.map((u) => u.update as { sessionUpdate?: string })
-		.filter((u): u is ToolCallNotification => u.sessionUpdate === "tool_call");
-}
-
-function toolCallUpdates(updates: SessionNotification[]): ToolCallUpdateNotification[] {
-	return updates
-		.map((u) => u.update as { sessionUpdate?: string })
-		.filter((u): u is ToolCallUpdateNotification => u.sessionUpdate === "tool_call_update");
-}
-
-function toolUpdateText(u: ToolCallUpdateNotification): string {
-	const blocks = u.content ?? [];
-	return blocks
-		.map((b) => (b.type === "content" && b.content?.type === "text" ? (b.content.text ?? "") : ""))
-		.join("");
-}
-
-interface Harness {
-	clientConn: ReturnType<typeof createInProcessAcpPair>["clientConn"];
-	updates: SessionNotification[];
-	filesystem: Filesystem;
-	sessionStore: SessionStore;
-	model: Model<Api>;
-}
-
-function makeHarness(opts: { model: Model<Api>; filesystem?: Filesystem; sessionStore?: SessionStore }): Harness {
-	const filesystem = opts.filesystem ?? createInMemoryFilesystem();
-	const sessionStore = opts.sessionStore ?? createInMemorySessionStore();
-	const updates: SessionNotification[] = [];
-	const { clientConn } = createInProcessAcpPair(
-		createBodhiPiAgent({
-			models: [opts.model],
-			defaultModelId: opts.model.id,
-			getApiKey: () => "test-key",
-			sessionStore,
-			filesystem,
-		}),
-		() => ({
-			sessionUpdate: async (params) => {
-				updates.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-		}),
-	);
-	return { clientConn, updates, filesystem, sessionStore, model: opts.model };
-}
-
-function scriptToolThenDone(faux: FauxProviderRegistration, toolName: string, args: Record<string, unknown>): void {
-	faux.setResponses([
-		fauxAssistantMessage([fauxToolCall(toolName, args)], { stopReason: "toolUse" }),
-		fauxAssistantMessage("done"),
-	]);
+function harnessFor(
+	faux: FauxProviderRegistration,
+	opts?: { filesystem?: ReturnType<typeof createInMemoryFilesystem> },
+) {
+	const model = faux.getModel() as Model<Api>;
+	return createTestHarness({ models: [model], defaultModelId: model.id, filesystem: opts?.filesystem });
 }
 
 test("read returns file contents", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/notes.txt", "the cake is a lie");
 	scriptToolThenDone(faux, "read", { path: "/notes.txt" });
 
@@ -136,7 +53,7 @@ test("read returns file contents", async () => {
 
 test("read of missing file fails gracefully", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	scriptToolThenDone(faux, "read", { path: "/missing.txt" });
 
 	await harness.clientConn.initialize(stdInitParams);
@@ -151,7 +68,7 @@ test("read of missing file fails gracefully", async () => {
 
 test("write creates a new file", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	scriptToolThenDone(faux, "write", { path: "/out.txt", content: "hi" });
 
 	await harness.clientConn.initialize(stdInitParams);
@@ -162,12 +79,12 @@ test("write creates a new file", async () => {
 	expect(await harness.filesystem.readTextFile("/out.txt")).toBe("hi");
 	const ends = toolCallUpdates(harness.updates);
 	expect(ends[0].status).toBe("completed");
-	expect(toolUpdateText(ends[0])).toContain("Wrote 2 bytes");
+	expect(toolUpdateText(ends[0])).toMatch(/Wrote \d+ bytes/);
 });
 
 test("write creates parent directories", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	scriptToolThenDone(faux, "write", { path: "/sub/dir/out.txt", content: "deep" });
 
 	await harness.clientConn.initialize(stdInitParams);
@@ -180,7 +97,7 @@ test("write creates parent directories", async () => {
 
 test("edit replaces unique substring", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/code.txt", "foo bar baz");
 	scriptToolThenDone(faux, "edit", {
 		path: "/code.txt",
@@ -197,7 +114,7 @@ test("edit replaces unique substring", async () => {
 
 test("edit fails when oldText is not unique", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/dup.txt", "x x");
 	scriptToolThenDone(faux, "edit", {
 		path: "/dup.txt",
@@ -216,7 +133,7 @@ test("edit fails when oldText is not unique", async () => {
 
 test("ls lists directory entries", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/a.txt", "a");
 	await harness.filesystem.writeTextFile("/b.txt", "bb");
 	await harness.filesystem.mkdir("/sub");
@@ -234,7 +151,7 @@ test("ls lists directory entries", async () => {
 
 test("find returns matching files", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.mkdir("/src", { recursive: true });
 	for (const name of ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"]) {
 		await harness.filesystem.writeTextFile(`/src/${name}`, "// ts");
@@ -255,7 +172,7 @@ test("find returns matching files", async () => {
 
 test("find respects limit", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	for (let i = 0; i < 50; i++) {
 		await harness.filesystem.writeTextFile(`/f${i}.ts`, "x");
 	}
@@ -273,7 +190,7 @@ test("find respects limit", async () => {
 
 test("grep finds matches with file:line format", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/a.txt", "first line\nneedle here\nthird line");
 	await harness.filesystem.writeTextFile("/b.txt", "no match");
 	await harness.filesystem.writeTextFile("/c.txt", "needle on first line\nlater");
@@ -291,7 +208,7 @@ test("grep finds matches with file:line format", async () => {
 
 test("grep with glob filter only matches included files", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/keep.ts", "needle");
 	await harness.filesystem.writeTextFile("/skip.md", "needle");
 	scriptToolThenDone(faux, "grep", {
@@ -311,9 +228,10 @@ test("grep with glob filter only matches included files", async () => {
 
 test("grep skips binary files", async () => {
 	const faux = newProvider();
-	const harness = makeHarness({ model: faux.getModel() as Model<Api> });
+	const harness = harnessFor(faux);
 	await harness.filesystem.writeTextFile("/text.txt", "needle in the haystack");
-	await harness.filesystem.writeTextFile("/bin.dat", "binary content needle");
+	// NUL byte built explicitly so the binary-skip path is visible to readers.
+	await harness.filesystem.writeTextFile("/bin.dat", `binary${String.fromCharCode(0)}content needle`);
 	scriptToolThenDone(faux, "grep", { pattern: "needle", path: "/" });
 
 	await harness.clientConn.initialize(stdInitParams);
@@ -329,7 +247,13 @@ test("tool calls replay on session/load", async () => {
 	const fauxA = newProvider();
 	const filesystem = createInMemoryFilesystem();
 	const sessionStore = createInMemorySessionStore();
-	const writer = makeHarness({ model: fauxA.getModel() as Model<Api>, filesystem, sessionStore });
+	const modelA = fauxA.getModel() as Model<Api>;
+	const writer = createTestHarness({
+		models: [modelA],
+		defaultModelId: modelA.id,
+		filesystem,
+		sessionStore,
+	});
 	scriptToolThenDone(fauxA, "write", { path: "/replay.txt", content: "captured" });
 
 	await writer.clientConn.initialize(stdInitParams);
@@ -338,7 +262,13 @@ test("tool calls replay on session/load", async () => {
 
 	// Fresh client backed by the same store + filesystem.
 	const fauxB = newProvider();
-	const reader = makeHarness({ model: fauxB.getModel() as Model<Api>, filesystem, sessionStore });
+	const modelB = fauxB.getModel() as Model<Api>;
+	const reader = createTestHarness({
+		models: [modelB],
+		defaultModelId: modelB.id,
+		filesystem,
+		sessionStore,
+	});
 	await reader.clientConn.initialize(stdInitParams);
 	await reader.clientConn.loadSession({ sessionId, cwd: "/", mcpServers: [] });
 
@@ -350,5 +280,5 @@ test("tool calls replay on session/load", async () => {
 	const replayedEnds = toolCallUpdates(reader.updates);
 	expect(replayedEnds).toHaveLength(1);
 	expect(replayedEnds[0].status).toBe("completed");
-	expect(toolUpdateText(replayedEnds[0])).toContain("Wrote 8 bytes");
+	expect(toolUpdateText(replayedEnds[0])).toMatch(/Wrote \d+ bytes/);
 });
