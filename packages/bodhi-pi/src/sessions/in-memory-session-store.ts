@@ -43,7 +43,9 @@ export function createInMemorySessionStore(): SessionStore {
 			record.updatedAt = Date.now();
 		},
 
-		async list({ cwd, cursor }: ListSessionsRequest): Promise<ListSessionsResult> {
+		async list({ cwd }: ListSessionsRequest): Promise<ListSessionsResult> {
+			// Single-page in-memory store; cursor is ignored. Disk-backed impls
+			// must honour `cursor` per the SessionStore.list JSDoc contract.
 			const all = [...sessions.values()]
 				.filter((r) => (cwd ? r.cwd === cwd : true))
 				.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -54,8 +56,6 @@ export function createInMemorySessionStore(): SessionStore {
 					updatedAt: r.updatedAt,
 					messageCount: r.entries.filter((e) => e.type === "message").length,
 				}));
-			// Single-page in-memory; cursor is not used.
-			void cursor;
 			return { sessions: all };
 		},
 

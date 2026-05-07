@@ -2,6 +2,7 @@ import path from "node:path";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import picomatch from "picomatch";
 import { type Static, Type } from "typebox";
+import { accumulateBounded, truncationFooter } from "./_accumulate.js";
 import { resolvePath, type ToolDeps } from "./index.js";
 import { GREP_MAX_BYTES, GREP_MAX_LINE_LENGTH, GREP_MAX_MATCHES } from "./limits.js";
 import { walk } from "./walk.js";
@@ -47,46 +48,38 @@ export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
 			const re = new RegExp(literal ? escapeRegex(pattern) : pattern, flags);
 			const globMatcher = glob ? picomatch(glob, { dot: true }) : undefined;
 
-			const matches: string[] = [];
-			let bytes = 0;
-			let truncatedByBytes = false;
-			let truncatedByLimit = false;
-
-			outer: for await (const entry of walk(deps.filesystem, root, { maxEntries: 50_000 })) {
-				if (!entry.isFile) continue;
-				const rel = path.posix.relative(root, entry.absolutePath);
-				if (globMatcher && !globMatcher(rel) && !globMatcher(entry.absolutePath)) continue;
-				let content: string;
-				try {
-					content = await deps.filesystem.readTextFile(entry.absolutePath);
-				} catch {
-					continue;
-				}
-				if (isLikelyBinary(content)) continue;
-				const lines = content.split("\n");
-				for (let i = 0; i < lines.length; i++) {
-					if (!re.test(lines[i])) continue;
-					if (matches.length >= cap) {
-						truncatedByLimit = true;
-						break outer;
+			async function* matches(): AsyncGenerator<string> {
+				for await (const entry of walk(deps.filesystem, root, { maxEntries: 50_000 })) {
+					if (!entry.isFile) continue;
+					const rel = path.posix.relative(root, entry.absolutePath);
+					if (globMatcher && !globMatcher(rel) && !globMatcher(entry.absolutePath)) continue;
+					let content: string;
+					try {
+						content = await deps.filesystem.readTextFile(entry.absolutePath);
+					} catch {
+						continue;
 					}
-					const line = `${entry.absolutePath}:${i + 1}:${truncateLine(lines[i])}`;
-					if (bytes + line.length + 1 > GREP_MAX_BYTES) {
-						truncatedByBytes = true;
-						break outer;
+					if (isLikelyBinary(content)) continue;
+					const lines = content.split("\n");
+					for (let i = 0; i < lines.length; i++) {
+						if (!re.test(lines[i])) continue;
+						yield `${entry.absolutePath}:${i + 1}:${truncateLine(lines[i])}`;
 					}
-					matches.push(line);
-					bytes += line.length + 1;
 				}
 			}
+			const { lines, stopped } = await accumulateBounded(matches(), { maxItems: cap, maxBytes: GREP_MAX_BYTES });
 
-			let output = matches.join("\n");
-			if (matches.length === 0) {
+			let output = lines.join("\n");
+			if (lines.length === 0) {
 				output = `No matches for ${pattern} under ${dirPath}${glob ? ` (glob: ${glob})` : ""}.`;
-			} else if (truncatedByLimit) {
-				output += `\n\n[Truncated at ${cap}-match limit. Refine the pattern for fewer hits.]`;
-			} else if (truncatedByBytes) {
-				output += `\n\n[Truncated by ${Math.floor(GREP_MAX_BYTES / 1024)}KB output limit.]`;
+			} else if (stopped !== null) {
+				output += `\n\n${truncationFooter({
+					shown: lines.length,
+					stopped,
+					item: "matches",
+					maxBytes: GREP_MAX_BYTES,
+					maxItems: cap,
+				})}`;
 			}
 			return { content: [{ type: "text", text: output }], details: undefined };
 		},

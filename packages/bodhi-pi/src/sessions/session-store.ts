@@ -54,7 +54,14 @@ export interface SessionStore {
 	/** Append one entry. Caller (the agent) provides the entry id. */
 	append(sessionId: string, entry: SessionEntry): Promise<void>;
 
-	/** List sessions (optional cwd filter, opaque cursor). */
+	/**
+	 * List sessions (optional cwd filter + opaque pagination cursor).
+	 *
+	 * Ephemeral / single-page implementations (e.g. `createInMemorySessionStore`)
+	 * may ignore `cursor`. Disk-backed and remote implementations MUST honour
+	 * cursor semantics: when a previous call returned `nextCursor`, passing
+	 * that string back in must yield the next page.
+	 */
 	list(req: ListSessionsRequest): Promise<ListSessionsResult>;
 
 	/** Permanently delete a session and all its entries. */

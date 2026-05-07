@@ -21,22 +21,25 @@ import {
 	type ResumeSessionRequest,
 	type ResumeSessionResponse,
 	type SessionConfigOption,
-	type SessionNotification,
 	type SetSessionConfigOptionRequest,
 	type SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
-import type { AgentMessage, AgentTool, Agent as PiAgent } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentMessage, type AgentTool, type Agent as PiAgent } from "@mariozechner/pi-agent-core";
 import type { Api, Model, StopReason as PiStopReason } from "@mariozechner/pi-ai";
-import { createAgentSession } from "../core/agent-session.js";
 import type { Filesystem } from "../filesystem/filesystem.js";
 import type { SessionStore } from "../sessions/session-store.js";
 import { createBuiltinTools, toolKindFor } from "../tools/index.js";
 import { BODHI_PI_VERSION } from "../version.js";
-
-type AcpStopReason = PromptResponse["stopReason"];
-
-const MODEL_CONFIG_ID = "model";
-const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
+import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "./constants.js";
+import {
+	agentToolContentForAcp,
+	extractText,
+	extractToolCalls,
+	formatLocationHint,
+	isToolResultMessage,
+	mapStopReason,
+	toolResultContentForAcp,
+} from "./notifications.js";
 
 export interface BodhiPiConfig {
 	/** Models the host wants to expose. Each entry's id/name drives the ACP option list. */
@@ -78,6 +81,14 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 	return (conn: AgentSideConnection): AcpAgent => new BodhiPiAcpAgent(config, conn);
 }
 
+/**
+ * ACP-side agent class. Throw conventions:
+ *
+ *   - factory validation (in `createBodhiPiAgent`) → plain `Error`
+ *   - ACP protocol violations from method handlers → `RequestError(-32602/-32601, ...)`
+ *   - tool execution errors → plain `Error` (propagated by pi-agent-core to
+ *     `tool_execution_end.isError` → ACP `tool_call_update` with status: "failed")
+ */
 class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
 
@@ -115,7 +126,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		const defaultModel = this.findModel(this.config.defaultModelId);
 		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd: record.cwd });
-		const piAgent = createAgentSession({
+		const piAgent = new Agent({
 			initialState: { model: defaultModel, tools },
 			getApiKey: this.config.getApiKey,
 		});
@@ -138,13 +149,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// Stream history back via session/update notifications, in order.
 		// For each persisted message we emit text chunks AND replay any tool calls /
 		// tool results found in its content blocks.
-		const toolResultsById = new Map<string, ToolResultMessageLike>();
+		const toolResultsById = new Map<string, ReturnType<typeof toolResultContentForAcp>>();
+		const toolResultIsError = new Map<string, boolean>();
 		for (const entry of restored.entries) {
 			if (entry.type !== "message") continue;
-			if (entry.message.role === "toolResult") {
-				const tr = entry.message as ToolResultMessageLike;
-				toolResultsById.set(tr.toolCallId, tr);
-			}
+			if (!isToolResultMessage(entry.message)) continue;
+			toolResultsById.set(entry.message.toolCallId, toolResultContentForAcp(entry.message));
+			toolResultIsError.set(entry.message.toolCallId, entry.message.isError);
 		}
 
 		for (const entry of restored.entries) {
@@ -186,15 +197,15 @@ class BodhiPiAcpAgent implements AcpAgent {
 							rawInput: toolCall.arguments,
 						},
 					});
-					const result = toolResultsById.get(toolCall.id);
-					if (result) {
+					const resultContent = toolResultsById.get(toolCall.id);
+					if (resultContent !== undefined) {
 						await this.conn.sessionUpdate({
 							sessionId: params.sessionId,
 							update: {
 								sessionUpdate: "tool_call_update",
 								toolCallId: toolCall.id,
-								status: result.isError ? "failed" : "completed",
-								content: toolResultContentForAcp(result),
+								status: toolResultIsError.get(toolCall.id) ? "failed" : "completed",
+								content: resultContent,
 							},
 						});
 					}
@@ -297,64 +308,67 @@ class BodhiPiAcpAgent implements AcpAgent {
 		let lastAssistantStopReason: PiStopReason | undefined;
 		let lastAssistantErrorMessage: string | undefined;
 
-		const unsubscribeStream = session.piAgent.subscribe(async (event) => {
-			if (event.type !== "message_update") return;
-			const sub = event.assistantMessageEvent;
-			if (sub.type !== "text_delta") return;
-			const update: SessionNotification = {
-				sessionId: params.sessionId,
-				update: {
-					sessionUpdate: "agent_message_chunk",
-					content: { type: "text", text: sub.delta },
-				},
-			};
-			await this.conn.sessionUpdate(update);
-		});
+		const sessionId = params.sessionId;
+		const conn = this.conn;
+		const store = this.config.sessionStore;
 
-		const unsubscribeTools = session.piAgent.subscribe(async (event) => {
-			if (event.type === "tool_execution_start") {
-				await this.conn.sessionUpdate({
-					sessionId: params.sessionId,
-					update: {
-						sessionUpdate: "tool_call",
-						toolCallId: event.toolCallId,
-						title: `${event.toolName} ${formatLocationHint(event.args)}`.trim(),
-						kind: toolKindFor(event.toolName),
-						status: "in_progress",
-						rawInput: event.args,
-					},
-				});
-				return;
+		const unsubscribe = session.piAgent.subscribe(async (event) => {
+			switch (event.type) {
+				case "message_update": {
+					if (event.assistantMessageEvent.type !== "text_delta") return;
+					await conn.sessionUpdate({
+						sessionId,
+						update: {
+							sessionUpdate: "agent_message_chunk",
+							content: { type: "text", text: event.assistantMessageEvent.delta },
+						},
+					});
+					return;
+				}
+				case "tool_execution_start": {
+					await conn.sessionUpdate({
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call",
+							toolCallId: event.toolCallId,
+							title: `${event.toolName} ${formatLocationHint(event.args)}`.trim(),
+							kind: toolKindFor(event.toolName),
+							status: "in_progress",
+							rawInput: event.args,
+						},
+					});
+					return;
+				}
+				case "tool_execution_end": {
+					const resultContent = Array.isArray(event.result?.content) ? event.result.content : [];
+					await conn.sessionUpdate({
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: event.toolCallId,
+							status: event.isError ? "failed" : "completed",
+							content: agentToolContentForAcp(resultContent),
+						},
+					});
+					return;
+				}
+				case "message_end": {
+					const role = event.message.role;
+					if (role !== "user" && role !== "assistant" && role !== "toolResult") return;
+					if (role === "assistant") {
+						const msg = event.message as { stopReason?: PiStopReason; errorMessage?: string };
+						lastAssistantStopReason = msg.stopReason;
+						lastAssistantErrorMessage = msg.errorMessage;
+					}
+					await store.append(sessionId, {
+						type: "message",
+						id: randomUUID(),
+						timestamp: Date.now(),
+						message: event.message,
+					});
+					return;
+				}
 			}
-			if (event.type === "tool_execution_end") {
-				const resultContent = Array.isArray(event.result?.content) ? event.result.content : [];
-				await this.conn.sessionUpdate({
-					sessionId: params.sessionId,
-					update: {
-						sessionUpdate: "tool_call_update",
-						toolCallId: event.toolCallId,
-						status: event.isError ? "failed" : "completed",
-						content: agentToolContentForAcp(resultContent),
-					},
-				});
-			}
-		});
-
-		const unsubscribePersist = session.piAgent.subscribe(async (event) => {
-			if (event.type !== "message_end") return;
-			const role = event.message.role;
-			if (role !== "user" && role !== "assistant" && role !== "toolResult") return;
-			if (role === "assistant") {
-				const msg = event.message as { stopReason?: PiStopReason; errorMessage?: string };
-				lastAssistantStopReason = msg.stopReason;
-				lastAssistantErrorMessage = msg.errorMessage;
-			}
-			await this.config.sessionStore.append(params.sessionId, {
-				type: "message",
-				id: randomUUID(),
-				timestamp: Date.now(),
-				message: event.message,
-			});
 		});
 
 		try {
@@ -369,9 +383,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			const stopReason = mapStopReason(lastAssistantStopReason);
 			return { stopReason, userMessageId: params.messageId ?? null };
 		} finally {
-			unsubscribeStream();
-			unsubscribeTools();
-			unsubscribePersist();
+			unsubscribe();
 		}
 	}
 
@@ -419,107 +431,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.filter((e): e is Extract<typeof e, { type: "message" }> => e.type === "message")
 			.map((e) => e.message);
 		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd });
-		const piAgent = createAgentSession({
+		const piAgent = new Agent({
 			initialState: { model: restoredModel, messages, tools },
 			getApiKey: this.config.getApiKey,
 		});
 		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools, cancelled: false });
 		return { entries: record.entries, currentModelId: modelId };
-	}
-}
-
-/** Minimal shape of pi-ai's `ToolResultMessage` we need for ACP replay. */
-interface ToolResultMessageLike {
-	role: "toolResult";
-	toolCallId: string;
-	toolName: string;
-	content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-	isError: boolean;
-}
-
-interface ToolCallBlock {
-	id: string;
-	name: string;
-	arguments: Record<string, unknown>;
-}
-
-/** Pull plain-text payload from an AgentMessage for ACP replay chunks. */
-function extractText(message: AgentMessage): string {
-	const content = (message as { content?: unknown }).content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content
-		.filter((c): c is { type: "text"; text: string } => {
-			return typeof c === "object" && c !== null && (c as { type?: unknown }).type === "text";
-		})
-		.map((c) => c.text)
-		.join("");
-}
-
-/** Pull tool-call blocks from an assistant `AgentMessage`. */
-function extractToolCalls(message: AgentMessage): ToolCallBlock[] {
-	const content = (message as { content?: unknown }).content;
-	if (!Array.isArray(content)) return [];
-	const out: ToolCallBlock[] = [];
-	for (const c of content) {
-		if (typeof c !== "object" || c === null) continue;
-		const block = c as { type?: unknown; id?: unknown; name?: unknown; arguments?: unknown };
-		if (block.type !== "toolCall") continue;
-		if (typeof block.id !== "string" || typeof block.name !== "string") continue;
-		const args = (block.arguments && typeof block.arguments === "object" ? block.arguments : {}) as Record<
-			string,
-			unknown
-		>;
-		out.push({ id: block.id, name: block.name, arguments: args });
-	}
-	return out;
-}
-
-/** Convert a pi-ai `ToolResultMessage.content` array into an ACP `ToolCallContent` array. */
-function toolResultContentForAcp(result: ToolResultMessageLike): ToolCallContentBlock[] {
-	return agentToolContentForAcp(result.content);
-}
-
-interface ToolCallContentBlock {
-	type: "content";
-	content: { type: "text"; text: string };
-}
-
-function agentToolContentForAcp(blocks: Array<{ type: string; text?: string }>): ToolCallContentBlock[] {
-	const text = blocks
-		.filter((b) => b.type === "text" && typeof b.text === "string")
-		.map((b) => b.text as string)
-		.join("");
-	if (!text) return [];
-	return [{ type: "content", content: { type: "text", text } }];
-}
-
-/** Heuristic: pull a "path" string out of validated tool args for the ACP `title` hint. */
-function formatLocationHint(args: unknown): string {
-	if (!args || typeof args !== "object") return "";
-	const path = (args as { path?: unknown }).path;
-	return typeof path === "string" ? path : "";
-}
-
-/**
- * Map pi-agent-core's `StopReason` to ACP's `stopReason` enum.
- *
- *   - `"aborted"` → `"cancelled"`
- *   - `"length"` → `"max_tokens"`
- *   - `"stop"` / `"toolUse"` → `"end_turn"`
- *   - `"error"` is handled separately by the caller (throws `RequestError`).
- *   - undefined falls back to `"end_turn"`.
- */
-function mapStopReason(sr: PiStopReason | undefined): AcpStopReason {
-	switch (sr) {
-		case "aborted":
-			return "cancelled";
-		case "length":
-			return "max_tokens";
-		case "stop":
-		case "toolUse":
-			return "end_turn";
-		default:
-			return "end_turn";
 	}
 }

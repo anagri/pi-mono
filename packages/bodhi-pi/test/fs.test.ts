@@ -268,7 +268,7 @@ test("find respects limit", async () => {
 	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
 	const lines = text.split("\n").filter((l) => l.endsWith(".ts"));
 	expect(lines).toHaveLength(10);
-	expect(text).toContain("Truncated at 10-result limit");
+	expect(text).toMatch(/Truncated:.*10-matches limit/);
 });
 
 test("grep finds matches with file:line format", async () => {
