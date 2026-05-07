@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- M2.1 — Basic session persistence (persist · load · resume · list · close) over ACP. Introduces a mandatory host-injected `BodhiPiConfig.sessionStore: SessionStore` (no default fallback). Ships `createInMemorySessionStore()` as a public reference helper. The agent now advertises `loadSession`, `sessionCapabilities.list`, `sessionCapabilities.resume`, `sessionCapabilities.close` capabilities, plus `_meta["bodhi-pi"].sessionDelete: true` for the custom extension.
+  - `session/load` performs the full ACP-spec history replay via `user_message_chunk` / `agent_message_chunk` notifications, then returns the active model in `configOptions`.
+  - `session/resume` rehydrates the session without replaying history (per ACP).
+  - `session/list` filters by cwd and returns ACP-shaped `SessionInfo` entries (`updatedAt` derived from createdAt).
+  - `session/close` releases active runtime resources only — drops the live pi-agent-core Agent from the in-process cache while persisted data remains; per the ACP `session/close` RFD a subsequent `session/load(sameId)` re-hydrates and replays.
+  - `_bodhi-pi/session/delete` (custom extension method, `_`-prefixed per ACP `extensibility.mdx`) permanently removes a session from the store.
+  - `session/prompt` now refuses with a JSON-RPC error if the session is not in the in-process cache, forcing explicit `session/load` after `session/close`.
+  - Persistence triggers: each `pi-agent-core` `message_end` event appends a `SessionMessageEntry`; each `setSessionConfigOption(model)` appends a `ModelChangeEntry`. On `session/load`/`session/resume`, the agent restores the latest model from history before rehydrating messages.
+  - Tests: `chat.test.ts` extended to 8 integration tests (baseline single-prompt, model switch, persist+load, list+filter, close-keeps-data, model-persists-across-load, resume-without-replay, delete). `chat.e2e.ts` extended to 4 e2e tests with one new multi-turn context-retention test against real Haiku.
+
 - M1.3 — Per-session model switching over ACP. `BodhiPiConfig` now takes `models: Model<Api>[]` plus `defaultModelId: string`. `session/new` advertises the registered models as a `SessionConfigOption` (`id: "model"`, `category: "model"`, `type: "select"`); the host switches the active model via the stable `session/setSessionConfigOption` method. The next prompt routes to the new model automatically (pi-agent-core reads `state.model` per turn). Renamed `simple_chat.{test,e2e}.ts` → `chat.{test,e2e}.ts` and extended both with multi-model coverage.
 
 ### Changed

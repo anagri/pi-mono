@@ -1,7 +1,7 @@
 import type { SessionConfigOption, SessionNotification } from "@agentclientprotocol/sdk";
 import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
 import { expect, test } from "vitest";
-import { createBodhiPiAgent } from "../src/index.js";
+import { createBodhiPiAgent, createInMemorySessionStore } from "../src/index.js";
 import { createInProcessAcpPair } from "../test/helpers/in-process-connection.js";
 
 type SelectOption = SessionConfigOption & { type: "select" };
@@ -28,6 +28,14 @@ function requireEnv(name: string): string {
 	return value as string;
 }
 
+const stdInitParams = {
+	protocolVersion: 1,
+	clientCapabilities: {
+		fs: { readTextFile: false, writeTextFile: false },
+		terminal: false,
+	},
+} as const;
+
 interface SingleModelHarness {
 	stopReason: string;
 	chunks: SessionNotification[];
@@ -47,6 +55,7 @@ async function runSingleTurn(opts: {
 			models: [opts.model],
 			defaultModelId: opts.model.id,
 			getApiKey: (p) => (p === opts.provider ? opts.apiKey : undefined),
+			sessionStore: createInMemorySessionStore(),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {
@@ -56,24 +65,12 @@ async function runSingleTurn(opts: {
 		}),
 	);
 
-	await clientConn.initialize({
-		protocolVersion: 1,
-		clientCapabilities: {
-			fs: { readTextFile: false, writeTextFile: false },
-			terminal: false,
-		},
-	});
-
-	const { sessionId } = await clientConn.newSession({
-		cwd: process.cwd(),
-		mcpServers: [],
-	});
-
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
 	const result = await clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: opts.prompt }],
 	});
-
 	const chunks = updates.filter((u) => u.update.sessionUpdate === "agent_message_chunk");
 	return {
 		stopReason: result.stopReason,
@@ -130,6 +127,7 @@ test("switching model mid-session changes provenance", async () => {
 				if (p === "openai") return openaiKey;
 				return undefined;
 			},
+			sessionStore: createInMemorySessionStore(),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {
@@ -139,19 +137,11 @@ test("switching model mid-session changes provenance", async () => {
 		}),
 	);
 
-	await clientConn.initialize({
-		protocolVersion: 1,
-		clientCapabilities: {
-			fs: { readTextFile: false, writeTextFile: false },
-			terminal: false,
-		},
-	});
-
+	await clientConn.initialize(stdInitParams);
 	const { sessionId, configOptions } = await clientConn.newSession({
 		cwd: process.cwd(),
 		mcpServers: [],
 	});
-
 	const initialOption = asSelectOption(configOptions?.[0]);
 	expect(initialOption.currentValue).toBe(claude.id);
 	expect(initialOption.options).toHaveLength(2);
@@ -159,7 +149,6 @@ test("switching model mid-session changes provenance", async () => {
 	const provenancePrompt =
 		"Are you made by Anthropic or by OpenAI? Answer with exactly one of those two words and nothing else.";
 
-	// Turn 1: routed to Anthropic
 	updates.length = 0;
 	const claudeResult = await clientConn.prompt({
 		sessionId,
@@ -172,7 +161,6 @@ test("switching model mid-session changes provenance", async () => {
 		`expected anthropic provenance, got: ${JSON.stringify(claudeText)}`,
 	).toBe(true);
 
-	// Switch to OpenAI
 	const switchResult = await clientConn.setSessionConfigOption({
 		sessionId,
 		configId: "model",
@@ -181,7 +169,6 @@ test("switching model mid-session changes provenance", async () => {
 	const switched = asSelectOption(switchResult.configOptions[0]);
 	expect(switched.currentValue).toBe(gpt.id);
 
-	// Turn 2: routed to OpenAI
 	updates.length = 0;
 	const gptResult = await clientConn.prompt({
 		sessionId,
@@ -193,4 +180,57 @@ test("switching model mid-session changes provenance", async () => {
 		gptText.includes("openai") || gptText.includes("gpt") || gptText.includes("chatgpt"),
 		`expected openai provenance, got: ${JSON.stringify(gptText)}`,
 	).toBe(true);
+});
+
+test("real LLM remembers context across two prompts in same session", async () => {
+	const apiKey = requireEnv("ANTHROPIC_API_KEY");
+
+	const updates: SessionNotification[] = [];
+	const haiku = getModel("anthropic", "claude-haiku-4-5");
+
+	const { clientConn } = createInProcessAcpPair(
+		createBodhiPiAgent({
+			models: [haiku],
+			defaultModelId: haiku.id,
+			getApiKey: (p) => (p === "anthropic" ? apiKey : undefined),
+			sessionStore: createInMemorySessionStore(),
+		}),
+		() => ({
+			sessionUpdate: async (params) => {
+				updates.push(params);
+			},
+			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+		}),
+	);
+
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
+
+	// Turn 1: state a fact.
+	updates.length = 0;
+	await clientConn.prompt({
+		sessionId,
+		prompt: [
+			{
+				type: "text",
+				text: "My favourite number is 42. Reply with the single word 'noted' and nothing else.",
+			},
+		],
+	});
+	const noteText = chunkedAgentText(updates).toLowerCase();
+	expect(noteText.includes("noted"), `expected acknowledgment, got: ${JSON.stringify(noteText)}`).toBe(true);
+
+	// Turn 2: ask for the fact back — proves multi-turn context survives.
+	updates.length = 0;
+	await clientConn.prompt({
+		sessionId,
+		prompt: [
+			{
+				type: "text",
+				text: "What is my favourite number? Reply with just the digits and nothing else.",
+			},
+		],
+	});
+	const recallText = chunkedAgentText(updates);
+	expect(recallText.includes("42"), `expected to recall '42', got: ${JSON.stringify(recallText)}`).toBe(true);
 });
