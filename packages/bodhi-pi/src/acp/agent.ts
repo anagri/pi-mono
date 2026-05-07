@@ -42,24 +42,13 @@ import {
 } from "./notifications.js";
 
 export interface BodhiPiConfig {
-	/** Models the host wants to expose. Each entry's id/name drives the ACP option list. Mandatory; no default fallback. */
 	models: Model<Api>[];
-	/** id of the default model — must be one of models[i].id. Mandatory; no default fallback. */
+	/** Must be one of `models[i].id`. */
 	defaultModelId: string;
-	/** Resolves API key per provider name (e.g., "anthropic", "openai"). Mandatory; no default fallback. */
 	getApiKey: (provider: string) => string | undefined;
-	/** Persistence store. Mandatory; no default fallback. */
 	sessionStore: SessionStore;
-	/** Filesystem the agent uses for read/write/edit/ls/find/grep. Mandatory; no default fallback. */
 	filesystem: Filesystem;
-	/**
-	 * Optional system prompt injected at session creation. Threaded into every
-	 * session's `initialState.systemPrompt`. Not persisted as a session entry —
-	 * it is configuration, not session state. `loadSession` and `resumeSession`
-	 * always use the value present in the current `BodhiPiConfig`. Hosts that
-	 * want layered composition (project context, append sections, tool snippets)
-	 * compose the string client-side and pass the result.
-	 */
+	/** Not persisted; reread from config on every load/resume. */
 	systemPrompt?: string;
 }
 
@@ -72,11 +61,7 @@ interface SessionState {
 	cancelled: boolean;
 }
 
-/**
- * Returns the `toAgent` callback expected by `AgentSideConnection`.
- *
- *     const conn = new AgentSideConnection(createBodhiPiAgent(cfg), stream);
- */
+/** Returns the `toAgent` callback expected by `AgentSideConnection`. */
 export function createBodhiPiAgent(config: BodhiPiConfig) {
 	if (!config.sessionStore) {
 		throw new Error("BodhiPiConfig.sessionStore is required (no default fallback)");
@@ -91,12 +76,10 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 }
 
 /**
- * ACP-side agent class. Throw conventions:
- *
- *   - factory validation (in `createBodhiPiAgent`) → plain `Error`
- *   - ACP protocol violations from method handlers → `RequestError(-32602/-32601, ...)`
- *   - tool execution errors → plain `Error` (propagated by pi-agent-core to
- *     `tool_execution_end.isError` → ACP `tool_call_update` with status: "failed")
+ * Throw conventions:
+ *   - ACP protocol violations → `RequestError(-32602/-32601, ...)`
+ *   - tool execution errors → plain `Error` (pi-agent-core surfaces these as
+ *     `tool_execution_end.isError` → ACP `tool_call_update.status: "failed"`)
  */
 class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
@@ -159,9 +142,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
 		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
 
-		// Stream history back via session/update notifications, in order.
-		// For each persisted message we emit text chunks AND replay any tool calls /
-		// tool results found in its content blocks.
+		// Stream history back via session/update notifications, pairing each
+		// assistant tool_use block with its persisted tool_result.
 		const toolResultsById = new Map<string, ReturnType<typeof toolResultContentForAcp>>();
 		const toolResultIsError = new Map<string, boolean>();
 		for (const entry of restored.entries) {
@@ -196,8 +178,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 						},
 					});
 				}
-				// Replay tool_use blocks from this assistant message paired with the
-				// corresponding toolResult (if persisted).
 				for (const toolCall of extractToolCalls(entry.message)) {
 					await this.conn.sessionUpdate({
 						sessionId: params.sessionId,
@@ -232,7 +212,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-		// Same rehydration as loadSession, but no history replay (per ACP spec).
+		// Per ACP spec: rehydrate without replaying history.
 		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
@@ -256,8 +236,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 
 	async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
 		const cached = this.sessions.get(params.sessionId);
-		// Per ACP session/close RFD: cancel any ongoing work + free runtime resources.
-		// The persisted record stays in the store for future session/load.
+		// Per ACP session/close: drop runtime state but keep the persisted record.
 		cached?.piAgent.abort();
 		this.sessions.delete(params.sessionId);
 		return {};
@@ -289,8 +268,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 			throw new RequestError(-32602, `model config requires string value, got ${typeof params.value}`);
 		}
 		const newModel = this.findModel(params.value);
-		// Mutate the pi-agent's active model. pi-ai's streamSimple reads
-		// state.model per turn, so the next prompt routes here.
+		// pi-ai's streamSimple reads state.model per turn, so mutating here
+		// routes the next prompt to the new model.
 		session.piAgent.state.model = newModel;
 		session.currentModelId = params.value;
 		await this.config.sessionStore.append(params.sessionId, {
@@ -316,7 +295,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.map((b) => b.text)
 			.join("");
 
-		// Reset cancel flag at the start of every prompt so a previous cancel doesn't bleed in.
+		// Reset so a prior cancel doesn't bleed into this prompt.
 		session.cancelled = false;
 		let lastAssistantStopReason: PiStopReason | undefined;
 		let lastAssistantErrorMessage: string | undefined;
@@ -434,12 +413,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.load(sessionId);
 		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
 
-		// Restore latest model from history; fall back to default.
 		const lastModelChange = [...record.entries].reverse().find((e) => e.type === "model_change");
 		const modelId = lastModelChange?.modelId ?? this.config.defaultModelId;
 		const restoredModel = this.findModel(modelId);
 
-		// Recreate pi-agent with restored messages and a fresh tool-set bound to cwd.
 		const messages: AgentMessage[] = record.entries
 			.filter((e): e is Extract<typeof e, { type: "message" }> => e.type === "message")
 			.map((e) => e.message);
