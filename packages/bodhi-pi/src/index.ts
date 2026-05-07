@@ -1,2 +1,2 @@
-export type { Agent, AgentOptions } from "@mariozechner/pi-agent-core";
-export { createAgentSession } from "./core/agent-session.js";
+export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
+export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
