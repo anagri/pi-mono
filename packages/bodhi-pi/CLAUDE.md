@@ -15,3 +15,10 @@ Default to writing no comments. Add one only when the **why** is non-obvious to 
 - **Tests don't need comments** unless the assertion encodes a non-obvious invariant. `it("rejects unknown sessionId")` is its own documentation.
 
 When in doubt, delete the comment and see if the code still reads. If it does, leave it deleted.
+
+## Testing new features
+
+Plan **integration** and **e2e** tests at design time, not after. Integration is the primary correctness layer (deterministic stubs via `aimock` or `registerFauxProvider`); e2e is a thin sanity check that the stubs aren't over-constrained.
+
+- e2e for a single feature uses one cheap OpenAI model (default `gpt-4o-mini` — non-reasoning, sidesteps pi-ai's `openai-responses` reasoning-item round-trip 404 with `store:false`; same workaround `coding-agent` uses). Cross-provider parity is the subject of `e2e/chat.e2e.ts` and isn't needed per feature.
+- See `test/chat.test.ts` / `test/fs.test.ts` and `e2e/chat.e2e.ts` / `e2e/fs.e2e.ts` for the canonical patterns (forced-choice prompts, substring matches, side-effect assertions).

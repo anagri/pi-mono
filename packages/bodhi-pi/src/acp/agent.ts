@@ -4,6 +4,7 @@ import {
 	type AgentSideConnection,
 	type AuthenticateRequest,
 	type AuthenticateResponse,
+	type AvailableCommand,
 	type CancelNotification,
 	type CloseSessionRequest,
 	type CloseSessionResponse,
@@ -26,6 +27,8 @@ import {
 } from "@agentclientprotocol/sdk";
 import { Agent, type AgentMessage, type AgentTool, type Agent as PiAgent } from "@mariozechner/pi-agent-core";
 import type { Api, Model, StopReason as PiStopReason } from "@mariozechner/pi-ai";
+import { loadProjectCommands } from "../commands/discovery.js";
+import { expandPromptTemplate, type PromptTemplate } from "../commands/prompt-templates.js";
 import type { Filesystem } from "../filesystem/filesystem.js";
 import type { SessionStore } from "../sessions/session-store.js";
 import { createBuiltinTools, toolKindFor } from "../tools/index.js";
@@ -57,8 +60,18 @@ interface SessionState {
 	currentModelId: string;
 	cwd: string;
 	tools: AgentTool[];
+	/** Discovered once at session hydration; refresh requires `session/close` + `session/load`. */
+	commands: PromptTemplate[];
 	/** Set by `cancel()`; read by `prompt()` to return `stopReason: "cancelled"`. Reset before each prompt. */
 	cancelled: boolean;
+}
+
+function toAvailableCommand(t: PromptTemplate): AvailableCommand {
+	return {
+		name: t.name,
+		description: t.description,
+		...(t.argumentHint ? { input: { hint: t.argumentHint } } : {}),
+	};
 }
 
 /** Returns the `toAgent` callback expected by `AgentSideConnection`. */
@@ -131,8 +144,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 			currentModelId: this.config.defaultModelId,
 			cwd: record.cwd,
 			tools,
+			commands: [],
 			cancelled: false,
 		});
+		await this.discoverAndAdvertiseCommands(record.id);
 		return {
 			sessionId: record.id,
 			configOptions: [this.buildModelConfigOption(this.config.defaultModelId)],
@@ -206,6 +221,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			}
 		}
 
+		await this.discoverAndAdvertiseCommands(params.sessionId);
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
 		};
@@ -214,6 +230,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
 		// Per ACP spec: rehydrate without replaying history.
 		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
+		await this.discoverAndAdvertiseCommands(params.sessionId);
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
 		};
@@ -294,6 +311,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
 			.map((b) => b.text)
 			.join("");
+		const promptText = expandPromptTemplate(text, session.commands);
 
 		// Reset so a prior cancel doesn't bleed into this prompt.
 		session.cancelled = false;
@@ -364,7 +382,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 
 		try {
-			await session.piAgent.prompt(text);
+			await session.piAgent.prompt(promptText);
 			await session.piAgent.waitForIdle();
 			if (session.cancelled) {
 				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
@@ -430,7 +448,20 @@ class BodhiPiAcpAgent implements AcpAgent {
 			},
 			getApiKey: this.config.getApiKey,
 		});
-		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools, cancelled: false });
+		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools, commands: [], cancelled: false });
 		return { entries: record.entries, currentModelId: modelId };
+	}
+
+	private async discoverAndAdvertiseCommands(sessionId: string): Promise<void> {
+		const session = this.sessions.get(sessionId);
+		if (!session) return;
+		session.commands = await loadProjectCommands(this.config.filesystem, session.cwd);
+		await this.conn.sessionUpdate({
+			sessionId,
+			update: {
+				sessionUpdate: "available_commands_update",
+				availableCommands: session.commands.map(toAvailableCommand),
+			},
+		});
 	}
 }

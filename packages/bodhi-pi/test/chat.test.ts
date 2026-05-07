@@ -330,7 +330,8 @@ test("resumeSession rehydrates without replaying history", async () => {
 	expect(resumedOption.currentValue).toBe(baseModel.id);
 
 	// Critical contrast vs loadSession: NO history replay notifications.
-	expect(reader.updates).toHaveLength(0);
+	const replayKinds = new Set(["user_message_chunk", "agent_message_chunk", "tool_call", "tool_call_update"]);
+	expect(reader.updates.filter((u) => replayKinds.has(u.update.sessionUpdate))).toHaveLength(0);
 
 	// Subsequent prompts work because the session is now loaded in cache.
 	await reader.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "second" }] });

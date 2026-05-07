@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- Slash commands / prompt templates. Markdown files under
+  `<cwd>/.bodhi-pi/commands/*.md` (with optional YAML frontmatter for
+  `description` and `argument-hint`) are discovered via the injected
+  `Filesystem` at session hydration and advertised via ACP
+  `available_commands_update`. `session/prompt` text starting with
+  `/<name>` is expanded against the cached templates (supports `$1`/`$2`/…,
+  `$@`, `$ARGUMENTS`, `${@:N}`, `${@:N:L}`) before being forwarded to the
+  LLM; unknown names pass through verbatim. New runtime dep: `yaml`.
 - M3.2 — Health pass + `BodhiPiConfig.systemPrompt`. Five-commit cleanup
   derived from the M3.1 multi-angle health review.
   - **Wire correctness:** `prompt()` now maps pi-agent-core's `stopReason`
