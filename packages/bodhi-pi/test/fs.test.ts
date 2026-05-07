@@ -1,6 +1,13 @@
-import { type Api, type FauxProviderRegistration, type Model, registerFauxProvider } from "@mariozechner/pi-ai";
+import {
+	type Api,
+	type FauxProviderRegistration,
+	fauxAssistantMessage,
+	fauxToolCall,
+	type Model,
+	registerFauxProvider,
+} from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
+import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { scriptToolThenDone } from "./helpers/faux-script.js";
 import { createTestHarness } from "./helpers/harness.js";
@@ -281,4 +288,194 @@ test("tool calls replay on session/load", async () => {
 	expect(replayedEnds).toHaveLength(1);
 	expect(replayedEnds[0].status).toBe("completed");
 	expect(toolUpdateText(replayedEnds[0])).toMatch(/Wrote \d+ bytes/);
+});
+
+test("read with offset returns lines from that point", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`);
+	await harness.filesystem.writeTextFile("/big.txt", lines.join("\n"));
+	scriptToolThenDone(faux, "read", { path: "/big.txt", offset: 5 });
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "read" }] });
+
+	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
+	expect(text).toContain("line-5");
+	expect(text).toContain("line-20");
+	expect(text).not.toContain("line-4\n");
+});
+
+test("read with limit returns N lines plus a continuation marker", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`);
+	await harness.filesystem.writeTextFile("/big.txt", lines.join("\n"));
+	scriptToolThenDone(faux, "read", { path: "/big.txt", offset: 1, limit: 3 });
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "read" }] });
+
+	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
+	expect(text).toContain("line-1");
+	expect(text).toContain("line-3");
+	expect(text).not.toContain("line-4");
+	expect(text).toMatch(/17 more lines.*offset=4/);
+});
+
+test("read byte-truncation kicks in for a very long single line", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	const longLine = "x".repeat(60_000);
+	await harness.filesystem.writeTextFile("/long.txt", longLine);
+	scriptToolThenDone(faux, "read", { path: "/long.txt" });
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "read" }] });
+
+	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
+	expect(text).toMatch(/Truncated by .*KB limit/);
+});
+
+test("grep byte-truncation kicks in when many matches accumulate", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	// Each match line will be ~30 bytes ("/f<i>.txt:1:" + a long string). Need >50KB total to trip the byte cap.
+	const matchPayload = "needle".repeat(100); // 600 chars per line
+	for (let i = 0; i < 200; i++) {
+		await harness.filesystem.writeTextFile(`/f${i}.txt`, matchPayload);
+	}
+	scriptToolThenDone(faux, "grep", { pattern: "needle", path: "/" });
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "grep" }] });
+
+	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
+	expect(text).toMatch(/Truncated:.*KB output limit/);
+});
+
+test("grep truncates a long matched line at GREP_MAX_LINE_LENGTH with ellipsis", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	// 1000-char line containing 'needle'.
+	const longLine = `${"x".repeat(900)}needle${"y".repeat(100)}`;
+	await harness.filesystem.writeTextFile("/long.txt", longLine);
+	scriptToolThenDone(faux, "grep", { pattern: "needle", path: "/" });
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "grep" }] });
+
+	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
+	const matchLine = text.split("\n").find((l) => l.startsWith("/long.txt:")) ?? "";
+	expect(matchLine.endsWith("...")).toBe(true);
+});
+
+test("ls byte-truncation kicks in for a directory with many entries", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	// Each entry line is ~25 bytes ("file-NNNN.txt\tfile\t1\n"). Need >50KB total ⇒ ~2000 entries.
+	for (let i = 0; i < 2500; i++) {
+		await harness.filesystem.writeTextFile(`/file-${String(i).padStart(4, "0")}.txt`, "x");
+	}
+	scriptToolThenDone(faux, "ls", { path: "/" });
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ls" }] });
+
+	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
+	expect(text).toMatch(/Truncated:.*(KB output limit|entries limit)/);
+});
+
+test("multiple tool calls in one prompt all surface as notifications in order", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	// Prime two tool calls in sequence — pi-agent-core executes them sequentially
+	// and re-prompts the LLM after each round of results. We script that loop:
+	// turn 1: write,  turn 2 (after toolResult): read,  turn 3: "done".
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("write", { path: "/m.txt", content: "hi" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxToolCall("read", { path: "/m.txt" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage("done"),
+	]);
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "do both" }] });
+
+	const starts = toolCallStarts(harness.updates);
+	const ends = toolCallUpdates(harness.updates);
+	expect(starts).toHaveLength(2);
+	expect(starts[0].rawInput).toMatchObject({ path: "/m.txt", content: "hi" });
+	expect(starts[1].rawInput).toMatchObject({ path: "/m.txt" });
+	expect(ends).toHaveLength(2);
+	expect(ends[0].status).toBe("completed");
+	expect(ends[1].status).toBe("completed");
+	expect(toolUpdateText(ends[1])).toContain("hi");
+});
+
+test("tool failure replays as failed on session/load", async () => {
+	const fauxA = newProvider();
+	const filesystem = createInMemoryFilesystem();
+	const sessionStore = createInMemorySessionStore();
+	const modelA = fauxA.getModel() as Model<Api>;
+	const writer = createTestHarness({
+		models: [modelA],
+		defaultModelId: modelA.id,
+		filesystem,
+		sessionStore,
+	});
+	// First turn: read a missing file (will fail); second turn: model says "ok".
+	scriptToolThenDone(fauxA, "read", { path: "/missing.txt" });
+
+	await writer.clientConn.initialize(stdInitParams);
+	const { sessionId } = await writer.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await writer.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "read" }] });
+
+	// Reader replays the failed tool call.
+	const fauxB = newProvider();
+	const modelB = fauxB.getModel() as Model<Api>;
+	const reader = createTestHarness({
+		models: [modelB],
+		defaultModelId: modelB.id,
+		filesystem,
+		sessionStore,
+	});
+	await reader.clientConn.initialize(stdInitParams);
+	await reader.clientConn.loadSession({ sessionId, cwd: "/", mcpServers: [] });
+
+	const replayedEnds = toolCallUpdates(reader.updates);
+	expect(replayedEnds).toHaveLength(1);
+	expect(replayedEnds[0].status).toBe("failed");
+	expect(toolUpdateText(replayedEnds[0]).toUpperCase()).toContain("ENOENT");
+});
+
+test("prompt rejects with -32602 when session is unknown", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	faux.setResponses([fauxAssistantMessage("ok")]);
+
+	await harness.clientConn.initialize(stdInitParams);
+	await expect(
+		harness.clientConn.prompt({ sessionId: "no-such-session", prompt: [{ type: "text", text: "x" }] }),
+	).rejects.toThrow(/not loaded/);
+});
+
+test("createBodhiPiAgent throws synchronously when defaultModelId is not in models", () => {
+	const faux = newProvider();
+	const model = faux.getModel() as Model<Api>;
+	expect(() =>
+		createBodhiPiAgent({
+			models: [model],
+			defaultModelId: "nonexistent",
+			getApiKey: () => "test-key",
+			sessionStore: createInMemorySessionStore(),
+			filesystem: createInMemoryFilesystem(),
+		}),
+	).toThrow(/defaultModelId.*nonexistent/);
 });
