@@ -42,16 +42,25 @@ import {
 } from "./notifications.js";
 
 export interface BodhiPiConfig {
-	/** Models the host wants to expose. Each entry's id/name drives the ACP option list. */
+	/** Models the host wants to expose. Each entry's id/name drives the ACP option list. Mandatory; no default fallback. */
 	models: Model<Api>[];
-	/** id of the default model — must be one of models[i].id. */
+	/** id of the default model — must be one of models[i].id. Mandatory; no default fallback. */
 	defaultModelId: string;
-	/** Resolves API key per provider name (e.g., "anthropic", "openai"). */
+	/** Resolves API key per provider name (e.g., "anthropic", "openai"). Mandatory; no default fallback. */
 	getApiKey: (provider: string) => string | undefined;
 	/** Persistence store. Mandatory; no default fallback. */
 	sessionStore: SessionStore;
 	/** Filesystem the agent uses for read/write/edit/ls/find/grep. Mandatory; no default fallback. */
 	filesystem: Filesystem;
+	/**
+	 * Optional system prompt injected at session creation. Threaded into every
+	 * session's `initialState.systemPrompt`. Not persisted as a session entry —
+	 * it is configuration, not session state. `loadSession` and `resumeSession`
+	 * always use the value present in the current `BodhiPiConfig`. Hosts that
+	 * want layered composition (project context, append sections, tool snippets)
+	 * compose the string client-side and pass the result.
+	 */
+	systemPrompt?: string;
 }
 
 interface SessionState {
@@ -127,7 +136,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const defaultModel = this.findModel(this.config.defaultModelId);
 		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd: record.cwd });
 		const piAgent = new Agent({
-			initialState: { model: defaultModel, tools },
+			initialState: {
+				model: defaultModel,
+				tools,
+				...(this.config.systemPrompt !== undefined ? { systemPrompt: this.config.systemPrompt } : {}),
+			},
 			getApiKey: this.config.getApiKey,
 		});
 		this.sessions.set(record.id, {
@@ -432,7 +445,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.map((e) => e.message);
 		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd });
 		const piAgent = new Agent({
-			initialState: { model: restoredModel, messages, tools },
+			initialState: {
+				model: restoredModel,
+				messages,
+				tools,
+				...(this.config.systemPrompt !== undefined ? { systemPrompt: this.config.systemPrompt } : {}),
+			},
 			getApiKey: this.config.getApiKey,
 		});
 		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools, cancelled: false });

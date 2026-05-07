@@ -475,6 +475,81 @@ test("cancel during prompt yields stopReason 'cancelled'", async () => {
 	expect(result.stopReason).toBe("cancelled");
 });
 
+test("BodhiPiConfig.systemPrompt threads into the pi-agent-core context", async () => {
+	const seen: string[] = [];
+	const faux = newFaux();
+	// Use a factory response so we can capture the systemPrompt that pi-agent-core
+	// passes into the LLM call's Context.
+	faux.setResponses([
+		(ctx) => {
+			seen.push(ctx.systemPrompt ?? "<none>");
+			return fauxAssistantMessage("ok");
+		},
+	]);
+	const model = faux.getModel() as Model<Api>;
+
+	const SENTINEL = "you are a unit-test sentinel";
+	const { clientConn } = createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		sessionStore: createInMemorySessionStore(),
+		systemPrompt: SENTINEL,
+	});
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
+
+	expect(seen).toHaveLength(1);
+	expect(seen[0]).toBe(SENTINEL);
+});
+
+test("systemPrompt is reapplied on loadSession (config-time, not session state)", async () => {
+	const seen: string[] = [];
+	const faux1 = newFaux();
+	faux1.setResponses([
+		(ctx) => {
+			seen.push(ctx.systemPrompt ?? "<none>");
+			return fauxAssistantMessage("ok");
+		},
+	]);
+	const model1 = faux1.getModel() as Model<Api>;
+
+	const PROMPT_A = "agent personality A";
+	const store = createInMemorySessionStore();
+	const writer = createTestHarness({
+		models: [model1],
+		defaultModelId: model1.id,
+		sessionStore: store,
+		systemPrompt: PROMPT_A,
+	});
+	await writer.clientConn.initialize(stdInitParams);
+	const { sessionId } = await writer.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await writer.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
+
+	// A different host comes back with a different systemPrompt + a different faux provider.
+	const faux2 = newFaux();
+	faux2.setResponses([
+		(ctx) => {
+			seen.push(ctx.systemPrompt ?? "<none>");
+			return fauxAssistantMessage("ok");
+		},
+	]);
+	const model2 = faux2.getModel() as Model<Api>;
+
+	const PROMPT_B = "agent personality B (loaded later)";
+	const reader = createTestHarness({
+		models: [model2],
+		defaultModelId: model2.id,
+		sessionStore: store,
+		systemPrompt: PROMPT_B,
+	});
+	await reader.clientConn.initialize(stdInitParams);
+	await reader.clientConn.loadSession({ sessionId, cwd: "/", mcpServers: [] });
+	await reader.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
+
+	expect(seen).toEqual([PROMPT_A, PROMPT_B]);
+});
+
 test("listSessions omits nextCursor when there's no next page", async () => {
 	const mock = await startMock();
 	mock.onMessage(/.*/, { content: "ack" });

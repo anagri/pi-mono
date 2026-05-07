@@ -21,6 +21,7 @@ export interface TestHarnessOptions {
 	getApiKey?: (provider: string) => string | undefined;
 	sessionStore?: SessionStore;
 	filesystem?: Filesystem;
+	systemPrompt?: string;
 }
 
 /**
@@ -43,6 +44,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			getApiKey: opts.getApiKey ?? (() => "test-key"),
 			sessionStore,
 			filesystem,
+			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {
