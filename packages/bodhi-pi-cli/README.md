@@ -51,6 +51,8 @@ node dist/cli.js [options]
 
 Sessions are stored in `~/.bodhi-pi-cli/sessions.db` (SQLite, WAL mode). Each session is scoped to the directory where the CLI was launched. Use `/sessions` to list and `/resume <short-id>` to reload.
 
+The session store and Node filesystem/script-executor adapters live in [`@bodhiapp/bodhi-pi-node`](../bodhi-pi-node).
+
 ## Tests
 
 ```sh

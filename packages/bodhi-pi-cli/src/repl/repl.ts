@@ -73,7 +73,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 		terminal: process.stdin.isTTY ?? false,
 	});
 
-	process.stdout.write(chalk.bold(`bodhi-pi-cli`) + `  cwd: ${opts.cwd}\n`);
+	process.stdout.write(`${chalk.bold(`bodhi-pi-cli`)}  cwd: ${opts.cwd}\n`);
 	process.stdout.write(`session: ${state.sessionId.slice(0, 8)}…  type /help for commands\n\n`);
 
 	for (;;) {
@@ -107,10 +107,10 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 					prompt: [{ type: "text", text: line }],
 				});
 				renderer.flush();
-				process.stdout.write(chalk.dim(`[${result.stopReason}]`) + "\n");
+				process.stdout.write(`${chalk.dim(`[${result.stopReason}]`)}\n`);
 			} catch (err) {
 				renderer.flush();
-				process.stdout.write(chalk.red(`[error] ${String(err)}`) + "\n");
+				process.stdout.write(`${chalk.red(`[error] ${String(err)}`)}\n`);
 			}
 		}
 	}

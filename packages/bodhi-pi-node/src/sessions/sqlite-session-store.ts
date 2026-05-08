@@ -147,6 +147,6 @@ export function createSqliteSessionStore(dbPath: string): SessionStore {
 	};
 }
 
-export function defaultDbPath(): string {
-	return path.join(os.homedir(), ".bodhi-pi-cli", "sessions.db");
+export function defaultDbPath(appDirName = "bodhi-pi"): string {
+	return path.join(os.homedir(), `.${appDirName}`, "sessions.db");
 }

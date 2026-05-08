@@ -16,8 +16,8 @@ beforeEach(() => {
 afterEach(() => {
 	try {
 		fs.unlinkSync(dbPath);
-		fs.unlinkSync(dbPath + "-wal");
-		fs.unlinkSync(dbPath + "-shm");
+		fs.unlinkSync(`${dbPath}-wal`);
+		fs.unlinkSync(`${dbPath}-shm`);
 	} catch {
 		// ignore missing files
 	}

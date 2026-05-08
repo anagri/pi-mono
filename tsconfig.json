@@ -21,7 +21,9 @@
 			"@earendil-works/pi-agent-old": ["./packages/agent-old/src/index.ts"],
 			"@earendil-works/pi-agent-old/*": ["./packages/agent-old/src/*"],
 			"@bodhiapp/bodhi-pi": ["./packages/bodhi-pi/src/index.ts"],
-			"@bodhiapp/bodhi-pi/*": ["./packages/bodhi-pi/src/*"]
+			"@bodhiapp/bodhi-pi/*": ["./packages/bodhi-pi/src/*"],
+			"@bodhiapp/bodhi-pi-node": ["./packages/bodhi-pi-node/src/index.ts"],
+			"@bodhiapp/bodhi-pi-node/*": ["./packages/bodhi-pi-node/src/*"]
 		}
 	},
 	"include": [

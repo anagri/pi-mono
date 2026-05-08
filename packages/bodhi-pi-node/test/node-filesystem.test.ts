@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createNodeFilesystem } from "../src/fs/node-filesystem.js";
+import { createNodeFilesystem } from "../src/filesystem/node-filesystem.js";
 
 let root: string;
 let filesystem: ReturnType<typeof createNodeFilesystem>;

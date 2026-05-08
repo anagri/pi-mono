@@ -46,10 +46,10 @@ export function createRenderer(): Renderer {
 			const preview = extractContentText(update.content).slice(0, 400);
 			if (status === "completed") {
 				const line = preview ? `  → ${preview}` : "";
-				if (line) process.stdout.write(chalk.dim(line) + "\n");
+				if (line) process.stdout.write(`${chalk.dim(line)}\n`);
 			} else if (status === "failed") {
 				const line = preview ? `  ✗ ${preview}` : "  ✗ failed";
-				process.stdout.write(chalk.red(line) + "\n");
+				process.stdout.write(`${chalk.red(line)}\n`);
 			}
 		} else if (kind === "user_message_chunk") {
 			// history replay: show dimmed user messages

@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { defaultDbPath } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { getEnvApiKey, getModels, getProviders } from "@mariozechner/pi-ai";
-import { defaultDbPath } from "./sessions/sqlite-session-store.js";
 
 export interface ResolvedConfig {
 	models: Model<Api>[];
@@ -34,12 +34,12 @@ function parseArgs(argv: string[]): Record<string, string | true> {
 export function resolveConfig(argv: string[]): ResolvedConfig {
 	const args = parseArgs(argv);
 
-	if (args["help"] || args["h"]) {
+	if (args.help || args.h) {
 		printHelp();
 		process.exit(0);
 	}
 
-	if (args["version"] || args["v"]) {
+	if (args.version || args.v) {
 		process.stdout.write("0.0.1\n");
 		process.exit(0);
 	}
@@ -58,7 +58,7 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 		process.exit(1);
 	}
 
-	const modelArg = typeof args["model"] === "string" ? args["model"] : undefined;
+	const modelArg = typeof args.model === "string" ? args.model : undefined;
 	const modelEnv = process.env.BODHI_MODEL;
 	const requestedId = modelArg ?? modelEnv;
 
@@ -85,7 +85,7 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 	}
 
 	const dbPath =
-		typeof args["db"] === "string" ? path.resolve(args["db"].replace(/^~/, os.homedir())) : defaultDbPath();
+		typeof args.db === "string" ? path.resolve(args.db.replace(/^~/, os.homedir())) : defaultDbPath("bodhi-pi-cli");
 
 	return { models: modelsWithKey, defaultModelId, getApiKey, systemPrompt, dbPath };
 }

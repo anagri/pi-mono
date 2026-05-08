@@ -1,9 +1,7 @@
 import type { Agent, AgentSideConnection } from "@agentclientprotocol/sdk";
 import { createBodhiPiAgent, type Filesystem, type SessionStore } from "@bodhiapp/bodhi-pi";
+import { createNodeFilesystem, createNodeScriptExecutor, createSqliteSessionStore } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { createNodeFilesystem } from "./fs/node-filesystem.js";
-import { createNodeScriptExecutor } from "./fs/node-script-executor.js";
-import { createSqliteSessionStore } from "./sessions/sqlite-session-store.js";
 
 export interface CliAgentOptions {
 	cwd: string;
