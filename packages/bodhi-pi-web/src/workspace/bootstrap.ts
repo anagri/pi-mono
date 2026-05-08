@@ -1,4 +1,7 @@
 import { loadHandle, queryPermission, requestPermission, saveHandle } from "@bodhiapp/bodhi-pi-browser";
+
+// queryPermission is used in `bootstrapWorkspace` for the stored-handle path.
+// requestPermission is used in `reGrantPermission` for stale-handle revalidation.
 import type { WorkspaceConfig } from "./types";
 
 /**
@@ -56,9 +59,13 @@ export async function pickAndPersistDirectory(): Promise<WorkspaceConfig | undef
 	if (typeof window === "undefined" || typeof window.showDirectoryPicker !== "function") {
 		throw new Error("File System Access API not available in this browser");
 	}
+	// `showDirectoryPicker({ mode: "readwrite" })` already grants the requested
+	// mode when the user picks a folder — the resolved handle is usable as-is.
+	// We do NOT call `queryPermission` or `requestPermission` here: the picker
+	// dialog consumes the user-activation token, so any follow-up call needs a
+	// fresh gesture and may falsely return "prompt"/"denied". Pattern lifted
+	// from BodhiSearch/web-acp/src/hooks/useVolumes.ts:147-179.
 	const handle = await window.showDirectoryPicker({ mode: "readwrite" });
-	const granted = await requestPermission(handle, "readwrite");
-	if (granted !== "granted") return undefined;
 	await saveHandle(handle);
 	return {
 		mode: "fsa",
