@@ -2,6 +2,7 @@
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import {
+	createBrowserScriptExecutor,
 	createDexieSessionStore,
 	createMessagePortStream,
 	createZenfsFilesystem,
@@ -28,6 +29,7 @@ self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) 
 		}
 		const filesystem = createZenfsFilesystem();
 		const sessionStore = createDexieSessionStore({ dbName: "bodhi-pi-web" });
+		const scriptExecutor = createBrowserScriptExecutor({ filesystem });
 
 		const factory = createBodhiPiAgent({
 			models,
@@ -35,7 +37,7 @@ self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) 
 			getApiKey: (provider: string) => apiKeys[provider],
 			filesystem,
 			sessionStore,
-			// scriptExecutor lands in M11.
+			scriptExecutor,
 			...(systemPrompt !== undefined ? { systemPrompt } : {}),
 		});
 
