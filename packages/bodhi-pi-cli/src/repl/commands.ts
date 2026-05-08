@@ -1,4 +1,4 @@
-import type { ClientSideConnection } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
 import type { SessionStore } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { Renderer } from "./render.js";
@@ -7,6 +7,7 @@ export interface ReplState {
 	sessionId: string;
 	currentModelId: string;
 	models: Model<Api>[];
+	availableCommands: AvailableCommand[];
 }
 
 export interface CommandContext {
@@ -28,17 +29,24 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 	switch (cmd) {
 		case "/help": {
-			process.stdout.write(
-				[
-					"  /help              show this help",
-					"  /new               start a new session",
-					"  /sessions          list sessions for current cwd",
-					"  /resume <id>       load a previous session (replays history)",
-					"  /model <id>        switch model for current session",
-					"  /quit              exit",
-					"",
-				].join("\n"),
-			);
+			const lines = [
+				"  /help              show this help",
+				"  /new               start a new session",
+				"  /sessions          list sessions for current cwd",
+				"  /resume <id>       load a previous session (replays history)",
+				"  /model <id>        switch model for current session",
+				"  /quit              exit",
+			];
+			if (ctx.state.availableCommands.length > 0) {
+				lines.push("", "  agent slash commands:");
+				for (const cmd of ctx.state.availableCommands) {
+					const hint = cmd.input ? ` <${cmd.input.hint ?? "input"}>` : "";
+					const label = `  /${cmd.name}${hint}`;
+					lines.push(`${label.padEnd(22)} ${cmd.description}`);
+				}
+			}
+			lines.push("");
+			process.stdout.write(lines.join("\n"));
 			return false;
 		}
 

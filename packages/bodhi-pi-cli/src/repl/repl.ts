@@ -3,6 +3,7 @@ import {
 	type Agent,
 	AgentSideConnection,
 	type AnyMessage,
+	type AvailableCommand,
 	type Client,
 	ClientSideConnection,
 	type Stream,
@@ -40,9 +41,20 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	const agentConn = new AgentSideConnection(opts.factory, agentStream);
 	void agentConn;
 
+	const state: ReplState = {
+		sessionId: "",
+		currentModelId: opts.models[0]?.id ?? "",
+		models: opts.models,
+		availableCommands: [],
+	};
+
 	const clientConn = new ClientSideConnection(
 		(_agent: Agent): Client => ({
 			sessionUpdate: async (params) => {
+				const update = params.update as Record<string, unknown>;
+				if (update.sessionUpdate === "available_commands_update") {
+					state.availableCommands = (update.availableCommands as AvailableCommand[]) ?? [];
+				}
 				renderer.onNotification(params);
 			},
 			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
@@ -52,12 +64,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 
 	await clientConn.initialize(INIT_PARAMS);
 	const { sessionId: initialSessionId } = await clientConn.newSession({ cwd: opts.cwd, mcpServers: [] });
-
-	const state: ReplState = {
-		sessionId: initialSessionId,
-		currentModelId: opts.models[0]?.id ?? "",
-		models: opts.models,
-	};
+	state.sessionId = initialSessionId;
 
 	// terminal: false when piped so readline doesn't try raw-mode on a non-TTY.
 	const rl = readline.createInterface({
@@ -80,7 +87,10 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 		line = line.trim();
 		if (!line) continue;
 
-		if (isCommand(line)) {
+		const cmdName = isCommand(line) ? line.trim().split(/\s+/)[0].slice(1) : null;
+		const isAgentCommand = cmdName !== null && state.availableCommands.some((c) => c.name === cmdName);
+
+		if (isCommand(line) && !isAgentCommand) {
 			const shouldExit = await handleCommand(line, {
 				clientConn,
 				state,

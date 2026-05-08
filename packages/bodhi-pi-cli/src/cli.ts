@@ -3,6 +3,7 @@ import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { config as loadEnv } from "dotenv";
 import { resolveConfig } from "./config.js";
 import { createNodeFilesystem } from "./fs/node-filesystem.js";
+import { createNodeScriptExecutor } from "./fs/node-script-executor.js";
 import { runRepl } from "./repl/repl.js";
 import { createSqliteSessionStore } from "./sessions/sqlite-session-store.js";
 
@@ -19,6 +20,7 @@ const factory = createBodhiPiAgent({
 	getApiKey: cfg.getApiKey,
 	sessionStore,
 	filesystem,
+	scriptExecutor: createNodeScriptExecutor(),
 	...(cfg.systemPrompt !== undefined ? { systemPrompt: cfg.systemPrompt } : {}),
 });
 
