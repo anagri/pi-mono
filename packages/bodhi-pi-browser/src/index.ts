@@ -1,4 +1,8 @@
 export {
+	type BrowserExtensionLoaderOptions,
+	createBrowserExtensionLoader,
+} from "./extensions/browser-extension-loader.js";
+export {
 	clearHandle,
 	loadHandle,
 	queryPermission,

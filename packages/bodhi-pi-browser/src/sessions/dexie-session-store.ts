@@ -1,6 +1,8 @@
 import type {
+	ExtensionEntry,
 	ListSessionsRequest,
 	ListSessionsResult,
+	ReadExtensionEntriesFilter,
 	SessionEntry,
 	SessionRecord,
 	SessionStore,
@@ -81,6 +83,16 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 			await db.transaction("rw", sessions, entries, async () => {
 				await entries.where({ sessionId }).delete();
 				await sessions.delete(sessionId);
+			});
+		},
+
+		async readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]> {
+			const rows = await entries.where({ sessionId }).sortBy("seq");
+			const exts = rows.map((r) => r.entry).filter((e): e is ExtensionEntry => e.type === "extension");
+			return exts.filter((e) => {
+				if (filter?.extensionName !== undefined && e.extensionName !== filter.extensionName) return false;
+				if (filter?.customType !== undefined && e.customType !== filter.customType) return false;
+				return true;
 			});
 		},
 	};

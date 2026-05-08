@@ -66,11 +66,14 @@ export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProvi
 			setModels(env.models);
 			setDefaultModelId(env.defaultModelId);
 
+			// Seeded workspace = test mode → record events for Playwright specs.
+			const recordEvents = workspace.mode === "seed";
 			const runtime = await startAgentRuntime({
 				models: env.models,
 				defaultModelId: env.defaultModelId,
 				apiKeys: env.apiKeys,
 				workspace,
+				...(recordEvents ? { recordEvents: true } : {}),
 				onNotification: (notif) => {
 					dispatchNotification(notif, {
 						appendChunk,

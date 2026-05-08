@@ -8,7 +8,13 @@ import {
 import { createMessagePortStream } from "@bodhiapp/bodhi-pi-browser";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { WorkspaceConfig } from "../workspace/types";
-import type { InitMessage } from "./types";
+import type { InitMessage, WorkerEventMessage } from "./types";
+
+declare global {
+	interface Window {
+		__bodhiPiEventLog?: WorkerEventMessage["record"][];
+	}
+}
 
 const STD_INIT_PARAMS = {
 	protocolVersion: 1,
@@ -25,6 +31,14 @@ export interface RuntimeOptions {
 	systemPrompt?: string;
 	workspace: WorkspaceConfig;
 	onNotification: (notif: SessionNotification) => void;
+	/**
+	 * When true, the worker registers lifecycle-event handlers and posts each
+	 * event back to the main thread, where it is appended to
+	 * `window.__bodhiPiEventLog` so Playwright specs can assert sequences.
+	 * Set automatically by `RuntimeProvider` when running against a seeded
+	 * (test) workspace.
+	 */
+	recordEvents?: boolean;
 }
 
 export interface AgentRuntime {
@@ -45,8 +59,21 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		apiKeys: opts.apiKeys,
 		workspace: opts.workspace,
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.recordEvents ? { recordEvents: true } : {}),
 	};
 	worker.postMessage(init, [channel.port2]);
+
+	if (opts.recordEvents && typeof window !== "undefined") {
+		// Initialize the log array once; specs read from this. Worker posts
+		// events as `{ type: "bodhi-pi-event", record }` over the standard
+		// worker message channel, NOT the agent MessagePort.
+		window.__bodhiPiEventLog = window.__bodhiPiEventLog ?? [];
+		const log = window.__bodhiPiEventLog;
+		worker.addEventListener("message", (ev: MessageEvent<unknown>) => {
+			const msg = ev.data as WorkerEventMessage | undefined;
+			if (msg?.type === "bodhi-pi-event") log.push(msg.record);
+		});
+	}
 
 	const { readable, writable } = createMessagePortStream(channel.port1);
 	const stream = ndJsonStream(writable, readable);

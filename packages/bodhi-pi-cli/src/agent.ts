@@ -1,5 +1,11 @@
 import type { Agent, AgentSideConnection } from "@agentclientprotocol/sdk";
-import { createBodhiPiAgent, type Filesystem, type SessionStore } from "@bodhiapp/bodhi-pi";
+import {
+	type BodhiPiEventHandlers,
+	createBodhiPiAgent,
+	type Filesystem,
+	type RegisteredExtension,
+	type SessionStore,
+} from "@bodhiapp/bodhi-pi";
 import { createNodeFilesystem, createNodeScriptExecutor, createSqliteSessionStore } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
 
@@ -10,6 +16,8 @@ export interface CliAgentOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	eventHandlers?: BodhiPiEventHandlers;
+	extensionFactories?: RegisteredExtension[];
 }
 
 export interface CliAgent {
@@ -31,6 +39,8 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 		filesystem,
 		scriptExecutor: createNodeScriptExecutor(),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
+		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 	});
 	return { factory, sessionStore, filesystem, cwd: opts.cwd, models: opts.models };
 }

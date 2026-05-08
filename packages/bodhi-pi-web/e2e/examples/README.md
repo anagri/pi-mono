@@ -32,6 +32,30 @@ The browser ScriptExecutor wraps each script as an AsyncFunction. Try:
 
 Expected: the script computes days from your birthday to the baseline (2026-05-08) and the agent replies with the integer (`9624` for the example above).
 
+## Extensions
+
+Extensions are loaded automatically from `.bodhi-pi/extensions/*.js` after the
+folder is mounted. Source comes from the workspace itself, dynamic-imported via
+`data:text/javascript;base64,…` — no `node_modules`, no transpile step. Each
+file's default export is the factory `(pi) => void`.
+
+| File | What it does | Try it |
+|---|---|---|
+| `input-transform.js` | Rewrites prompts beginning with `?quick ` into a one-sentence directive. | `?quick what is 2 + 2` |
+| `pirate.js` | Appends a pirate-voice rule to the system prompt. | `say hello in your own words` |
+| `redact-secrets.js` | Scrubs `sk-…` API-key tokens out of tool results before they're displayed. | `read secrets.txt and tell me what's there verbatim` |
+| `dynamic-tools.js` | Registers a custom LLM-callable tool `bodhi_echo`. | `call the bodhi_echo tool with the message "hello from the browser" and report what it returned` |
+| `register-provider.js.disabled` | Adds a custom Anthropic model to the model dropdown. **Renaming required** — drop the `.disabled` suffix and paste a real API key inside. | `/model` (after enabling) |
+
+The browser loader is JS-only by design; TypeScript-source extensions need an
+in-browser transform (esbuild-wasm) which is deferred. In a Node host (e.g.
+`bodhi-pi-cli`), the same factories work as `.ts` files via jiti.
+
+To author your own: drop a new `*.js` file in `.bodhi-pi/extensions/`, mount the
+workspace, and the worker picks it up on session start. A bad extension (parse
+error, missing default export) is logged to the dev-tools console and skipped —
+it does not block peer extensions or the agent.
+
 ## Built-in filesystem tools
 
 Plain prompts that exercise the six `read` / `write` / `edit` / `ls` / `find` / `grep` tools against the seeded files.
@@ -63,17 +87,24 @@ grep for "codeword" in <mount>/notes and tell me the value
 ├── commands/
 │   ├── echo.md             — /echo <word>
 │   └── say-tuesday.md      — /say-tuesday
-└── skills/
-    ├── say-hello/
-    │   └── SKILL.md        — /skill:say-hello <name>
-    └── days-since-birthday/
-        ├── SKILL.md        — /skill:days-since-birthday <YYYY-MM-DD>
-        └── script.js       — invoked via run_script
+├── skills/
+│   ├── say-hello/
+│   │   └── SKILL.md        — /skill:say-hello <name>
+│   └── days-since-birthday/
+│       ├── SKILL.md        — /skill:days-since-birthday <YYYY-MM-DD>
+│       └── script.js       — invoked via run_script
+└── extensions/
+    ├── input-transform.js          — `?quick` prefix rewrites your prompt
+    ├── pirate.js                   — system-prompt augmentation
+    ├── redact-secrets.js           — scrub sk-… from tool results
+    ├── dynamic-tools.js            — registers the bodhi_echo tool
+    └── register-provider.js.disabled — adds an Anthropic model (rename + add key)
 notes/                       — grep demo
 topics/                      — ls demo
 docs/                        — find demo (.md vs .txt vs .js)
 scripts/                     — extra .js the find demo includes
 poem.txt                     — write/read/edit demo seed
+secrets.txt                  — redact-secrets demo (fake key tokens)
 ```
 
 ## Notes

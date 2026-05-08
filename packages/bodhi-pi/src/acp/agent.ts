@@ -25,10 +25,23 @@ import {
 	type SetSessionConfigOptionRequest,
 	type SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
-import { Agent, type AgentMessage, type AgentTool, type Agent as PiAgent } from "@mariozechner/pi-agent-core";
-import type { Api, Model, StopReason as PiStopReason } from "@mariozechner/pi-ai";
+import {
+	type AfterToolCallContext,
+	type AfterToolCallResult,
+	Agent,
+	type AgentMessage,
+	type AgentTool,
+	type BeforeToolCallContext,
+	type BeforeToolCallResult,
+	type Agent as PiAgent,
+} from "@mariozechner/pi-agent-core";
+import type { Api, Model, StopReason as PiStopReason, ProviderResponse } from "@mariozechner/pi-ai";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
+import { EventDispatcher } from "@/events/dispatcher.js";
+import type { BodhiPiEventHandlers } from "@/events/types.js";
+import { ExtensionRunner, mergeCommands, mergeTools } from "@/extensions/runner.js";
+import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import type { SessionStore } from "@/sessions/session-store.js";
@@ -60,6 +73,14 @@ export interface BodhiPiConfig {
 	systemPrompt?: string;
 	/** When provided, the `run_script` built-in tool is registered. Hosts implement per their runtime. */
 	scriptExecutor?: ScriptExecutor;
+	/** Lifecycle event handlers; map keyed by event type, each value an array of async handlers. */
+	eventHandlers?: BodhiPiEventHandlers;
+	/**
+	 * Pre-loaded extension factories. bodhi-pi core never walks the filesystem;
+	 * each runtime (Node via jiti, browser via data-URL ESM) is responsible for
+	 * its own discovery + loading and passes the resulting factories here.
+	 */
+	extensionFactories?: RegisteredExtension[];
 }
 
 interface SessionState {
@@ -94,6 +115,8 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 	if (!config.filesystem) {
 		throw new Error("BodhiPiConfig.filesystem is required (no default fallback)");
 	}
+	// Defaults must be in the host-supplied models registry. Extension-contributed
+	// providers are *additive* — they cannot satisfy the default model requirement.
 	if (!config.models.find((m) => m.id === config.defaultModelId)) {
 		throw new Error(`defaultModelId "${config.defaultModelId}" not in models registry`);
 	}
@@ -108,11 +131,46 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
  */
 class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
+	private readonly events: EventDispatcher;
+	private extensionRunner?: ExtensionRunner;
+	private extensionRunnerReady?: Promise<void>;
 
 	constructor(
 		private readonly config: BodhiPiConfig,
 		private readonly conn: AgentSideConnection,
-	) {}
+	) {
+		// EventDispatcher is constructed once with both host-supplied handlers
+		// AND extension-registered handlers merged. Extension handlers are added
+		// asynchronously via `ensureExtensionRunner()` on first session use.
+		this.events = new EventDispatcher(config.eventHandlers);
+	}
+
+	private async ensureExtensionRunner(): Promise<ExtensionRunner | undefined> {
+		const factories = this.config.extensionFactories;
+		if (!factories || factories.length === 0) return undefined;
+		if (this.extensionRunner) return this.extensionRunner;
+		if (!this.extensionRunnerReady) {
+			this.extensionRunnerReady = (async () => {
+				const runner = await ExtensionRunner.build({
+					conn: this.conn,
+					sessionStore: this.config.sessionStore,
+					extensions: factories,
+				});
+				this.extensionRunner = runner;
+				// Merge extension event handlers into the dispatcher's existing handler map.
+				const extHandlers = runner.getEventHandlers();
+				for (const [type, list] of Object.entries(extHandlers) as [
+					keyof BodhiPiEventHandlers,
+					NonNullable<BodhiPiEventHandlers[keyof BodhiPiEventHandlers]>,
+				][]) {
+					if (!list || list.length === 0) continue;
+					this.events.appendHandlers(type, list);
+				}
+			})();
+		}
+		await this.extensionRunnerReady;
+		return this.extensionRunner;
+	}
 
 	async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
 		return {
@@ -140,10 +198,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
+		await this.ensureExtensionRunner();
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		const defaultModel = this.findModel(this.config.defaultModelId);
 		await this._buildSessionState(record.id, defaultModel, record.cwd);
 		await this.advertiseSlashable(record.id);
+		await this.events.emitSessionStart({
+			type: "session_start",
+			sessionId: record.id,
+			cwd: record.cwd,
+			reason: "new",
+		});
 		return {
 			sessionId: record.id,
 			configOptions: [this.buildModelConfigOption(this.config.defaultModelId)],
@@ -151,6 +216,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
+		await this.ensureExtensionRunner();
 		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
 
 		// Stream history back via session/update notifications, pairing each
@@ -218,15 +284,28 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 
 		await this.advertiseSlashable(params.sessionId);
+		await this.events.emitSessionStart({
+			type: "session_start",
+			sessionId: params.sessionId,
+			cwd: params.cwd,
+			reason: "load",
+		});
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
 		};
 	}
 
 	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+		await this.ensureExtensionRunner();
 		// Per ACP spec: rehydrate without replaying history.
 		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
 		await this.advertiseSlashable(params.sessionId);
+		await this.events.emitSessionStart({
+			type: "session_start",
+			sessionId: params.sessionId,
+			cwd: params.cwd,
+			reason: "resume",
+		});
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
 		};
@@ -252,6 +331,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// Per ACP session/close: drop runtime state but keep the persisted record.
 		cached?.piAgent.abort();
 		this.sessions.delete(params.sessionId);
+		await this.events.emitSessionShutdown({ type: "session_shutdown", sessionId: params.sessionId });
 		return {};
 	}
 
@@ -264,6 +344,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			this.sessions.get(sessionId)?.piAgent.abort();
 			this.sessions.delete(sessionId);
 			await this.config.sessionStore.delete(sessionId);
+			await this.events.emitSessionShutdown({ type: "session_shutdown", sessionId });
 			return {};
 		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
@@ -281,6 +362,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			throw new RequestError(-32602, `model config requires string value, got ${typeof params.value}`);
 		}
 		const newModel = this.findModel(params.value);
+		const previousModelId = session.currentModelId;
 		// pi-ai's streamSimple reads state.model per turn, so mutating here
 		// routes the next prompt to the new model.
 		session.piAgent.state.model = newModel;
@@ -291,6 +373,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 			timestamp: Date.now(),
 			provider: newModel.provider,
 			modelId: newModel.id,
+		});
+		await this.events.emitModelSelect({
+			type: "model_select",
+			sessionId: params.sessionId,
+			fromModelId: previousModelId,
+			toModelId: params.value,
 		});
 		return {
 			configOptions: [this.buildModelConfigOption(params.value)],
@@ -309,7 +397,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.join("");
 		// Skills first because they use the more specific `/skill:` prefix; if no
 		// skill matches, the text falls through to slash-command expansion.
-		const promptText = expandPromptTemplate(expandSkillCommand(text, session.skills), session.commands);
+		const expandedText = expandPromptTemplate(expandSkillCommand(text, session.skills), session.commands);
 
 		// Reset so a prior cancel doesn't bleed into this prompt.
 		session.cancelled = false;
@@ -319,10 +407,54 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const sessionId = params.sessionId;
 		const conn = this.conn;
 		const store = this.config.sessionStore;
+		const events = this.events;
+
+		// Mutable input hook — extensions can rewrite text or short-circuit with `handled: true`.
+		const inputResult = await events.emitInput({ type: "input", sessionId, text: expandedText, source: "acp" });
+		if (inputResult.handled) {
+			return { stopReason: "end_turn", userMessageId: params.messageId ?? null };
+		}
+
+		// Mutable system-prompt + user-prompt hook (fired once per agent run).
+		const before = await events.emitBeforeAgentStart({
+			type: "before_agent_start",
+			sessionId,
+			systemPrompt: session.piAgent.state.systemPrompt,
+			userPrompt: inputResult.text,
+		});
+		if (before.systemPrompt !== session.piAgent.state.systemPrompt) {
+			session.piAgent.state.systemPrompt = before.systemPrompt;
+		}
+		const promptText = before.userPrompt;
+
+		await events.emitAgentStart({ type: "agent_start", sessionId, userPrompt: promptText });
 
 		const unsubscribe = session.piAgent.subscribe(async (event) => {
 			switch (event.type) {
+				case "turn_start": {
+					await events.emitTurnStart({ type: "turn_start", sessionId });
+					return;
+				}
+				case "turn_end": {
+					await events.emitTurnEnd({
+						type: "turn_end",
+						sessionId,
+						message: event.message,
+						toolResults: event.toolResults,
+					});
+					return;
+				}
+				case "message_start": {
+					await events.emitMessageStart({ type: "message_start", sessionId, message: event.message });
+					return;
+				}
 				case "message_update": {
+					await events.emitMessageUpdate({
+						type: "message_update",
+						sessionId,
+						message: event.message,
+						assistantMessageEvent: event.assistantMessageEvent,
+					});
 					if (event.assistantMessageEvent.type !== "text_delta") return;
 					await conn.sessionUpdate({
 						sessionId,
@@ -334,6 +466,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "tool_execution_start": {
+					await events.emitToolExecutionStart({
+						type: "tool_execution_start",
+						sessionId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						args: event.args,
+					});
 					await conn.sessionUpdate({
 						sessionId,
 						update: {
@@ -347,7 +486,25 @@ class BodhiPiAcpAgent implements AcpAgent {
 					});
 					return;
 				}
+				case "tool_execution_update": {
+					await events.emitToolExecutionUpdate({
+						type: "tool_execution_update",
+						sessionId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						partialResult: event.partialResult,
+					});
+					return;
+				}
 				case "tool_execution_end": {
+					await events.emitToolExecutionEnd({
+						type: "tool_execution_end",
+						sessionId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						result: event.result,
+						isError: event.isError,
+					});
 					const resultContent = Array.isArray(event.result?.content) ? event.result.content : [];
 					await conn.sessionUpdate({
 						sessionId,
@@ -361,6 +518,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "message_end": {
+					await events.emitMessageEnd({ type: "message_end", sessionId, message: event.message });
 					const role = event.message.role;
 					if (role !== "user" && role !== "assistant" && role !== "toolResult") return;
 					if (role === "assistant") {
@@ -383,12 +541,31 @@ class BodhiPiAcpAgent implements AcpAgent {
 			await session.piAgent.prompt(promptText);
 			await session.piAgent.waitForIdle();
 			if (session.cancelled) {
+				await events.emitAgentEnd({
+					type: "agent_end",
+					sessionId,
+					stopReason: "cancelled",
+					messages: session.piAgent.state.messages,
+					...(lastAssistantErrorMessage !== undefined ? { errorMessage: lastAssistantErrorMessage } : {}),
+				});
 				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
 			}
 			if (lastAssistantStopReason === "error") {
+				await events.emitAgentEnd({
+					type: "agent_end",
+					sessionId,
+					messages: session.piAgent.state.messages,
+					errorMessage: lastAssistantErrorMessage ?? "model error",
+				});
 				throw new RequestError(-32603, lastAssistantErrorMessage ?? "model error");
 			}
 			const stopReason = mapStopReason(lastAssistantStopReason);
+			await events.emitAgentEnd({
+				type: "agent_end",
+				sessionId,
+				stopReason,
+				messages: session.piAgent.state.messages,
+			});
 			return { stopReason, userMessageId: params.messageId ?? null };
 		} finally {
 			unsubscribe();
@@ -402,8 +579,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		session.piAgent.abort();
 	}
 
+	private allModels(): Model<Api>[] {
+		const ext = this.extensionRunner?.getProviderModels() ?? [];
+		const seen = new Set(this.config.models.map((m) => m.id));
+		return [...this.config.models, ...ext.filter((m) => !seen.has(m.id))];
+	}
+
 	private findModel(id: string): Model<Api> {
-		const m = this.config.models.find((x) => x.id === id);
+		const m = this.allModels().find((x) => x.id === id);
 		if (!m) throw new RequestError(-32602, `unknown model id: ${id}`);
 		return m;
 	}
@@ -415,7 +598,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			category: "model",
 			type: "select",
 			currentValue,
-			options: this.config.models.map((m) => ({
+			options: this.allModels().map((m) => ({
 				value: m.id,
 				name: m.name,
 			})),
@@ -448,14 +631,22 @@ class BodhiPiAcpAgent implements AcpAgent {
 		cwd: string,
 		messages: AgentMessage[] = [],
 	): Promise<void> {
-		const tools = createBuiltinTools({
+		const builtinTools = createBuiltinTools({
 			filesystem: this.config.filesystem,
 			cwd,
 			...(this.config.scriptExecutor ? { scriptExecutor: this.config.scriptExecutor } : {}),
 		});
-		const commands = await loadProjectCommands(this.config.filesystem, cwd);
+		const projectCommands = await loadProjectCommands(this.config.filesystem, cwd);
 		const skills = await loadProjectSkills(this.config.filesystem, cwd);
+		// Merge extension tools/commands. Builtins + project commands win on collision.
+		const tools = this.extensionRunner ? mergeTools(builtinTools, this.extensionRunner.getTools()) : builtinTools;
+		const commands = this.extensionRunner
+			? mergeCommands(projectCommands, this.extensionRunner.getCommands())
+			: projectCommands;
 		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
+		const events = this.events;
+		const extRunner = this.extensionRunner;
+		const hostGetApiKey = this.config.getApiKey;
 		const piAgent = new Agent({
 			initialState: {
 				model,
@@ -463,7 +654,54 @@ class BodhiPiAcpAgent implements AcpAgent {
 				tools,
 				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
 			},
-			getApiKey: this.config.getApiKey,
+			getApiKey: async (provider: string) => {
+				const hostKey = hostGetApiKey(provider);
+				if (hostKey !== undefined) return hostKey;
+				if (extRunner) return await extRunner.resolveProviderKey(provider);
+				return undefined;
+			},
+			beforeToolCall: async (ctx: BeforeToolCallContext): Promise<BeforeToolCallResult | undefined> => {
+				const result = await events.emitToolCall({
+					type: "tool_call",
+					sessionId,
+					toolCallId: ctx.toolCall.id,
+					toolName: ctx.toolCall.name,
+					input: ctx.args as Record<string, unknown>,
+				});
+				return result.block
+					? { block: true, ...(result.reason !== undefined ? { reason: result.reason } : {}) }
+					: undefined;
+			},
+			afterToolCall: async (ctx: AfterToolCallContext): Promise<AfterToolCallResult | undefined> => {
+				const overrides = await events.emitToolResult({
+					type: "tool_result",
+					sessionId,
+					toolCallId: ctx.toolCall.id,
+					toolName: ctx.toolCall.name,
+					result: ctx.result,
+					isError: ctx.isError,
+				});
+				return Object.keys(overrides).length === 0 ? undefined : overrides;
+			},
+			onPayload: async (payload, m) => {
+				return await events.emitBeforeProviderRequest({
+					type: "before_provider_request",
+					sessionId,
+					provider: m.provider,
+					modelId: m.id,
+					payload,
+				});
+			},
+			onResponse: async (response: ProviderResponse, m) => {
+				await events.emitAfterProviderResponse({
+					type: "after_provider_response",
+					sessionId,
+					provider: m.provider,
+					modelId: m.id,
+					status: response.status,
+					headers: response.headers,
+				});
+			},
 		});
 		this.sessions.set(sessionId, {
 			piAgent,

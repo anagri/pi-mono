@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { SessionEntry, SessionRecord, SessionStore } from "@bodhiapp/bodhi-pi";
+import type {
+	ExtensionEntry,
+	ReadExtensionEntriesFilter,
+	SessionEntry,
+	SessionRecord,
+	SessionStore,
+} from "@bodhiapp/bodhi-pi";
 import Database from "better-sqlite3";
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -143,6 +149,22 @@ export function createSqliteSessionStore(dbPath: string): SessionStore {
 		delete(sessionId) {
 			db.delete(sessions).where(eq(sessions.id, sessionId)).run();
 			return Promise.resolve();
+		},
+
+		readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]> {
+			const rows = db
+				.select()
+				.from(sessionEntries)
+				.where(and(eq(sessionEntries.sessionId, sessionId), eq(sessionEntries.type, "extension")))
+				.orderBy(sessionEntries.ordinal)
+				.all();
+			const entries = rows.map((r) => JSON.parse(r.payload) as ExtensionEntry);
+			const matched = entries.filter((e) => {
+				if (filter?.extensionName !== undefined && e.extensionName !== filter.extensionName) return false;
+				if (filter?.customType !== undefined && e.customType !== filter.customType) return false;
+				return true;
+			});
+			return Promise.resolve(matched);
 		},
 	};
 }

@@ -1,0 +1,36 @@
+/**
+ * register-provider — adds a custom LLM model to the model-switcher dropdown.
+ * Demonstrates `pi.registerProvider`.
+ *
+ * DISABLED BY DEFAULT: rename this file to `register-provider.js` (drop the
+ * `.disabled` suffix) AND fill in a real Anthropic API key below to try it.
+ * The browser loader only picks up `*.js` / `*.mjs` files, so the suffix
+ * keeps it inert until you opt in.
+ *
+ * After enabling, the model dropdown will gain a "Claude Haiku 4.5 (via
+ * extension)" option you can switch to with /model. The provider's API key
+ * comes from `getApiKey` on the registered provider — bodhi-pi falls back to
+ * this when the host's own `getApiKey(provider)` returns undefined.
+ *
+ * NOTE: this is a *minimal* Model<Api> shape sufficient for routing. It
+ * does NOT include cost/usage metadata — the model dropdown will still work
+ * but cost displays may be missing. For production hosts, import the real
+ * Model definition from @mariozechner/pi-ai instead.
+ */
+export default function (pi) {
+	pi.registerProvider("ext-anthropic", {
+		model: {
+			id: "claude-haiku-4-5",
+			provider: "anthropic",
+			api: "anthropic-messages",
+			name: "Claude Haiku 4.5 (via extension)",
+			baseUrl: "https://api.anthropic.com",
+			contextWindow: 200000,
+			maxTokens: 8192,
+			input: ["text", "image"],
+			reasoning: false,
+		},
+		// Replace with a real Anthropic API key, e.g. "sk-ant-..."
+		getApiKey: () => "REPLACE_WITH_YOUR_ANTHROPIC_KEY",
+	});
+}

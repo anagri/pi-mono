@@ -20,6 +20,8 @@ Tracks what's shipped, what's in progress, and what's planned. Each completed mi
 | **M4.3**         | `019065e5`            | `ScriptExecutor` interface + `run_script` tool; host-injected, optional (capability-conditional)     |
 | **M4.3-cli**     | `b523427a`            | Wire slash commands + `ScriptExecutor` into bodhi-pi-cli REPL                                        |
 | **M4-health**    | `40d9d7d5`            | Health-pass fixes for slash commands + skills                                                        |
+| **M5.1**         | _pending commit_      | Headless lifecycle events (16 types) + `BodhiPiConfig.eventHandlers`; wired across cli + web         |
+| **M5.2**         | _pending commit_      | `ExtensionAPI` factory + Node/browser loaders; tools/commands/providers/events-bus/appendEntry       |
 
 ### M2.1 detail — session persistence
 

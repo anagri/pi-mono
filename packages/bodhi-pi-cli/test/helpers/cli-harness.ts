@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
+import type { BodhiPiEventHandlers, RegisteredExtension } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { createCliAgent } from "@/agent.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
@@ -18,6 +19,8 @@ export interface CliTestHarnessOptions {
 	model: Model<Api>;
 	apiKey: string;
 	provider?: string;
+	eventHandlers?: BodhiPiEventHandlers;
+	extensionFactories?: RegisteredExtension[];
 }
 
 export async function createCliTestHarness(opts: CliTestHarnessOptions): Promise<CliTestHarness> {
@@ -31,6 +34,8 @@ export async function createCliTestHarness(opts: CliTestHarnessOptions): Promise
 		models: [opts.model],
 		defaultModelId: opts.model.id,
 		getApiKey: (p) => (p === provider ? opts.apiKey : undefined),
+		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
+		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 	});
 
 	const updates: SessionNotification[] = [];

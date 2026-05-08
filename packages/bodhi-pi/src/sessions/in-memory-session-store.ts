@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type {
+	ExtensionEntry,
 	ListSessionsRequest,
 	ListSessionsResult,
+	ReadExtensionEntriesFilter,
 	SessionEntry,
 	SessionRecord,
 	SessionStore,
@@ -61,6 +63,18 @@ export function createInMemorySessionStore(): SessionStore {
 
 		async delete(sessionId) {
 			sessions.delete(sessionId);
+		},
+
+		async readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]> {
+			const record = sessions.get(sessionId);
+			if (!record) return [];
+			const all = record.entries.filter((e): e is ExtensionEntry => e.type === "extension");
+			const matched = all.filter((e) => {
+				if (filter?.extensionName !== undefined && e.extensionName !== filter.extensionName) return false;
+				if (filter?.customType !== undefined && e.customType !== filter.customType) return false;
+				return true;
+			});
+			return structuredClone(matched);
 		},
 	};
 }

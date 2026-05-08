@@ -1,9 +1,11 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import {
+	type BodhiPiEventHandlers,
 	createBodhiPiAgent,
 	createInMemoryFilesystem,
 	createInMemorySessionStore,
 	type Filesystem,
+	type RegisteredExtension,
 	type ScriptExecutor,
 	type SessionStore,
 } from "@/index.js";
@@ -24,6 +26,8 @@ export interface TestHarnessOptions {
 	filesystem?: Filesystem;
 	systemPrompt?: string;
 	scriptExecutor?: ScriptExecutor;
+	eventHandlers?: BodhiPiEventHandlers;
+	extensionFactories?: RegisteredExtension[];
 }
 
 /**
@@ -48,6 +52,8 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			filesystem,
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 			...(opts.scriptExecutor ? { scriptExecutor: opts.scriptExecutor } : {}),
+			...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
+			...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {

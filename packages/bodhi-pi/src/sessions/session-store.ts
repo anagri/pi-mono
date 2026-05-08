@@ -3,7 +3,31 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 /** Discriminator-typed entry persisted in the session log. */
 export type SessionEntry =
 	| { type: "message"; id: string; timestamp: number; message: AgentMessage }
-	| { type: "model_change"; id: string; timestamp: number; provider: string; modelId: string };
+	| { type: "model_change"; id: string; timestamp: number; provider: string; modelId: string }
+	| ExtensionEntry;
+
+/**
+ * Custom session entry written by an extension via `pi.appendEntry`.
+ *
+ * `extensionName` is used by `readExtensionEntries` for filtering; `customType`
+ * is opaque to bodhi-pi (extensions choose their own taxonomy, e.g.
+ * "web-search-results", "todo-list", "audit-log"). `data` is JSON-cloneable
+ * payload — implementations MUST round-trip it through their store.
+ */
+export interface ExtensionEntry {
+	type: "extension";
+	id: string;
+	timestamp: number;
+	extensionName: string;
+	customType: string;
+	data: unknown;
+}
+
+/** Filter for `readExtensionEntries`. Both fields are AND-combined. */
+export interface ReadExtensionEntriesFilter {
+	extensionName?: string;
+	customType?: string;
+}
 
 /** Full session record returned by load(). */
 export interface SessionRecord {
@@ -66,4 +90,13 @@ export interface SessionStore {
 
 	/** Permanently delete a session and all its entries. */
 	delete(sessionId: string): Promise<void>;
+
+	/**
+	 * Read extension entries previously written via `append({ type: "extension", ... })`.
+	 *
+	 * Extensions call this on `session_start` to rebuild in-memory state from
+	 * past sessions (e.g. replaying a todo list, restoring search-result cache).
+	 * Filtering is AND-combined; pass `{}` to read every extension entry.
+	 */
+	readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]>;
 }
