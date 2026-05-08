@@ -231,3 +231,21 @@
 .composer-stop:hover {
 	background: #b91c1c;
 }
+
+.status-bar-unmount {
+	margin-left: 0.5rem;
+	padding: 0.125rem 0.5rem;
+	background: transparent;
+	color: #fca5a5;
+	border: 1px solid #4b5563;
+	border-radius: 0.25rem;
+	cursor: pointer;
+	font-size: 0.75rem;
+	font-family: inherit;
+}
+
+.status-bar-unmount:hover {
+	background: #374151;
+	color: #fef2f2;
+	border-color: #6b7280;
+}

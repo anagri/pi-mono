@@ -1,10 +1,12 @@
+import { clearHandle } from "@bodhiapp/bodhi-pi-browser";
 import { useEffect, useState } from "react";
 import "./App.css";
-import { type BootstrapResult, bootstrapWorkspace } from "./workspace/bootstrap";
-import type { WorkspaceConfig } from "./workspace/types";
+import { clearLastSessionId } from "./agent/session-storage";
 import { ChatPage } from "./ui/ChatPage";
 import { DirectoryGate } from "./ui/DirectoryGate";
 import { RuntimeProvider } from "./ui/RuntimeProvider";
+import { type BootstrapResult, bootstrapWorkspace } from "./workspace/bootstrap";
+import type { WorkspaceConfig } from "./workspace/types";
 
 function App() {
 	const [boot, setBoot] = useState<BootstrapResult | null>(null);
@@ -26,6 +28,17 @@ function App() {
 
 	function handleGranted(workspace: WorkspaceConfig) {
 		setBoot({ ready: true, workspace });
+	}
+
+	async function handleUnmount() {
+		// Forget the granted FSA handle and the per-tab session pointer; the
+		// state flip below unmounts <RuntimeProvider> which terminates the
+		// worker (ZenFS state goes with the realm). Dexie sessions persist
+		// across unmounts but are filtered by cwd, so a remount of a
+		// different folder starts with a clean /sessions list.
+		await clearHandle();
+		clearLastSessionId();
+		setBoot({ ready: false, kind: "needs-pick" });
 	}
 
 	if (error) {
@@ -52,7 +65,7 @@ function App() {
 	}
 
 	return (
-		<RuntimeProvider workspace={boot.workspace}>
+		<RuntimeProvider workspace={boot.workspace} onUnmount={handleUnmount}>
 			<ChatPage />
 		</RuntimeProvider>
 	);

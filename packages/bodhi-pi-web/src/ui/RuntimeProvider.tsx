@@ -17,6 +17,7 @@ interface RuntimeContextValue {
 	availableCommands: AvailableCommand[];
 	prompt: (text: string) => Promise<void>;
 	cancelPrompt: () => Promise<void>;
+	unmount: () => Promise<void>;
 }
 
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
@@ -29,10 +30,11 @@ export function useRuntime(): RuntimeContextValue {
 
 export interface RuntimeProviderProps {
 	workspace: WorkspaceConfig;
+	onUnmount?: () => void | Promise<void>;
 	children: React.ReactNode;
 }
 
-export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
+export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
@@ -193,6 +195,11 @@ export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
 		}
 	}
 
+	async function unmount(): Promise<void> {
+		if (!onUnmount) return;
+		await onUnmount();
+	}
+
 	async function cancelPrompt(): Promise<void> {
 		const c = conn;
 		if (!c) return;
@@ -210,7 +217,16 @@ export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
 
 	return (
 		<RuntimeContext.Provider
-			value={{ conn, sessionId, currentModelId, models, availableCommands, prompt, cancelPrompt }}
+			value={{
+				conn,
+				sessionId,
+				currentModelId,
+				models,
+				availableCommands,
+				prompt,
+				cancelPrompt,
+				unmount,
+			}}
 		>
 			{children}
 		</RuntimeContext.Provider>
