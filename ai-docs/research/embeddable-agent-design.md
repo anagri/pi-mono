@@ -279,14 +279,7 @@ Same core, five host wirings.
 
 ## 12. Milestones
 
-1. **M0** — This document accepted.
-2. **M1** — Conformance test suites: `Filesystem`, `Terminal`, `SessionStore`. No implementations yet; tests fail.
-3. **M2** — In-memory + Node-fs + Node-terminal + JSONL `SessionStore`. Conformance suites pass.
-4. **M3** — `createBodhiPiAgent` core. Wire `pi-agent-core` against `HostBindings`. Achieve coding-agent parity for prompt / cancel / sessions / fork / clone / compaction.
-5. **M4** — ACP wire adapter (stdio first). Validate against `@agentclientprotocol/sdk`.
-6. **M5** — Browser worker host. OPFS first, then Chrome FS-Access. End-to-end demo: chat-with-codebase in browser.
-7. **M6** — Web server hosts: WebSocket and stateless HTTP/SSE adapters.
-8. **M7** — Standalone-JS extension runtime + skill discovery. Port one or two coding-agent skills as proofs.
+See [`ai-docs/milestones.md`](../milestones.md) for the current milestone status (completed, in-progress, and planned).
 
 ---
 
