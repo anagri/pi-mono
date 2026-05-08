@@ -223,3 +223,11 @@
 	max-height: 8rem;
 	overflow-y: auto;
 }
+
+.composer-stop {
+	background: #dc2626;
+}
+
+.composer-stop:hover {
+	background: #b91c1c;
+}

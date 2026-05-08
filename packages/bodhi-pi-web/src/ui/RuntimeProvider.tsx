@@ -16,6 +16,7 @@ interface RuntimeContextValue {
 	models: Model<Api>[];
 	availableCommands: AvailableCommand[];
 	prompt: (text: string) => Promise<void>;
+	cancelPrompt: () => Promise<void>;
 }
 
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
@@ -192,8 +193,25 @@ export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
 		}
 	}
 
+	async function cancelPrompt(): Promise<void> {
+		const c = conn;
+		if (!c) return;
+		const sid = useChatStore.getState().sessionId;
+		if (!sid || sid === "local") return;
+		try {
+			// `session/cancel` is a notification — bodhi-pi maps it to a turn
+			// abort, the inflight `prompt()` resolves with stopReason "cancelled",
+			// and the existing finally-block in `prompt()` flips status back to idle.
+			await c.cancel({ sessionId: sid });
+		} catch (err) {
+			addSystemMessage(`error: ${String(err)}`);
+		}
+	}
+
 	return (
-		<RuntimeContext.Provider value={{ conn, sessionId, currentModelId, models, availableCommands, prompt }}>
+		<RuntimeContext.Provider
+			value={{ conn, sessionId, currentModelId, models, availableCommands, prompt, cancelPrompt }}
+		>
 			{children}
 		</RuntimeContext.Provider>
 	);

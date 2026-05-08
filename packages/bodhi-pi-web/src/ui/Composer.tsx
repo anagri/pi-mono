@@ -3,10 +3,11 @@ import { useChatStore } from "../store/chatStore";
 
 export interface ComposerProps {
 	onSubmit: (text: string) => void | Promise<void>;
+	onStop?: () => void | Promise<void>;
 	disabled?: boolean;
 }
 
-export function Composer({ onSubmit, disabled }: ComposerProps) {
+export function Composer({ onSubmit, onStop, disabled }: ComposerProps) {
 	const [value, setValue] = useState("");
 	const status = useChatStore((s) => s.status);
 	// Composer is hard-disabled only during initial boot. In the "closed" state
@@ -14,6 +15,7 @@ export function Composer({ onSubmit, disabled }: ComposerProps) {
 	// to recover, so we keep the input enabled and rely on the prompt handler
 	// to block non-slash content.
 	const isDisabled = disabled || status === "initializing";
+	const isStreaming = status === "streaming";
 	const placeholder =
 		status === "closed"
 			? "session closed — type /new or /resume <id>"
@@ -24,9 +26,14 @@ export function Composer({ onSubmit, disabled }: ComposerProps) {
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
 		const text = value.trim();
-		if (!text || isDisabled) return;
+		if (!text || isDisabled || isStreaming) return;
 		setValue("");
 		await onSubmit(text);
+	}
+
+	async function handleStop() {
+		if (!onStop) return;
+		await onStop();
 	}
 
 	return (
@@ -41,9 +48,20 @@ export function Composer({ onSubmit, disabled }: ComposerProps) {
 				placeholder={placeholder}
 				autoFocus
 			/>
-			<button data-testid="composer-send" type="submit" className="composer-send" disabled={isDisabled}>
-				Send
-			</button>
+			{isStreaming ? (
+				<button
+					data-testid="composer-stop"
+					type="button"
+					className="composer-send composer-stop"
+					onClick={handleStop}
+				>
+					Stop
+				</button>
+			) : (
+				<button data-testid="composer-send" type="submit" className="composer-send" disabled={isDisabled}>
+					Send
+				</button>
+			)}
 		</form>
 	);
 }

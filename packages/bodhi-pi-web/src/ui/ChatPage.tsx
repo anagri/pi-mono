@@ -6,17 +6,21 @@ import { StatusBar } from "./StatusBar";
 
 export function ChatPage() {
 	const status = useChatStore((s) => s.status);
-	const { prompt } = useRuntime();
+	const { prompt, cancelPrompt } = useRuntime();
 
 	async function handleSubmit(text: string) {
 		await prompt(text);
+	}
+
+	async function handleStop() {
+		await cancelPrompt();
 	}
 
 	return (
 		<div data-testid="chat-page" data-test-state={status} className="chat-page">
 			<StatusBar />
 			<MessageList />
-			<Composer onSubmit={handleSubmit} />
+			<Composer onSubmit={handleSubmit} onStop={handleStop} />
 		</div>
 	);
 }
