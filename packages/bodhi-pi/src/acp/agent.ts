@@ -31,6 +31,10 @@ import { loadProjectCommands } from "../commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "../commands/prompt-templates.js";
 import type { Filesystem } from "../filesystem/filesystem.js";
 import type { SessionStore } from "../sessions/session-store.js";
+import { loadProjectSkills } from "../skills/discovery.js";
+import { expandSkillCommand } from "../skills/invocation.js";
+import type { Skill } from "../skills/skill.js";
+import { composeSystemPrompt } from "../skills/system-prompt.js";
 import { createBuiltinTools, toolKindFor } from "../tools/index.js";
 import { BODHI_PI_VERSION } from "../version.js";
 import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "./constants.js";
@@ -62,6 +66,7 @@ interface SessionState {
 	tools: AgentTool[];
 	/** Discovered once at session hydration; refresh requires `session/close` + `session/load`. */
 	commands: PromptTemplate[];
+	skills: Skill[];
 	/** Set by `cancel()`; read by `prompt()` to return `stopReason: "cancelled"`. Reset before each prompt. */
 	cancelled: boolean;
 }
@@ -72,6 +77,10 @@ function toAvailableCommand(t: PromptTemplate): AvailableCommand {
 		description: t.description,
 		...(t.argumentHint ? { input: { hint: t.argumentHint } } : {}),
 	};
+}
+
+function skillToAvailableCommand(s: Skill): AvailableCommand {
+	return { name: `skill:${s.name}`, description: s.description };
 }
 
 /** Returns the `toAgent` callback expected by `AgentSideConnection`. */
@@ -131,11 +140,16 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		const defaultModel = this.findModel(this.config.defaultModelId);
 		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd: record.cwd });
+		// Skills must load before Agent construction so the composed systemPrompt
+		// (base + <available_skills>) is in the initial state.
+		const commands = await loadProjectCommands(this.config.filesystem, record.cwd);
+		const skills = await loadProjectSkills(this.config.filesystem, record.cwd);
+		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
 		const piAgent = new Agent({
 			initialState: {
 				model: defaultModel,
 				tools,
-				...(this.config.systemPrompt !== undefined ? { systemPrompt: this.config.systemPrompt } : {}),
+				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
 			},
 			getApiKey: this.config.getApiKey,
 		});
@@ -144,10 +158,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			currentModelId: this.config.defaultModelId,
 			cwd: record.cwd,
 			tools,
-			commands: [],
+			commands,
+			skills,
 			cancelled: false,
 		});
-		await this.discoverAndAdvertiseCommands(record.id);
+		await this.advertiseSlashable(record.id);
 		return {
 			sessionId: record.id,
 			configOptions: [this.buildModelConfigOption(this.config.defaultModelId)],
@@ -221,7 +236,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			}
 		}
 
-		await this.discoverAndAdvertiseCommands(params.sessionId);
+		await this.advertiseSlashable(params.sessionId);
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
 		};
@@ -230,7 +245,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
 		// Per ACP spec: rehydrate without replaying history.
 		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
-		await this.discoverAndAdvertiseCommands(params.sessionId);
+		await this.advertiseSlashable(params.sessionId);
 		return {
 			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
 		};
@@ -311,7 +326,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
 			.map((b) => b.text)
 			.join("");
-		const promptText = expandPromptTemplate(text, session.commands);
+		// Skills first because they use the more specific `/skill:` prefix; if no
+		// skill matches, the text falls through to slash-command expansion.
+		const promptText = expandPromptTemplate(expandSkillCommand(text, session.skills), session.commands);
 
 		// Reset so a prior cancel doesn't bleed into this prompt.
 		session.cancelled = false;
@@ -439,28 +456,42 @@ class BodhiPiAcpAgent implements AcpAgent {
 			.filter((e): e is Extract<typeof e, { type: "message" }> => e.type === "message")
 			.map((e) => e.message);
 		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd });
+		const commands = await loadProjectCommands(this.config.filesystem, cwd);
+		const skills = await loadProjectSkills(this.config.filesystem, cwd);
+		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
 		const piAgent = new Agent({
 			initialState: {
 				model: restoredModel,
 				messages,
 				tools,
-				...(this.config.systemPrompt !== undefined ? { systemPrompt: this.config.systemPrompt } : {}),
+				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
 			},
 			getApiKey: this.config.getApiKey,
 		});
-		this.sessions.set(sessionId, { piAgent, currentModelId: modelId, cwd, tools, commands: [], cancelled: false });
+		this.sessions.set(sessionId, {
+			piAgent,
+			currentModelId: modelId,
+			cwd,
+			tools,
+			commands,
+			skills,
+			cancelled: false,
+		});
 		return { entries: record.entries, currentModelId: modelId };
 	}
 
-	private async discoverAndAdvertiseCommands(sessionId: string): Promise<void> {
+	private async advertiseSlashable(sessionId: string): Promise<void> {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
-		session.commands = await loadProjectCommands(this.config.filesystem, session.cwd);
+		const availableCommands: AvailableCommand[] = [
+			...session.commands.map(toAvailableCommand),
+			...session.skills.map(skillToAvailableCommand),
+		];
 		await this.conn.sessionUpdate({
 			sessionId,
 			update: {
 				sessionUpdate: "available_commands_update",
-				availableCommands: session.commands.map(toAvailableCommand),
+				availableCommands,
 			},
 		});
 	}

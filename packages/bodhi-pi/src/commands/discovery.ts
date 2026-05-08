@@ -1,31 +1,22 @@
 import { join } from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parseFrontmatter } from "../_internal/frontmatter.js";
 import type { Filesystem } from "../filesystem/filesystem.js";
 import type { PromptTemplate } from "./prompt-templates.js";
 
 export const COMMANDS_SUBDIR = ".bodhi-pi/commands";
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const DESCRIPTION_TRUNCATE = 60;
 
-interface Frontmatter {
+interface CommandFrontmatter {
 	description?: string;
 	"argument-hint"?: string;
 }
 
-function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body: string } {
-	const match = FRONTMATTER_RE.exec(raw);
-	if (!match) return { frontmatter: {}, body: raw };
-	const parsed = parseYaml(match[1]);
-	if (!parsed || typeof parsed !== "object") return { frontmatter: {}, body: match[2] };
-	return { frontmatter: parsed as Frontmatter, body: match[2] };
-}
-
 function loadTemplate(filePath: string, raw: string): PromptTemplate | null {
-	let frontmatter: Frontmatter;
+	let frontmatter: CommandFrontmatter;
 	let body: string;
 	try {
-		({ frontmatter, body } = parseFrontmatter(raw));
+		({ frontmatter, body } = parseFrontmatter<CommandFrontmatter>(raw));
 	} catch {
 		return null;
 	}

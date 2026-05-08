@@ -3,6 +3,22 @@
 ## [Unreleased]
 
 ### Added
+- Skills (markdown-only). Folder-per-skill bundles under
+  `<cwd>/.bodhi-pi/skills/<name>/SKILL.md` are discovered via the
+  injected `Filesystem` at session hydration. YAML frontmatter supports
+  `name?`, `description` (required), `disable-model-invocation?`, and
+  `allowed-tools?` (parsed but not enforced — matches coding-agent v1).
+  At session creation the agent appends an `<available_skills>` XML
+  block to the host's `systemPrompt`; skills with `disable-model-
+  invocation: true` are excluded from the block but still invocable.
+  Every skill (including hidden ones) is advertised as
+  `skill:<name>` in `available_commands_update`. `/skill:<name> args`
+  in a `session/prompt` wraps the SKILL.md body in a `<skill>` element
+  and appends args as a separate paragraph (NOT `$1`-substituted —
+  different from prompt templates). Unknown names pass through
+  verbatim. Sibling files in a skill folder (scripts, references,
+  assets) are loadable by the existing `read` tool — script execution
+  is a separate milestone.
 - Slash commands / prompt templates. Markdown files under
   `<cwd>/.bodhi-pi/commands/*.md` (with optional YAML frontmatter for
   `description` and `argument-hint`) are discovered via the injected
