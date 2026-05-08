@@ -1,83 +1,30 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import {
-	type Agent,
-	AgentSideConnection,
-	type AnyMessage,
-	type Client,
-	ClientSideConnection,
-	type SessionNotification,
-	type Stream,
-} from "@agentclientprotocol/sdk";
-import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@bodhiapp/bodhi-pi";
 import { getModel } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { stdInitParams } from "../test/helpers/acp-constants.js";
+import { type CliTestHarness, createCliTestHarness } from "../test/helpers/cli-harness.js";
+import { chunkedAgentText } from "../test/helpers/notifications.js";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY!;
 
-function createInProcessPair(
-	toAgent: (conn: AgentSideConnection) => Agent,
-	toClient: (agent: Agent) => Client,
-): { clientConn: ClientSideConnection } {
-	const a2c = new TransformStream<AnyMessage, AnyMessage>();
-	const c2a = new TransformStream<AnyMessage, AnyMessage>();
-	const agentStream: Stream = { readable: c2a.readable, writable: a2c.writable };
-	const clientStream: Stream = { readable: a2c.readable, writable: c2a.writable };
-	const agentConn = new AgentSideConnection(toAgent, agentStream);
-	void agentConn;
-	const clientConn = new ClientSideConnection(toClient, clientStream);
-	return { clientConn };
-}
+let harness: CliTestHarness;
 
-let tmpDb: string;
-
-beforeEach(() => {
-	tmpDb = path.join(os.tmpdir(), `repl-e2e-${Date.now()}.db`);
+beforeEach(async () => {
+	harness = await createCliTestHarness({ model: getModel("openai", "gpt-4o-mini"), apiKey: OPENAI_KEY });
 });
 
-afterEach(() => {
-	for (const suffix of ["", "-wal", "-shm"]) {
-		try {
-			fs.unlinkSync(tmpDb + suffix);
-		} catch {
-			// ignore
-		}
-	}
+afterEach(async () => {
+	await harness.cleanup();
 });
 
-test("bodhi-pi sends agent_message_chunk and returns end_turn (gpt-5-mini)", async () => {
-	const model = getModel("openai", "gpt-5-mini");
-	const notifications: SessionNotification[] = [];
+test("CLI agent returns end_turn and streams chunks (gpt-4o-mini)", async () => {
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	const { clientConn } = createInProcessPair(
-		createBodhiPiAgent({
-			models: [model],
-			defaultModelId: model.id,
-			getApiKey: (p) => (p === "openai" ? OPENAI_KEY : undefined),
-			sessionStore: createInMemorySessionStore(),
-			filesystem: createInMemoryFilesystem(),
-		}),
-		(_agent) => ({
-			sessionUpdate: async (params) => {
-				notifications.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
-		}),
-	);
-
-	await clientConn.initialize({
-		protocolVersion: 1,
-		clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-	});
-	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
-
-	const result = await clientConn.prompt({
+	const result = await harness.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with exactly one word: hello" }],
 	});
 
 	expect(result.stopReason).toBe("end_turn");
-	const chunks = notifications.filter((n) => n.update.sessionUpdate === "agent_message_chunk");
-	expect(chunks.length).toBeGreaterThanOrEqual(1);
+	expect(chunkedAgentText(harness.updates).toLowerCase()).toContain("hello");
 });

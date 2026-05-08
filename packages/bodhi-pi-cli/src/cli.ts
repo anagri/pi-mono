@@ -1,27 +1,19 @@
 #!/usr/bin/env node
-import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { config as loadEnv } from "dotenv";
+import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";
-import { createNodeFilesystem } from "./fs/node-filesystem.js";
-import { createNodeScriptExecutor } from "./fs/node-script-executor.js";
 import { runRepl } from "./repl/repl.js";
-import { createSqliteSessionStore } from "./sessions/sqlite-session-store.js";
 
 loadEnv();
 
 const cfg = resolveConfig(process.argv.slice(2));
-const cwd = process.cwd();
-const filesystem = createNodeFilesystem(cwd);
-const sessionStore = createSqliteSessionStore(cfg.dbPath);
-
-const factory = createBodhiPiAgent({
+const agent = createCliAgent({
+	cwd: process.cwd(),
+	dbPath: cfg.dbPath,
 	models: cfg.models,
 	defaultModelId: cfg.defaultModelId,
 	getApiKey: cfg.getApiKey,
-	sessionStore,
-	filesystem,
-	scriptExecutor: createNodeScriptExecutor(),
 	...(cfg.systemPrompt !== undefined ? { systemPrompt: cfg.systemPrompt } : {}),
 });
 
-await runRepl({ factory, cwd, sessionStore, models: cfg.models });
+await runRepl({ factory: agent.factory, cwd: agent.cwd, sessionStore: agent.sessionStore, models: agent.models });
