@@ -1,15 +1,15 @@
 import { useChatStore } from "../store/chatStore";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
+import { useRuntime } from "./RuntimeProvider";
 import { StatusBar } from "./StatusBar";
 
 export function ChatPage() {
-	const { status, addMessage } = useChatStore();
+	const status = useChatStore((s) => s.status);
+	const { prompt } = useRuntime();
 
-	// M2 echo-only behavior. M3 replaces this with conn.prompt(...) via RuntimeProvider.
 	async function handleSubmit(text: string) {
-		addMessage("user", text);
-		addMessage("assistant", `echo: ${text}`);
+		await prompt(text);
 	}
 
 	return (

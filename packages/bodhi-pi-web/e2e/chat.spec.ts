@@ -1,27 +1,30 @@
 import { expect, test } from "./fixtures";
 
-test("M2 echo round trip", async ({ chat }) => {
-	await test.step("boot lands on echo state", async () => {
+test("M3 agent round trip with gpt-4o-mini", async ({ chat }) => {
+	await test.step("boot lands on idle state", async () => {
 		await chat.goto();
-		await chat.waitForState("echo");
-		await expect(chat.statusBar).toHaveAttribute("data-current-model", "echo");
+		await chat.waitForState("idle", 60_000);
+		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 	});
 
-	await test.step("send first message", async () => {
-		await chat.send("hello");
+	await test.step("send a prompt", async () => {
+		await chat.send("Reply with the single word: ping");
 	});
 
-	await test.step("user message lands", async () => {
-		expect(await chat.lastMessage("user")).toBe("hello");
+	await test.step("streaming starts", async () => {
+		await chat.waitForState("streaming");
 	});
 
-	await test.step("echo response lands", async () => {
-		expect(await chat.lastMessage("assistant")).toBe("echo: hello");
+	await test.step("returns to idle when complete", async () => {
+		await chat.waitForState("idle", 60_000);
 	});
 
-	await test.step("second turn keeps history intact", async () => {
-		await chat.send("again");
-		expect(await chat.messages("user").count()).toBe(2);
-		expect(await chat.lastMessage("assistant")).toBe("echo: again");
+	await test.step("user message landed", async () => {
+		expect(await chat.lastMessage("user")).toContain("ping");
+	});
+
+	await test.step("assistant response contains ping", async () => {
+		const text = await chat.lastMessage("assistant");
+		expect(text.toLowerCase()).toContain("ping");
 	});
 });
