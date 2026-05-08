@@ -16,6 +16,34 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 
 **Reuse dependency types.** Use `pi-agent-core`'s `AgentOptions`, `pi-ai`'s `Model<Api>`, ACP SDK's types directly — no wrapper types until a real semantic mismatch.
 
+## Reference clients & publishable adapters
+
+`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, ScriptExecutor are host-injected. Two reference hosts and two adapter packages prove every feature works on both Node and browser:
+
+| Package | Role | Status |
+|---|---|---|
+| `packages/bodhi-pi-cli` | Reference Node host (REPL CLI) | private workspace package |
+| `packages/bodhi-pi-web` | Reference browser host (Vite/React + Web Worker) | private workspace package |
+| `packages/bodhi-pi-node` | Publishable Node adapters (`@bodhiapp/bodhi-pi-node`) — `createNodeFilesystem`, `createSqliteSessionStore`, `createNodeScriptExecutor` | publishable npm package |
+| `packages/bodhi-pi-browser` | Publishable browser adapters (`@bodhiapp/bodhi-pi-browser`) — `createZenfsFilesystem`, `createDexieSessionStore`, `createBrowserScriptExecutor`, `createMessagePortStream` | publishable npm package |
+
+The adapter packages exist so any third-party host (a different CLI, a desktop wrapper, an extension) can `npm i @bodhiapp/bodhi-pi @bodhiapp/bodhi-pi-{node,browser}` and skip the reference-client code entirely.
+
+## Feature workflow (TDD across the matrix)
+
+Every new agent feature lands in this order. **Skipping any step is a regression risk** because Node-only or browser-only assumptions creep in fast:
+
+1. **`bodhi-pi/test/*.test.ts`** — failing integration test against an in-process ACP pair using faux providers / aimock + the in-memory adapter helpers. Make it pass in `src/`.
+2. **`bodhi-pi/e2e/*.e2e.ts`** — gpt-4o-mini round-trip proving the feature reaches a real LLM. Use real adapter helpers (not mocks).
+3. **`bodhi-pi-node/`** — if the feature requires a host-side adapter (FS, sessions, scripts), implement it here. Add unit tests in `bodhi-pi-node/test/`.
+4. **`bodhi-pi-browser/`** — same surface, browser-shaped (ZenFS, Dexie, AsyncFunction). Add unit tests in `bodhi-pi-browser/src/**/*.test.ts` (vitest + fake-indexeddb).
+5. **`bodhi-pi-cli/e2e/*.e2e.ts`** — Node host wires through the new feature. Real LLM, real adapters, asserts the feature reaches the user.
+6. **`bodhi-pi-web/e2e/*.spec.ts`** — Playwright spec, same shape as the CLI e2e but driven through Chrome + the worker. Real LLM, seeded `window.__bodhiPiWebSeed` workspace.
+
+**Why both reference clients?** Browser-only quirks (FSA permission re-grant after picker, ZenFS async-only, AsyncFunction CSP needs) and Node-only quirks (better-sqlite3 native bindings, child_process spawn ergonomics) only surface in the host. The agent's own e2e can't catch them. The two reference clients are our cross-runtime regression net.
+
+**Examples folder for manual smoke.** `packages/bodhi-pi-web/e2e/examples/` is a real on-disk demo workspace with `.bodhi-pi/commands/`, `.bodhi-pi/skills/`, and seeded data files — mount via Chrome's FSA picker to exercise every feature without running the test suite.
+
 ## Key files
 
 | Path | Role |
