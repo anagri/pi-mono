@@ -68,3 +68,53 @@ test.describe("M9 unknown slash command falls through", () => {
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("gravy");
 	});
 });
+
+test.describe("M16 commands re-emit on /resume", () => {
+	test.use({
+		workspaceSeed: {
+			name: "demo",
+			files: {
+				"/.bodhi-pi/commands/echo.md": ECHO_TEMPLATE,
+			},
+		},
+	});
+
+	test("available_commands_update fires again after session/load", async ({ chat }) => {
+		await test.step("boot — /help shows the seeded command", async () => {
+			await chat.goto();
+			await chat.waitForState("idle", 60_000);
+			await chat.send("/help");
+			await expect(chat.messages("system").last()).toContainText("echo");
+		});
+
+		let sessionA = "";
+		await test.step("capture sessionId from /sessions", async () => {
+			await chat.send("/sessions");
+			const sysLocator = chat.messages("system").last();
+			await expect(sysLocator).toContainText(/sessions:/);
+			const sys = (await sysLocator.textContent()) ?? "";
+			const match = sys.match(/\* ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
+			expect(match).not.toBeNull();
+			sessionA = match![1];
+		});
+
+		await test.step("/new wipes per-session command list, /help shows none", async () => {
+			await chat.send("/new");
+			await chat.waitForState("idle", 60_000);
+			await chat.send("/help");
+			// Same command file, same workspace → new session re-runs discovery
+			// against /mnt/demo/.bodhi-pi/commands. /help should still list echo.
+			await expect(chat.messages("system").last()).toContainText("echo");
+		});
+
+		await test.step("/resume A re-emits available_commands_update", async () => {
+			await chat.send(`/resume ${sessionA}`);
+			await chat.waitForState("idle", 60_000);
+			await chat.send("/help");
+			// Proves bodhi-pi's loadSession path re-runs command discovery and
+			// emits available_commands_update — render.ts repopulates the
+			// availableCommands state, /help reads it.
+			await expect(chat.messages("system").last()).toContainText("echo");
+		});
+	});
+});

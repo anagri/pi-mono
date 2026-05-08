@@ -22,7 +22,9 @@ test.describe("M15 tool-call replay across /resume", () => {
 		let sessionA = "";
 		await test.step("capture sessionId from /sessions", async () => {
 			await chat.send("/sessions");
-			const sys = (await chat.messages("system").last().textContent()) ?? "";
+			const sysLocator = chat.messages("system").last();
+			await expect(sysLocator).toContainText(/sessions:/);
+			const sys = (await sysLocator.textContent()) ?? "";
 			const match = sys.match(/\* ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
 			expect(match).not.toBeNull();
 			sessionA = match![1];
