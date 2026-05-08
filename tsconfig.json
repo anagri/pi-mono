@@ -23,7 +23,9 @@
 			"@bodhiapp/bodhi-pi": ["./packages/bodhi-pi/src/index.ts"],
 			"@bodhiapp/bodhi-pi/*": ["./packages/bodhi-pi/src/*"],
 			"@bodhiapp/bodhi-pi-node": ["./packages/bodhi-pi-node/src/index.ts"],
-			"@bodhiapp/bodhi-pi-node/*": ["./packages/bodhi-pi-node/src/*"]
+			"@bodhiapp/bodhi-pi-node/*": ["./packages/bodhi-pi-node/src/*"],
+			"@bodhiapp/bodhi-pi-browser": ["./packages/bodhi-pi-browser/src/index.ts"],
+			"@bodhiapp/bodhi-pi-browser/*": ["./packages/bodhi-pi-browser/src/*"]
 		}
 	},
 	"include": [
@@ -38,6 +40,7 @@
 		"packages/bodhi-pi/**/*",
 		"packages/bodhi-pi-cli/**/*",
 		"packages/bodhi-pi-node/**/*",
+		"packages/bodhi-pi-browser/**/*",
 		"packages/bodhi-pi-web/**/*"
 	]
 }

@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"lib": ["ES2022", "DOM", "WebWorker"],
+		"types": ["node"],
+		"paths": {
+			"@/*": ["./src/*"],
+			"@test/*": ["./test/*"]
+		}
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts"]
+}

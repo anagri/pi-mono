@@ -1,0 +1,41 @@
+{
+	"name": "@bodhiapp/bodhi-pi-browser",
+	"version": "0.0.1",
+	"description": "Browser adapters (ZenFS, Dexie, AsyncFunction) for @bodhiapp/bodhi-pi.",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
+		"test": "vitest --run",
+		"prepublishOnly": "npm run clean && npm run build"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"@types/node": "^24.3.0",
+		"tsc-alias": "^1.8.10",
+		"typescript": "^5.7.3",
+		"vitest": "^3.2.4"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/anagri/pi-mono.git",
+		"directory": "packages/bodhi-pi-browser"
+	}
+}
