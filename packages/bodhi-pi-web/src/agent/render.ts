@@ -1,4 +1,4 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, SessionNotification } from "@agentclientprotocol/sdk";
 import type { ChatState } from "../store/chatStore";
 
 /**
@@ -23,6 +23,7 @@ export interface RenderActions {
 	appendChunk: ChatState["appendChunk"];
 	addMessage: ChatState["addMessage"];
 	addSystemMessage: ChatState["addSystemMessage"];
+	setAvailableCommands?: (commands: AvailableCommand[]) => void;
 }
 
 export function dispatchNotification(notif: SessionNotification, actions: RenderActions): void {
@@ -43,6 +44,12 @@ export function dispatchNotification(notif: SessionNotification, actions: Render
 		if (content?.type === "text" && content.text) {
 			actions.appendChunk("user", content.text);
 		}
+		return;
+	}
+
+	if (kind === "available_commands_update") {
+		const commands = (update.availableCommands as AvailableCommand[] | undefined) ?? [];
+		actions.setAvailableCommands?.(commands);
 		return;
 	}
 

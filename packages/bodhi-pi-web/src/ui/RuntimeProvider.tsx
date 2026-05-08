@@ -1,14 +1,18 @@
-import type { ClientSideConnection } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { dispatchNotification } from "../agent/render";
 import { type AgentRuntime, startAgentRuntime } from "../agent/runtime";
 import { readEnv } from "../env";
 import { useChatStore } from "../store/chatStore";
+import { handleCommand, isCommand } from "./commands";
 
 interface RuntimeContextValue {
 	conn: ClientSideConnection | null;
 	sessionId: string;
 	currentModelId: string;
+	models: Model<Api>[];
+	availableCommands: AvailableCommand[];
 	prompt: (text: string) => Promise<void>;
 }
 
@@ -23,6 +27,8 @@ export function useRuntime(): RuntimeContextValue {
 export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
+	const [models, setModels] = useState<Model<Api>[]>([]);
+	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
 	const { setStatus, setSessionId, setCurrentModelId, addMessage, appendChunk, addSystemMessage } = useChatStore();
 	const sessionId = useChatStore((s) => s.sessionId);
 	const currentModelId = useChatStore((s) => s.currentModelId);
@@ -33,13 +39,19 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 
 		(async () => {
 			const env = readEnv();
+			setModels(env.models);
 
 			const runtime = await startAgentRuntime({
 				models: env.models,
 				defaultModelId: env.defaultModelId,
 				apiKeys: env.apiKeys,
 				onNotification: (notif) => {
-					dispatchNotification(notif, { appendChunk, addMessage, addSystemMessage });
+					dispatchNotification(notif, {
+						appendChunk,
+						addMessage,
+						addSystemMessage,
+						setAvailableCommands,
+					});
 				},
 			});
 
@@ -81,6 +93,30 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 			addSystemMessage("error: runtime not ready");
 			return;
 		}
+
+		// Slash-command routing mirrors bodhi-pi-cli/src/repl/repl.ts:90-101.
+		// Local commands (e.g. /model) handled here; agent-announced commands
+		// fall through to clientConn.prompt as a normal turn.
+		if (isCommand(text)) {
+			const cmdName = text.trim().split(/\s+/)[0].slice(1);
+			const isAgentCommand = availableCommands.some((c) => c.name === cmdName);
+			if (!isAgentCommand) {
+				addMessage("user", text);
+				const handled = await handleCommand(text, {
+					conn: c,
+					state: {
+						sessionId: useChatStore.getState().sessionId,
+						currentModelId: useChatStore.getState().currentModelId,
+						models,
+						availableCommands,
+					},
+					addSystemMessage,
+					setCurrentModelId,
+				});
+				if (handled) return;
+			}
+		}
+
 		const sid = useChatStore.getState().sessionId;
 		addMessage("user", text);
 		setStatus("streaming");
@@ -94,6 +130,10 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 	}
 
 	return (
-		<RuntimeContext.Provider value={{ conn, sessionId, currentModelId, prompt }}>{children}</RuntimeContext.Provider>
+		<RuntimeContext.Provider
+			value={{ conn, sessionId, currentModelId, models, availableCommands, prompt }}
+		>
+			{children}
+		</RuntimeContext.Provider>
 	);
 }

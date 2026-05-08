@@ -27,8 +27,11 @@ export function readEnv(): ResolvedEnv {
 		}
 	}
 
-	// M3 hardcodes a single model. M4 widens the registry.
-	const models: Model<Api>[] = [getModel("openai", "gpt-4o-mini") as Model<Api>];
+	// M4: two-model registry so /model can swap between them.
+	const models: Model<Api>[] = [
+		getModel("openai", "gpt-4o-mini") as Model<Api>,
+		getModel("openai", "gpt-4o") as Model<Api>,
+	];
 	const defaultModelId = "gpt-4o-mini";
 
 	return { apiKeys, models, defaultModelId };
