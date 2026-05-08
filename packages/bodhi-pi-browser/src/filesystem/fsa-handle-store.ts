@@ -64,7 +64,7 @@ export async function queryPermission(
 	const fn = ext(handle).queryPermission;
 	if (!fn) return "prompt";
 	try {
-		return await fn({ mode });
+		return await fn.call(handle, { mode });
 	} catch {
 		return "prompt";
 	}
@@ -77,7 +77,7 @@ export async function requestPermission(
 	const fn = ext(handle).requestPermission;
 	if (!fn) return "denied";
 	try {
-		return await fn({ mode });
+		return await fn.call(handle, { mode });
 	} catch {
 		return "denied";
 	}
