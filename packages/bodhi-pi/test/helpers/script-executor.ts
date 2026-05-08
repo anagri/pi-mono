@@ -1,4 +1,4 @@
-import type { Filesystem, ScriptExecutor } from "../../src/index.js";
+import type { Filesystem, ScriptExecutor } from "@/index.js";
 
 /**
  * Reference test executor — non-sandboxed. Reads the script via the test

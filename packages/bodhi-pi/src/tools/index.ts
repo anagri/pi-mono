@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { Filesystem } from "../filesystem/filesystem.js";
-import type { ScriptExecutor } from "../script-executor/script-executor.js";
+import type { Filesystem } from "@/filesystem/filesystem.js";
+import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { createEditTool } from "./edit.js";
 import { createFindTool } from "./find.js";
 import { createGrepTool } from "./grep.js";

@@ -7,7 +7,7 @@ import {
 	registerFauxProvider,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
+import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { scriptToolThenDone } from "./helpers/faux-script.js";
 import { createTestHarness } from "./helpers/harness.js";

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
+import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -13,6 +14,7 @@ const aiSrc = path.resolve(here, "../ai/src/index.ts");
 const agentSrc = path.resolve(here, "../agent/src/index.ts");
 
 export default defineConfig({
+	plugins: [tsconfigPaths()],
 	resolve: {
 		alias: [
 			{ find: /^@bodhiapp\/bodhi-pi$/, replacement: bodhiPiSrc },

@@ -8,7 +8,7 @@ import {
 	registerFauxProvider,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createInMemorySessionStore } from "../src/index.js";
+import { createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { asSelectOption } from "./helpers/acp-narrow.js";
 import { createTestHarness } from "./helpers/harness.js";

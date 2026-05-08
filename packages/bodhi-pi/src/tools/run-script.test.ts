@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { ScriptExecuteParams, ScriptExecutor } from "../script-executor/script-executor.js";
+import type { ScriptExecuteParams, ScriptExecutor } from "@/script-executor/script-executor.js";
 import { createRunScriptTool } from "./run-script.js";
 
 function makeExecutor(impl: ScriptExecutor["execute"]): ScriptExecutor {

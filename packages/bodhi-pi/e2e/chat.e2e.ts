@@ -1,10 +1,10 @@
 import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
+import { stdInitParams } from "@test/helpers/acp-constants.js";
+import { asSelectOption } from "@test/helpers/acp-narrow.js";
+import { requireEnv } from "@test/helpers/env.js";
+import { createTestHarness } from "@test/helpers/harness.js";
+import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
-import { stdInitParams } from "../test/helpers/acp-constants.js";
-import { asSelectOption } from "../test/helpers/acp-narrow.js";
-import { requireEnv } from "../test/helpers/env.js";
-import { createTestHarness } from "../test/helpers/harness.js";
-import { chunkedAgentText } from "../test/helpers/notifications.js";
 
 async function runSingleTurn(opts: { model: Model<Api>; apiKey: string; provider: string; prompt: string }) {
 	const { clientConn, updates } = createTestHarness({

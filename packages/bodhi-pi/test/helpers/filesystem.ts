@@ -1,4 +1,4 @@
-import type { Filesystem } from "../../src/index.js";
+import type { Filesystem } from "@/index.js";
 
 export async function seedCommand(fs: Filesystem, cwd: string, name: string, content: string): Promise<void> {
 	const dir = `${cwd === "/" ? "" : cwd}/.bodhi-pi/commands`;

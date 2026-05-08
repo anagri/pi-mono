@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createInMemoryFilesystem } from "../filesystem/in-memory-filesystem.js";
+import { createInMemoryFilesystem } from "@/filesystem/in-memory-filesystem.js";
 import { loadProjectSkills } from "./discovery.js";
 
 const CWD = "/proj";

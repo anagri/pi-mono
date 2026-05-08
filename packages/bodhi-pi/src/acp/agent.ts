@@ -27,17 +27,17 @@ import {
 } from "@agentclientprotocol/sdk";
 import { Agent, type AgentMessage, type AgentTool, type Agent as PiAgent } from "@mariozechner/pi-agent-core";
 import type { Api, Model, StopReason as PiStopReason } from "@mariozechner/pi-ai";
-import { loadProjectCommands } from "../commands/discovery.js";
-import { expandPromptTemplate, type PromptTemplate } from "../commands/prompt-templates.js";
-import type { Filesystem } from "../filesystem/filesystem.js";
-import type { ScriptExecutor } from "../script-executor/script-executor.js";
-import type { SessionStore } from "../sessions/session-store.js";
-import { loadProjectSkills } from "../skills/discovery.js";
-import { expandSkillCommand } from "../skills/invocation.js";
-import type { Skill } from "../skills/skill.js";
-import { composeSystemPrompt } from "../skills/system-prompt.js";
-import { createBuiltinTools, toolKindFor } from "../tools/index.js";
-import { BODHI_PI_VERSION } from "../version.js";
+import { loadProjectCommands } from "@/commands/discovery.js";
+import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
+import type { Filesystem } from "@/filesystem/filesystem.js";
+import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import type { SessionStore } from "@/sessions/session-store.js";
+import { loadProjectSkills } from "@/skills/discovery.js";
+import { expandSkillCommand } from "@/skills/invocation.js";
+import type { Skill } from "@/skills/skill.js";
+import { composeSystemPrompt } from "@/skills/system-prompt.js";
+import { createBuiltinTools, toolKindFor } from "@/tools/index.js";
+import { BODHI_PI_VERSION } from "@/version.js";
 import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "./constants.js";
 import {
 	agentToolContentForAcp,

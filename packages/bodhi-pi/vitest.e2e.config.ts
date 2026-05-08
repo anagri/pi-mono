@@ -17,6 +17,7 @@ loadEnv({ path: path.join(here, "e2e", ".env.test"), override: true });
 const base = typeof baseConfig === "function" ? baseConfig({ command: "serve", mode: "test" }) : baseConfig;
 
 export default defineConfig({
+	plugins: base.plugins,
 	resolve: base.resolve,
 	test: {
 		globals: true,

@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { parseFrontmatter } from "../_internal/frontmatter.js";
-import type { Filesystem } from "../filesystem/filesystem.js";
+import { parseFrontmatter } from "@/_internal/frontmatter.js";
+import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { PromptTemplate } from "./prompt-templates.js";
 
 export const COMMANDS_SUBDIR = ".bodhi-pi/commands";

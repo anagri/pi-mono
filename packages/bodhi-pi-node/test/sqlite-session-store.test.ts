@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { SessionEntry } from "@bodhiapp/bodhi-pi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createSqliteSessionStore } from "../src/sessions/sqlite-session-store.js";
+import { createSqliteSessionStore } from "@/sessions/sqlite-session-store.js";
 
 let dbPath: string;
 let store: ReturnType<typeof createSqliteSessionStore>;

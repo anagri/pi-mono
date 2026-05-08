@@ -18,7 +18,7 @@
 	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
-		"build": "tsgo -p tsconfig.build.json",
+		"build": "tsgo -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
 		"db:generate": "drizzle-kit generate",
 		"test": "vitest --run",
@@ -33,6 +33,7 @@
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24.3.0",
 		"drizzle-kit": "^0.31.0",
+		"tsc-alias": "^1.8.10",
 		"typescript": "^5.7.3",
 		"vitest": "^3.2.4"
 	},

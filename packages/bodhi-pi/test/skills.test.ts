@@ -8,7 +8,7 @@ import {
 	type TextContent,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
+import { createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { seedCommand, seedSkill } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";

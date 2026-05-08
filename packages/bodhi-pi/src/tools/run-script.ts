@@ -1,6 +1,6 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "typebox";
-import type { ScriptExecutor } from "../script-executor/script-executor.js";
+import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { resolvePath } from "./index.js";
 import { RUN_SCRIPT_MAX_BYTES } from "./limits.js";
 

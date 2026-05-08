@@ -1,12 +1,12 @@
 import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
+import { stdInitParams } from "@test/helpers/acp-constants.js";
+import { requireEnv } from "@test/helpers/env.js";
+import { createTestHarness } from "@test/helpers/harness.js";
+import { chunkedAgentText } from "@test/helpers/notifications.js";
+import { createTestScriptExecutor } from "@test/helpers/script-executor.js";
+import { toolCallStarts } from "@test/helpers/tool-call-asserts.js";
 import { expect, test } from "vitest";
-import { createInMemoryFilesystem, type Filesystem } from "../src/index.js";
-import { stdInitParams } from "../test/helpers/acp-constants.js";
-import { requireEnv } from "../test/helpers/env.js";
-import { createTestHarness } from "../test/helpers/harness.js";
-import { chunkedAgentText } from "../test/helpers/notifications.js";
-import { createTestScriptExecutor } from "../test/helpers/script-executor.js";
-import { toolCallStarts } from "../test/helpers/tool-call-asserts.js";
+import { createInMemoryFilesystem, type Filesystem } from "@/index.js";
 
 const PROVIDER = "openai";
 const MODEL_ID = "gpt-4o-mini";

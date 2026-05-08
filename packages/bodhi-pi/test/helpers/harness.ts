@@ -6,7 +6,7 @@ import {
 	type Filesystem,
 	type ScriptExecutor,
 	type SessionStore,
-} from "../../src/index.js";
+} from "@/index.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
 
 export interface TestHarness {

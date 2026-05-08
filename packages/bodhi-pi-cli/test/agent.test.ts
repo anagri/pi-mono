@@ -10,7 +10,7 @@ import {
 	registerFauxProvider,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createCliAgent } from "../src/agent.js";
+import { createCliAgent } from "@/agent.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { scriptToolThenDone } from "./helpers/faux-script.js";
 import { createInProcessAcpPair } from "./helpers/in-process-connection.js";

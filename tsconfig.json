@@ -32,5 +32,11 @@
 		"packages/*/e2e/**/*",
 		"packages/coding-agent/examples/**/*"
 	],
-	"exclude": ["packages/web-ui/**/*", "**/dist/**"]
+	"exclude": [
+		"packages/web-ui/**/*",
+		"**/dist/**",
+		"packages/bodhi-pi/**/*",
+		"packages/bodhi-pi-cli/**/*",
+		"packages/bodhi-pi-node/**/*"
+	]
 }

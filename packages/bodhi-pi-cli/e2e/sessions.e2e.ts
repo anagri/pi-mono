@@ -1,11 +1,11 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import { getModel } from "@mariozechner/pi-ai";
+import { stdInitParams } from "@test/helpers/acp-constants.js";
+import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
+import { createInProcessAcpPair } from "@test/helpers/in-process-connection.js";
+import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
-import { createCliAgent } from "../src/agent.js";
-import { stdInitParams } from "../test/helpers/acp-constants.js";
-import { type CliTestHarness, createCliTestHarness } from "../test/helpers/cli-harness.js";
-import { createInProcessAcpPair } from "../test/helpers/in-process-connection.js";
-import { chunkedAgentText } from "../test/helpers/notifications.js";
+import { createCliAgent } from "@/agent.js";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY!;
 

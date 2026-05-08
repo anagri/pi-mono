@@ -1,8 +1,8 @@
 import { getModel } from "@mariozechner/pi-ai";
+import { stdInitParams } from "@test/helpers/acp-constants.js";
+import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
+import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { stdInitParams } from "../test/helpers/acp-constants.js";
-import { type CliTestHarness, createCliTestHarness } from "../test/helpers/cli-harness.js";
-import { chunkedAgentText } from "../test/helpers/notifications.js";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY!;
 

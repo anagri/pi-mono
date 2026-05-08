@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Filesystem } from "../filesystem/filesystem.js";
+import type { Filesystem } from "@/filesystem/filesystem.js";
 
 export interface WalkEntry {
 	absolutePath: string;

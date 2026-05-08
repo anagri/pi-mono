@@ -8,7 +8,7 @@ import {
 	registerFauxProvider,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createInMemoryFilesystem } from "../src/index.js";
+import { createInMemoryFilesystem } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
 import { createTestScriptExecutor } from "./helpers/script-executor.js";
