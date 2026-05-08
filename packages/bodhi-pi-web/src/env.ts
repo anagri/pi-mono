@@ -27,11 +27,15 @@ export function readEnv(): ResolvedEnv {
 		}
 	}
 
-	// M4: two-model registry so /model can swap between them.
+	// Default registry: two OpenAI models. M13 widens to Anthropic when the
+	// key is present so /model can cross providers.
 	const models: Model<Api>[] = [
 		getModel("openai", "gpt-4o-mini") as Model<Api>,
 		getModel("openai", "gpt-4o") as Model<Api>,
 	];
+	if (apiKeys.anthropic) {
+		models.push(getModel("anthropic", "claude-haiku-4-5") as Model<Api>);
+	}
 	const defaultModelId = "gpt-4o-mini";
 
 	return { apiKeys, models, defaultModelId };
