@@ -4,6 +4,7 @@ import {
 	createInMemoryFilesystem,
 	createInMemorySessionStore,
 	type Filesystem,
+	type ScriptExecutor,
 	type SessionStore,
 } from "../../src/index.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
@@ -22,6 +23,7 @@ export interface TestHarnessOptions {
 	sessionStore?: SessionStore;
 	filesystem?: Filesystem;
 	systemPrompt?: string;
+	scriptExecutor?: ScriptExecutor;
 }
 
 /**
@@ -45,6 +47,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			sessionStore,
 			filesystem,
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.scriptExecutor ? { scriptExecutor: opts.scriptExecutor } : {}),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {

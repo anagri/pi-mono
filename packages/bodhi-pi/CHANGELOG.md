@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### Added
+- `ScriptExecutor` host interface + `run_script` built-in tool.
+  Optional `BodhiPiConfig.scriptExecutor` (no default helper — runtime
+  choice belongs to the host). When provided, `run_script` is
+  capability-conditionally registered with TypeBox params
+  `{ path, args?, timeout? }`. Path resolves against session `cwd`
+  (same rule as `read`/`write`); ACP `tool_call.kind` is `"execute"`.
+  Output (stdout + stderr + exitCode) is truncated per
+  `RUN_SCRIPT_MAX_BYTES` (50KB per stream). Public types
+  `ScriptExecutor`, `ScriptExecuteParams`, `ScriptExecuteResult`
+  exported. Reference test executor (non-sandboxed `new Function`)
+  ships under `test/helpers/script-executor.ts`. End-to-end scripted
+  skill (`days-since-birthday`) verifies the full skill+script chain
+  via `gpt-4o-mini`.
 - Skills (markdown-only). Folder-per-skill bundles under
   `<cwd>/.bodhi-pi/skills/<name>/SKILL.md` are discovered via the
   injected `Filesystem` at session hydration. YAML frontmatter supports

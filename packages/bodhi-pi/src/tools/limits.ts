@@ -13,3 +13,4 @@ export const GREP_MAX_BYTES = 50_000;
 export const GREP_MAX_LINE_LENGTH = 500;
 export const LS_MAX_ENTRIES = 500;
 export const LS_MAX_BYTES = 50_000;
+export const RUN_SCRIPT_MAX_BYTES = 50_000;

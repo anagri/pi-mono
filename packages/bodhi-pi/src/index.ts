@@ -2,6 +2,11 @@ export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprot
 export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
 export type { DirEntry, FileStat, Filesystem } from "./filesystem/filesystem.js";
 export { createInMemoryFilesystem } from "./filesystem/in-memory-filesystem.js";
+export type {
+	ScriptExecuteParams,
+	ScriptExecuteResult,
+	ScriptExecutor,
+} from "./script-executor/script-executor.js";
 export { createInMemorySessionStore } from "./sessions/in-memory-session-store.js";
 export type {
 	ListSessionsRequest,

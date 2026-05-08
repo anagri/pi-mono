@@ -30,6 +30,7 @@ import type { Api, Model, StopReason as PiStopReason } from "@mariozechner/pi-ai
 import { loadProjectCommands } from "../commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "../commands/prompt-templates.js";
 import type { Filesystem } from "../filesystem/filesystem.js";
+import type { ScriptExecutor } from "../script-executor/script-executor.js";
 import type { SessionStore } from "../sessions/session-store.js";
 import { loadProjectSkills } from "../skills/discovery.js";
 import { expandSkillCommand } from "../skills/invocation.js";
@@ -57,6 +58,8 @@ export interface BodhiPiConfig {
 	filesystem: Filesystem;
 	/** Not persisted; reread from config on every load/resume. */
 	systemPrompt?: string;
+	/** When provided, the `run_script` built-in tool is registered. Hosts implement per their runtime. */
+	scriptExecutor?: ScriptExecutor;
 }
 
 interface SessionState {
@@ -139,7 +142,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		const defaultModel = this.findModel(this.config.defaultModelId);
-		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd: record.cwd });
+		const tools = createBuiltinTools({
+			filesystem: this.config.filesystem,
+			cwd: record.cwd,
+			...(this.config.scriptExecutor ? { scriptExecutor: this.config.scriptExecutor } : {}),
+		});
 		// Skills must load before Agent construction so the composed systemPrompt
 		// (base + <available_skills>) is in the initial state.
 		const commands = await loadProjectCommands(this.config.filesystem, record.cwd);
@@ -455,7 +462,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const messages: AgentMessage[] = record.entries
 			.filter((e): e is Extract<typeof e, { type: "message" }> => e.type === "message")
 			.map((e) => e.message);
-		const tools = createBuiltinTools({ filesystem: this.config.filesystem, cwd });
+		const tools = createBuiltinTools({
+			filesystem: this.config.filesystem,
+			cwd,
+			...(this.config.scriptExecutor ? { scriptExecutor: this.config.scriptExecutor } : {}),
+		});
 		const commands = await loadProjectCommands(this.config.filesystem, cwd);
 		const skills = await loadProjectSkills(this.config.filesystem, cwd);
 		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
