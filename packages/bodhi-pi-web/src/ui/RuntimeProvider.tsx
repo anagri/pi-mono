@@ -28,8 +28,9 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
+	const [defaultModelId, setDefaultModelId] = useState<string>("");
 	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
-	const { setStatus, setSessionId, setCurrentModelId, addMessage, appendChunk, addSystemMessage } = useChatStore();
+	const { setStatus, setSessionId, setCurrentModelId, addMessage, appendChunk, addSystemMessage, clear } = useChatStore();
 	const sessionId = useChatStore((s) => s.sessionId);
 	const currentModelId = useChatStore((s) => s.currentModelId);
 
@@ -40,6 +41,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 		(async () => {
 			const env = readEnv();
 			setModels(env.models);
+			setDefaultModelId(env.defaultModelId);
 
 			const runtime = await startAgentRuntime({
 				models: env.models,
@@ -95,8 +97,8 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		// Slash-command routing mirrors bodhi-pi-cli/src/repl/repl.ts:90-101.
-		// Local commands (e.g. /model) handled here; agent-announced commands
-		// fall through to clientConn.prompt as a normal turn.
+		// Local commands handled here; agent-announced commands fall through
+		// as a normal prompt turn.
 		if (isCommand(text)) {
 			const cmdName = text.trim().split(/\s+/)[0].slice(1);
 			const isAgentCommand = availableCommands.some((c) => c.name === cmdName);
@@ -107,14 +109,24 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 					state: {
 						sessionId: useChatStore.getState().sessionId,
 						currentModelId: useChatStore.getState().currentModelId,
+						defaultModelId,
 						models,
 						availableCommands,
 					},
 					addSystemMessage,
 					setCurrentModelId,
+					setSessionId,
+					setStatus,
+					clear,
 				});
 				if (handled) return;
 			}
+		}
+
+		// Block prompts when the session is closed; user must /new or /resume first.
+		if (useChatStore.getState().status === "closed") {
+			addSystemMessage("session is closed. Use /new to start a fresh one or /resume <id>.");
+			return;
 		}
 
 		const sid = useChatStore.getState().sessionId;

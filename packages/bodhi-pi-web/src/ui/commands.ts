@@ -6,12 +6,16 @@ import type { ChatState } from "../store/chatStore";
  * Slash-command dispatcher for bodhi-pi-web. Ported from
  * `bodhi-pi-cli/src/repl/commands.ts` — same `clientConn`/state surface,
  * different sink (system messages instead of stdout). M4 ships /help and
- * /model only; M5 adds /sessions, /new, /resume, /close, /delete.
+ * /model; M5 adds /sessions, /new, /resume, /close, /delete.
  */
+
+const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
+const DEFAULT_CWD = "/";
 
 export interface UiCommandState {
 	sessionId: string;
 	currentModelId: string;
+	defaultModelId: string;
 	models: Model<Api>[];
 	availableCommands: AvailableCommand[];
 }
@@ -21,6 +25,9 @@ export interface UiCommandContext {
 	state: UiCommandState;
 	addSystemMessage: ChatState["addSystemMessage"];
 	setCurrentModelId: ChatState["setCurrentModelId"];
+	setSessionId: ChatState["setSessionId"];
+	setStatus: ChatState["setStatus"];
+	clear: ChatState["clear"];
 }
 
 export function isCommand(line: string): boolean {
@@ -42,6 +49,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"local commands:",
 				"  /help              show this help",
 				"  /model [id]        list models or switch the active one",
+				"  /sessions          list sessions for this cwd",
+				"  /new               start a new session",
+				"  /resume <id>       load a previous session (replays history)",
+				"  /close             close the current session (data persists)",
+				"  /delete <id>       permanently delete a session",
 			];
 			if (ctx.state.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -79,7 +91,111 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 			return true;
 		}
 
+		case "/sessions": {
+			try {
+				const result = await ctx.conn.listSessions({ cwd: DEFAULT_CWD });
+				const sessions = (result.sessions ?? []) as Array<{ sessionId: string; cwd: string; updatedAt?: string }>;
+				if (sessions.length === 0) {
+					ctx.addSystemMessage("(no sessions for this cwd)");
+				} else {
+					const lines = ["sessions:"];
+					for (const s of sessions) {
+						const marker = s.sessionId === ctx.state.sessionId ? "*" : " ";
+						const updated = s.updatedAt ? formatAge(Date.parse(s.updatedAt)) : "";
+						// Full sessionId is included so /resume <id> can be copy-pasted.
+						lines.push(`${marker} ${s.sessionId}  ${updated}`);
+					}
+					ctx.addSystemMessage(lines.join("\n"));
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/new": {
+			try {
+				if (ctx.state.sessionId) {
+					await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
+				}
+				const result = await ctx.conn.newSession({ cwd: DEFAULT_CWD, mcpServers: [] });
+				ctx.clear();
+				ctx.setSessionId(result.sessionId);
+				ctx.setCurrentModelId(ctx.state.defaultModelId);
+				ctx.setStatus("idle");
+				ctx.addSystemMessage(`new session: ${result.sessionId.slice(0, 8)}…`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/resume": {
+			const targetId = parts[1];
+			if (!targetId) {
+				ctx.addSystemMessage("usage: /resume <session-id>");
+				return true;
+			}
+			try {
+				if (ctx.state.sessionId && ctx.state.sessionId !== targetId) {
+					await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
+				}
+				ctx.clear();
+				ctx.setSessionId(targetId);
+				const result = await ctx.conn.loadSession({ sessionId: targetId, cwd: DEFAULT_CWD, mcpServers: [] });
+				const restoredModel =
+					(result.configOptions?.[0]?.currentValue as string | undefined) ?? ctx.state.defaultModelId;
+				ctx.setCurrentModelId(restoredModel);
+				ctx.setStatus("idle");
+				ctx.addSystemMessage(`resumed session: ${targetId.slice(0, 8)}…`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+				ctx.setStatus("idle");
+			}
+			return true;
+		}
+
+		case "/close": {
+			try {
+				await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
+				ctx.setStatus("closed");
+				ctx.addSystemMessage(`closed session: ${ctx.state.sessionId.slice(0, 8)}…  (use /new or /resume <id>)`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/delete": {
+			const targetId = parts[1];
+			if (!targetId) {
+				ctx.addSystemMessage("usage: /delete <session-id>");
+				return true;
+			}
+			try {
+				await ctx.conn.extMethod(EXT_DELETE_SESSION, { sessionId: targetId });
+				ctx.addSystemMessage(`deleted session: ${targetId.slice(0, 8)}…`);
+				if (targetId === ctx.state.sessionId) {
+					// Recurse into /new to leave the user on a fresh, usable session.
+					await handleCommand("/new", ctx);
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
 		default:
 			return false;
 	}
+}
+
+function formatAge(ms: number): string {
+	const diff = Date.now() - ms;
+	const min = Math.floor(diff / 60000);
+	if (min < 1) return "just now";
+	if (min < 60) return `${min}m ago`;
+	const h = Math.floor(min / 60);
+	if (h < 24) return `${h}h ago`;
+	return `${Math.floor(h / 24)}d ago`;
 }
