@@ -37,6 +37,7 @@
 		"**/dist/**",
 		"packages/bodhi-pi/**/*",
 		"packages/bodhi-pi-cli/**/*",
-		"packages/bodhi-pi-node/**/*"
+		"packages/bodhi-pi-node/**/*",
+		"packages/bodhi-pi-web/**/*"
 	]
 }
