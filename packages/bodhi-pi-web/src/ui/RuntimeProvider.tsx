@@ -3,6 +3,7 @@ import type { Api, Model } from "@mariozechner/pi-ai";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { dispatchNotification } from "../agent/render";
 import { type AgentRuntime, startAgentRuntime } from "../agent/runtime";
+import { clearLastSessionId, readLastSessionId, writeLastSessionId } from "../agent/session-storage";
 import { readEnv } from "../env";
 import { useChatStore } from "../store/chatStore";
 import { handleCommand, isCommand } from "./commands";
@@ -33,6 +34,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 	const { setStatus, setSessionId, setCurrentModelId, addMessage, appendChunk, addSystemMessage, clear } = useChatStore();
 	const sessionId = useChatStore((s) => s.sessionId);
 	const currentModelId = useChatStore((s) => s.currentModelId);
+	const status = useChatStore((s) => s.status);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -61,16 +63,33 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 				runtime.dispose();
 				return;
 			}
-
 			runtimeRef.current = runtime;
 
-			const newSession = await runtime.conn.newSession({ cwd: "/", mcpServers: [] });
+			// Auto-resume the per-tab last session if Dexie still has it; the
+			// agent streams history back via session/load notifications, which
+			// render.ts dispatches into the chat store.
+			const lastId = readLastSessionId();
+			let activeId: string | undefined;
+			if (lastId) {
+				try {
+					await runtime.conn.loadSession({ sessionId: lastId, cwd: "/", mcpServers: [] });
+					activeId = lastId;
+				} catch {
+					// stale id (deleted in another tab, schema mismatch, etc.) — fall through
+					clearLastSessionId();
+				}
+			}
+			if (!activeId) {
+				const created = await runtime.conn.newSession({ cwd: "/", mcpServers: [] });
+				activeId = created.sessionId;
+			}
 			if (cancelled) {
 				runtime.dispose();
 				return;
 			}
 
-			setSessionId(newSession.sessionId);
+			setSessionId(activeId);
+			writeLastSessionId(activeId);
 			setCurrentModelId(env.defaultModelId);
 			setConn(runtime.conn);
 			setStatus("idle");
@@ -88,6 +107,17 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	// Keep sessionStorage in sync as commands swap or close sessions.
+	useEffect(() => {
+		if (status === "closed") {
+			clearLastSessionId();
+			return;
+		}
+		if (sessionId && sessionId !== "local") {
+			writeLastSessionId(sessionId);
+		}
+	}, [sessionId, status]);
 
 	async function prompt(text: string): Promise<void> {
 		const c = conn;

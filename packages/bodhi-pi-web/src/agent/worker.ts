@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@bodhiapp/bodhi-pi";
-import { createMessagePortStream } from "@bodhiapp/bodhi-pi-browser";
+import { createBodhiPiAgent, createInMemoryFilesystem } from "@bodhiapp/bodhi-pi";
+import { createDexieSessionStore, createMessagePortStream } from "@bodhiapp/bodhi-pi-browser";
 import type { InitMessage } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -13,7 +13,7 @@ self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) 
 	const { agentPort, models, defaultModelId, apiKeys, systemPrompt } = ev.data;
 
 	const filesystem = createInMemoryFilesystem();
-	const sessionStore = createInMemorySessionStore();
+	const sessionStore = createDexieSessionStore({ dbName: "bodhi-pi-web" });
 
 	const factory = createBodhiPiAgent({
 		models,

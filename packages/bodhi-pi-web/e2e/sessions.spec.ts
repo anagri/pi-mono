@@ -70,3 +70,33 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 		await expect(chat.messages("system").last()).not.toContainText(sessionA);
 	});
 });
+
+test("M6 reload resumes the last session via Dexie + sessionStorage", async ({ chat }) => {
+	await test.step("seed a session with a known fact", async () => {
+		await chat.goto();
+		await chat.waitForState("idle", 60_000);
+		await chat.send("Remember the codeword 'cobalt'. Reply only with: noted");
+		await chat.waitForState("streaming");
+		await chat.waitForState("idle", 60_000);
+		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("noted");
+	});
+
+	await test.step("reload the page", async () => {
+		await chat.page.reload();
+		await chat.waitForState("idle", 60_000);
+	});
+
+	await test.step("history replays via session/load", async () => {
+		// loadSession streams user_message_chunk + agent_message_chunk for each
+		// persisted message. render.ts dispatches them into the chat store.
+		await expect(chat.messages("user")).toContainText(/cobalt/i);
+		await expect(chat.messages("assistant").last()).toContainText(/noted/i);
+	});
+
+	await test.step("post-reload context is alive", async () => {
+		await chat.send("What was the codeword? Reply with just the word.");
+		await chat.waitForState("streaming");
+		await chat.waitForState("idle", 60_000);
+		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("cobalt");
+	});
+});
