@@ -1,0 +1,49 @@
+{
+	"name": "@bodhiapp/bodhi-pi-cli",
+	"version": "0.0.1",
+	"description": "REPL CLI for live-testing bodhi-pi",
+	"type": "module",
+	"main": "./dist/cli.js",
+	"bin": {
+		"bodhi-pi-cli": "./dist/cli.js"
+	},
+	"files": [
+		"dist",
+		"drizzle",
+		"README.md"
+	],
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json",
+		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
+		"db:generate": "drizzle-kit generate",
+		"test": "vitest --run",
+		"test:e2e": "vitest --run --config vitest.e2e.config.ts",
+		"cli": "node dist/cli.js"
+	},
+	"dependencies": {
+		"@agentclientprotocol/sdk": "^0.21.0",
+		"@bodhiapp/bodhi-pi": "^0.0.1",
+		"@mariozechner/pi-ai": "^0.73.0",
+		"better-sqlite3": "^11.10.0",
+		"chalk": "^5.4.1",
+		"dotenv": "^16.4.5",
+		"drizzle-orm": "^0.43.1"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/node": "^24.3.0",
+		"drizzle-kit": "^0.31.0",
+		"typescript": "^5.7.3",
+		"vitest": "^3.2.4"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/anagri/pi-mono.git",
+		"directory": "packages/bodhi-pi-cli"
+	}
+}
