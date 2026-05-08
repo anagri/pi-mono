@@ -45,6 +45,8 @@ export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
 		addMessage,
 		appendChunk,
 		addSystemMessage,
+		addToolCall,
+		updateToolCall,
 		clear,
 	} = useChatStore();
 	const sessionId = useChatStore((s) => s.sessionId);
@@ -71,6 +73,8 @@ export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
 						appendChunk,
 						addMessage,
 						addSystemMessage,
+						addToolCall,
+						updateToolCall,
 						setAvailableCommands,
 					});
 				},

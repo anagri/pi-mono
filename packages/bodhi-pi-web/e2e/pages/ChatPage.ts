@@ -42,6 +42,17 @@ export class ChatPage {
 		return (await last.locator(".message-content").textContent()) ?? "";
 	}
 
+	toolCalls(filter?: { name?: string; status?: "running" | "completed" | "failed" }) {
+		const parts = ['[data-testid="tool-call"]'];
+		if (filter?.name) parts.push(`[data-tool-name="${filter.name}"]`);
+		if (filter?.status) parts.push(`[data-tool-status="${filter.status}"]`);
+		return this.page.locator(parts.join(""));
+	}
+
+	lastToolCall(name?: string) {
+		return name ? this.toolCalls({ name }).last() : this.toolCalls().last();
+	}
+
 	async send(text: string) {
 		await this.input.fill(text);
 		await this.sendButton.click();
