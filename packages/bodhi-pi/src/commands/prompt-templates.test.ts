@@ -34,6 +34,10 @@ describe("parseCommandArgs", () => {
 	test("trailing whitespace", () => {
 		expect(parseCommandArgs("a b   ")).toEqual(["a", "b"]);
 	});
+
+	test("unclosed double-quote includes remaining content in the argument", () => {
+		expect(parseCommandArgs('"hello world')).toEqual(["hello world"]);
+	});
 });
 
 describe("substituteArgs", () => {

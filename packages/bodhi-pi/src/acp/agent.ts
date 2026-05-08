@@ -142,33 +142,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		const defaultModel = this.findModel(this.config.defaultModelId);
-		const tools = createBuiltinTools({
-			filesystem: this.config.filesystem,
-			cwd: record.cwd,
-			...(this.config.scriptExecutor ? { scriptExecutor: this.config.scriptExecutor } : {}),
-		});
-		// Skills must load before Agent construction so the composed systemPrompt
-		// (base + <available_skills>) is in the initial state.
-		const commands = await loadProjectCommands(this.config.filesystem, record.cwd);
-		const skills = await loadProjectSkills(this.config.filesystem, record.cwd);
-		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
-		const piAgent = new Agent({
-			initialState: {
-				model: defaultModel,
-				tools,
-				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
-			},
-			getApiKey: this.config.getApiKey,
-		});
-		this.sessions.set(record.id, {
-			piAgent,
-			currentModelId: this.config.defaultModelId,
-			cwd: record.cwd,
-			tools,
-			commands,
-			skills,
-			cancelled: false,
-		});
+		await this._buildSessionState(record.id, defaultModel, record.cwd);
 		await this.advertiseSlashable(record.id);
 		return {
 			sessionId: record.id,
@@ -462,6 +436,18 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const messages: AgentMessage[] = record.entries
 			.filter((e): e is Extract<typeof e, { type: "message" }> => e.type === "message")
 			.map((e) => e.message);
+		await this._buildSessionState(sessionId, restoredModel, cwd, messages);
+		return { entries: record.entries, currentModelId: modelId };
+	}
+
+	// Skills must load before Agent construction so the composed systemPrompt
+	// (base + <available_skills>) is in the initial state.
+	private async _buildSessionState(
+		sessionId: string,
+		model: Model<Api>,
+		cwd: string,
+		messages: AgentMessage[] = [],
+	): Promise<void> {
 		const tools = createBuiltinTools({
 			filesystem: this.config.filesystem,
 			cwd,
@@ -472,8 +458,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
 		const piAgent = new Agent({
 			initialState: {
-				model: restoredModel,
-				messages,
+				model,
+				...(messages.length > 0 ? { messages } : {}),
 				tools,
 				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
 			},
@@ -481,14 +467,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		this.sessions.set(sessionId, {
 			piAgent,
-			currentModelId: modelId,
+			currentModelId: model.id,
 			cwd,
 			tools,
 			commands,
 			skills,
 			cancelled: false,
 		});
-		return { entries: record.entries, currentModelId: modelId };
 	}
 
 	private async advertiseSlashable(sessionId: string): Promise<void> {

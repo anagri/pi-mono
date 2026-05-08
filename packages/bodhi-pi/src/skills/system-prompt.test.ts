@@ -55,14 +55,16 @@ describe("composeSystemPrompt", () => {
 		expect(composeSystemPrompt("be helpful", [skill({ disableModelInvocation: true })])).toBe("be helpful");
 	});
 
-	test("visible skills + no base returns the block alone", () => {
+	test("visible skills + no base returns preamble then block", () => {
 		const out = composeSystemPrompt(undefined, [skill({ name: "x" })]);
+		expect(out).toContain("/skill:<name>");
 		expect(out).toContain("<available_skills>");
-		expect(out?.startsWith("<available_skills>")).toBe(true);
+		expect(out?.startsWith("The following skills")).toBe(true);
 	});
 
-	test("visible skills + base appends with double newline", () => {
+	test("visible skills + base appends preamble+block with double newline", () => {
 		const out = composeSystemPrompt("be helpful", [skill({ name: "x" })]);
-		expect(out?.startsWith("be helpful\n\n<available_skills>")).toBe(true);
+		expect(out?.startsWith("be helpful\n\nThe following skills")).toBe(true);
+		expect(out).toContain("<available_skills>");
 	});
 });

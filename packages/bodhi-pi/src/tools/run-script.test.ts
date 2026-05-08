@@ -57,6 +57,15 @@ describe("createRunScriptTool", () => {
 		expect(text).toContain("exitCode: 1");
 	});
 
+	test("empty stdout and stderr produces only the exitCode line", async () => {
+		const executor = makeExecutor(async () => ({ stdout: "", stderr: "", exitCode: 1 }));
+		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+
+		const result = await tool.execute("call-1", { path: "x.js" });
+		const text = (result.content[0] as { text: string }).text;
+		expect(text).toBe("exitCode: 1");
+	});
+
 	test("stdout larger than RUN_SCRIPT_MAX_BYTES is truncated", async () => {
 		const big = "x".repeat(60_000);
 		const executor = makeExecutor(async () => ({ stdout: big, stderr: "", exitCode: 0 }));

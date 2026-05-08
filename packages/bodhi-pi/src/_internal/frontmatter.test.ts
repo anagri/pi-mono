@@ -34,4 +34,11 @@ describe("parseFrontmatter", () => {
 		expect(frontmatter).toEqual({ title: "ok" });
 		expect(body).toBe("body\r\n");
 	});
+
+	test("top-level YAML sequence returns empty frontmatter and raw input as body", () => {
+		const raw = "---\n- item\n- item\n---\nbody\n";
+		const { frontmatter, body } = parseFrontmatter<Sample>(raw);
+		expect(frontmatter).toEqual({});
+		expect(body).toBe("body\n");
+	});
 });

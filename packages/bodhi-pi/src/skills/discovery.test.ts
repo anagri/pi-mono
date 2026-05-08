@@ -113,4 +113,23 @@ describe("loadProjectSkills", () => {
 		const skills = await loadProjectSkills(fs, CWD);
 		expect(skills.map((s) => s.name)).toEqual(["alpha", "mike", "zeta"]);
 	});
+
+	test("skill with invalid name charset is skipped but siblings load", async () => {
+		const fs = await seed({
+			[`${SKILLS}/bad-name/SKILL.md`]: "---\nname: bad Name!\ndescription: x\n---\nbody\n",
+			[`${SKILLS}/good/SKILL.md`]: "---\ndescription: ok\n---\nbody\n",
+		});
+		const skills = await loadProjectSkills(fs, CWD);
+		expect(skills.map((s) => s.name)).toEqual(["good"]);
+	});
+
+	test("skill with description exceeding 1024 chars is skipped", async () => {
+		const longDesc = "x".repeat(1025);
+		const fs = await seed({
+			[`${SKILLS}/toolong/SKILL.md`]: `---\ndescription: ${longDesc}\n---\nbody\n`,
+			[`${SKILLS}/fine/SKILL.md`]: "---\ndescription: ok\n---\nbody\n",
+		});
+		const skills = await loadProjectSkills(fs, CWD);
+		expect(skills.map((s) => s.name)).toEqual(["fine"]);
+	});
 });

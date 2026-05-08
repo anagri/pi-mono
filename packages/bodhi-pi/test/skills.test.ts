@@ -8,8 +8,9 @@ import {
 	type TextContent,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createInMemoryFilesystem, createInMemorySessionStore, type Filesystem } from "../src/index.js";
+import { createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
+import { seedCommand, seedSkill } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";
 
 let providers: FauxProviderRegistration[] = [];
@@ -59,18 +60,6 @@ function capturingFaux(): CapturingFaux {
 		},
 	]);
 	return { faux, model, capturedSystemPrompts, capturedUserPrompts };
-}
-
-async function seedSkill(fs: Filesystem, cwd: string, folder: string, content: string): Promise<void> {
-	const dir = `${cwd === "/" ? "" : cwd}/.bodhi-pi/skills/${folder}`;
-	await fs.mkdir(dir, { recursive: true });
-	await fs.writeTextFile(`${dir}/SKILL.md`, content);
-}
-
-async function seedCommand(fs: Filesystem, cwd: string, name: string, content: string): Promise<void> {
-	const dir = `${cwd === "/" ? "" : cwd}/.bodhi-pi/commands`;
-	await fs.mkdir(dir, { recursive: true });
-	await fs.writeTextFile(`${dir}/${name}`, content);
 }
 
 function commandsUpdate(updates: ReturnType<typeof createTestHarness>["updates"]) {

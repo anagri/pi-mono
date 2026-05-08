@@ -11,6 +11,6 @@ export function parseFrontmatter<T extends object>(raw: string): { frontmatter: 
 	const match = FRONTMATTER_RE.exec(raw);
 	if (!match) return { frontmatter: {} as T, body: raw };
 	const parsed = parseYaml(match[1]);
-	if (!parsed || typeof parsed !== "object") return { frontmatter: {} as T, body: match[2] };
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { frontmatter: {} as T, body: match[2] };
 	return { frontmatter: parsed as T, body: match[2] };
 }

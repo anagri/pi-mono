@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createInMemoryFilesystem, createInMemorySessionStore } from "../src/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
+import { seedCommand } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";
 
 let providers: FauxProviderRegistration[] = [];
@@ -55,17 +56,6 @@ function capturingFaux(): CapturingFaux {
 		},
 	]);
 	return { faux, model, capturedUserPrompts };
-}
-
-async function seedCommand(
-	filesystem: ReturnType<typeof createInMemoryFilesystem>,
-	cwd: string,
-	name: string,
-	body: string,
-): Promise<void> {
-	const dir = `${cwd === "/" ? "" : cwd}/.bodhi-pi/commands`;
-	await filesystem.mkdir(dir, { recursive: true });
-	await filesystem.writeTextFile(`${dir}/${name}`, body);
 }
 
 function commandsUpdates(updates: ReturnType<typeof createTestHarness>["updates"]) {
