@@ -6,6 +6,7 @@ import { type AgentRuntime, startAgentRuntime } from "../agent/runtime";
 import { clearLastSessionId, readLastSessionId, writeLastSessionId } from "../agent/session-storage";
 import { readEnv } from "../env";
 import { useChatStore } from "../store/chatStore";
+import type { WorkspaceConfig } from "../workspace/types";
 import { handleCommand, isCommand } from "./commands";
 
 interface RuntimeContextValue {
@@ -25,13 +26,27 @@ export function useRuntime(): RuntimeContextValue {
 	return ctx;
 }
 
-export function RuntimeProvider({ children }: { children: React.ReactNode }) {
+export interface RuntimeProviderProps {
+	workspace: WorkspaceConfig;
+	children: React.ReactNode;
+}
+
+export function RuntimeProvider({ workspace, children }: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
 	const [defaultModelId, setDefaultModelId] = useState<string>("");
 	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
-	const { setStatus, setSessionId, setCurrentModelId, addMessage, appendChunk, addSystemMessage, clear } = useChatStore();
+	const {
+		setStatus,
+		setSessionId,
+		setCurrentModelId,
+		setMountPath,
+		addMessage,
+		appendChunk,
+		addSystemMessage,
+		clear,
+	} = useChatStore();
 	const sessionId = useChatStore((s) => s.sessionId);
 	const currentModelId = useChatStore((s) => s.currentModelId);
 	const status = useChatStore((s) => s.status);
@@ -39,6 +54,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		let cancelled = false;
 		setStatus("initializing");
+		setMountPath(workspace.rootPath);
 
 		(async () => {
 			const env = readEnv();
@@ -49,6 +65,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 				models: env.models,
 				defaultModelId: env.defaultModelId,
 				apiKeys: env.apiKeys,
+				workspace,
 				onNotification: (notif) => {
 					dispatchNotification(notif, {
 						appendChunk,
@@ -65,22 +82,26 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 			}
 			runtimeRef.current = runtime;
 
-			// Auto-resume the per-tab last session if Dexie still has it; the
-			// agent streams history back via session/load notifications, which
-			// render.ts dispatches into the chat store.
+			// Auto-resume per-tab last session if Dexie still has it.
 			const lastId = readLastSessionId();
 			let activeId: string | undefined;
 			if (lastId) {
 				try {
-					await runtime.conn.loadSession({ sessionId: lastId, cwd: "/", mcpServers: [] });
+					await runtime.conn.loadSession({
+						sessionId: lastId,
+						cwd: workspace.rootPath,
+						mcpServers: [],
+					});
 					activeId = lastId;
 				} catch {
-					// stale id (deleted in another tab, schema mismatch, etc.) — fall through
 					clearLastSessionId();
 				}
 			}
 			if (!activeId) {
-				const created = await runtime.conn.newSession({ cwd: "/", mcpServers: [] });
+				const created = await runtime.conn.newSession({
+					cwd: workspace.rootPath,
+					mcpServers: [],
+				});
 				activeId = created.sessionId;
 			}
 			if (cancelled) {
@@ -106,9 +127,8 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 			runtimeRef.current = null;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [workspace]);
 
-	// Keep sessionStorage in sync as commands swap or close sessions.
 	useEffect(() => {
 		if (status === "closed") {
 			clearLastSessionId();
@@ -126,9 +146,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 			return;
 		}
 
-		// Slash-command routing mirrors bodhi-pi-cli/src/repl/repl.ts:90-101.
-		// Local commands handled here; agent-announced commands fall through
-		// as a normal prompt turn.
 		if (isCommand(text)) {
 			const cmdName = text.trim().split(/\s+/)[0].slice(1);
 			const isAgentCommand = availableCommands.some((c) => c.name === cmdName);
@@ -148,12 +165,12 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 					setSessionId,
 					setStatus,
 					clear,
+					cwd: workspace.rootPath,
 				});
 				if (handled) return;
 			}
 		}
 
-		// Block prompts when the session is closed; user must /new or /resume first.
 		if (useChatStore.getState().status === "closed") {
 			addSystemMessage("session is closed. Use /new to start a fresh one or /resume <id>.");
 			return;
@@ -172,9 +189,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 	}
 
 	return (
-		<RuntimeContext.Provider
-			value={{ conn, sessionId, currentModelId, models, availableCommands, prompt }}
-		>
+		<RuntimeContext.Provider value={{ conn, sessionId, currentModelId, models, availableCommands, prompt }}>
 			{children}
 		</RuntimeContext.Provider>
 	);

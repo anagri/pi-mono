@@ -24,7 +24,10 @@
 	},
 	"dependencies": {
 		"@bodhiapp/bodhi-pi": "^0.0.1",
-		"dexie": "^4.0.11"
+		"@zenfs/core": "^2.5.0",
+		"@zenfs/dom": "^1.2.0",
+		"dexie": "^4.0.11",
+		"idb-keyval": "^6.2.2"
 	},
 	"devDependencies": {
 		"@types/node": "^24.3.0",

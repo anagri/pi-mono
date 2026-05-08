@@ -7,6 +7,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { createMessagePortStream } from "@bodhiapp/bodhi-pi-browser";
 import type { Api, Model } from "@mariozechner/pi-ai";
+import type { WorkspaceConfig } from "../workspace/types";
 import type { InitMessage } from "./types";
 
 const STD_INIT_PARAMS = {
@@ -22,6 +23,7 @@ export interface RuntimeOptions {
 	defaultModelId: string;
 	apiKeys: Record<string, string>;
 	systemPrompt?: string;
+	workspace: WorkspaceConfig;
 	onNotification: (notif: SessionNotification) => void;
 }
 
@@ -41,6 +43,7 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,
 		apiKeys: opts.apiKeys,
+		workspace: opts.workspace,
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 	};
 	worker.postMessage(init, [channel.port2]);

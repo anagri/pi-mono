@@ -15,6 +15,7 @@ export interface ChatState {
 	status: ChatStatus;
 	currentModelId: string;
 	sessionId: string;
+	mountPath: string;
 
 	addMessage: (role: MessageRole, content: string) => void;
 	addSystemMessage: (content: string) => void;
@@ -22,6 +23,7 @@ export interface ChatState {
 	setStatus: (status: ChatStatus) => void;
 	setCurrentModelId: (id: string) => void;
 	setSessionId: (id: string) => void;
+	setMountPath: (path: string) => void;
 	clear: () => void;
 }
 
@@ -33,6 +35,7 @@ export const useChatStore = create<ChatState>((set) => ({
 	status: "echo",
 	currentModelId: "echo",
 	sessionId: "local",
+	mountPath: "",
 
 	addMessage: (role, content) => set((s) => ({ messages: [...s.messages, { id: newId(), role, content }] })),
 
@@ -51,5 +54,6 @@ export const useChatStore = create<ChatState>((set) => ({
 	setStatus: (status) => set({ status }),
 	setCurrentModelId: (currentModelId) => set({ currentModelId }),
 	setSessionId: (sessionId) => set({ sessionId }),
+	setMountPath: (mountPath) => set({ mountPath }),
 	clear: () => set({ messages: [] }),
 }));

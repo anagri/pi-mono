@@ -10,7 +10,6 @@ import type { ChatState } from "../store/chatStore";
  */
 
 const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
-const DEFAULT_CWD = "/";
 
 export interface UiCommandState {
 	sessionId: string;
@@ -28,6 +27,7 @@ export interface UiCommandContext {
 	setSessionId: ChatState["setSessionId"];
 	setStatus: ChatState["setStatus"];
 	clear: ChatState["clear"];
+	cwd: string;
 }
 
 export function isCommand(line: string): boolean {
@@ -93,7 +93,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/sessions": {
 			try {
-				const result = await ctx.conn.listSessions({ cwd: DEFAULT_CWD });
+				const result = await ctx.conn.listSessions({ cwd: ctx.cwd });
 				const sessions = (result.sessions ?? []) as Array<{ sessionId: string; cwd: string; updatedAt?: string }>;
 				if (sessions.length === 0) {
 					ctx.addSystemMessage("(no sessions for this cwd)");
@@ -118,7 +118,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				if (ctx.state.sessionId) {
 					await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
 				}
-				const result = await ctx.conn.newSession({ cwd: DEFAULT_CWD, mcpServers: [] });
+				const result = await ctx.conn.newSession({ cwd: ctx.cwd, mcpServers: [] });
 				ctx.clear();
 				ctx.setSessionId(result.sessionId);
 				ctx.setCurrentModelId(ctx.state.defaultModelId);
@@ -142,7 +142,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				}
 				ctx.clear();
 				ctx.setSessionId(targetId);
-				const result = await ctx.conn.loadSession({ sessionId: targetId, cwd: DEFAULT_CWD, mcpServers: [] });
+				const result = await ctx.conn.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
 				const restoredModel =
 					(result.configOptions?.[0]?.currentValue as string | undefined) ?? ctx.state.defaultModelId;
 				ctx.setCurrentModelId(restoredModel);

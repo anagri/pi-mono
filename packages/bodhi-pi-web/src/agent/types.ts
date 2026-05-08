@@ -1,4 +1,5 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
+import type { WorkspaceConfig } from "../workspace/types";
 
 /** One-shot init message the main thread posts to the worker on spawn. */
 export interface InitMessage {
@@ -8,4 +9,5 @@ export interface InitMessage {
 	defaultModelId: string;
 	apiKeys: Record<string, string>;
 	systemPrompt?: string;
+	workspace: WorkspaceConfig;
 }
