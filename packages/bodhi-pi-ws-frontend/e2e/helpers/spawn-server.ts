@@ -9,9 +9,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const WS_SERVER_DIR = path.resolve(here, "../../../bodhi-pi-ws-server");
 
 export interface SpawnTestServerOptions {
-	/** Scenario directory under `e2e/data/<scenario>/` to materialize as the workspace. */
-	scenario?: string;
-	/** Inline files on top of the loaded scenario. Path keys begin with `/`. */
+	/**
+	 * Scenario directory under `e2e/data/<scenario>/` to materialize as the workspace.
+	 * Pass an array to merge multiple scenarios (later wins on collisions).
+	 */
+	scenario?: string | string[];
+	/** Inline files on top of the loaded scenario(s). Path keys begin with `/`. */
 	files?: Record<string, string>;
 }
 
@@ -39,7 +42,10 @@ export async function spawnTestServer(opts: SpawnTestServerOptions = {}): Promis
 	mkdirSync(workspaceDir, { recursive: true });
 	mkdirSync(dataDir, { recursive: true });
 	const seedFiles: Record<string, string> = {};
-	if (opts.scenario) Object.assign(seedFiles, loadScenario(opts.scenario));
+	if (opts.scenario) {
+		const names = Array.isArray(opts.scenario) ? opts.scenario : [opts.scenario];
+		for (const name of names) Object.assign(seedFiles, loadScenario(name));
+	}
 	if (opts.files) Object.assign(seedFiles, opts.files);
 	writeFiles(workspaceDir, seedFiles);
 

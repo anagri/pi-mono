@@ -1,9 +1,15 @@
-import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
 import { useCallback, useRef, useState } from "react";
+import { handleCommand, isCommand } from "../ui/commands";
 
 export interface MessageItem {
 	kind: "message";
 	role: "user" | "assistant";
+	text: string;
+}
+
+export interface SystemItem {
+	kind: "system";
 	text: string;
 }
 
@@ -17,12 +23,13 @@ export interface ToolCallItem {
 	status: ToolCallStatus;
 }
 
-export type ChatItem = MessageItem | ToolCallItem;
+export type ChatItem = MessageItem | SystemItem | ToolCallItem;
 
-export type ChatStatus = "idle" | "streaming";
+export type ChatStatus = "idle" | "streaming" | "closed";
 
 interface UseChatArgs {
 	conn: ClientSideConnection | null;
+	cwd: string;
 }
 
 function mapToolStatus(raw: string | undefined): ToolCallStatus {
@@ -37,11 +44,34 @@ function deriveToolName(title: string, kind?: string): string {
 	return first.replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
-export function useChat({ conn }: UseChatArgs) {
+export function useChat({ conn, cwd }: UseChatArgs) {
 	const [items, setItems] = useState<ChatItem[]>([]);
 	const [status, setStatus] = useState<ChatStatus>("idle");
 	const [error, setError] = useState<string>("");
+	const [currentModelId, setCurrentModelId] = useState<string>("");
+	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
 	const sessionIdRef = useRef<string | null>(null);
+	const defaultModelIdRef = useRef<string>("");
+
+	const addSystemMessage = useCallback((text: string) => {
+		setItems((prev) => [...prev, { kind: "system", text }]);
+	}, []);
+
+	const setSessionId = useCallback((id: string) => {
+		sessionIdRef.current = id;
+	}, []);
+
+	const setDefaultModelId = useCallback(
+		(id: string) => {
+			defaultModelIdRef.current = id;
+			if (!currentModelId) setCurrentModelId(id);
+		},
+		[currentModelId],
+	);
+
+	const clear = useCallback(() => {
+		setItems([]);
+	}, []);
 
 	const handleNotification = useCallback((n: SessionNotification) => {
 		const update = n.update as Record<string, unknown>;
@@ -88,6 +118,12 @@ export function useChat({ conn }: UseChatArgs) {
 			setItems((prev) =>
 				prev.map((it) => (it.kind === "tool" && it.toolCallId === toolCallId ? { ...it, status } : it)),
 			);
+			return;
+		}
+
+		if (kind === "available_commands_update") {
+			const commands = (update.availableCommands as AvailableCommand[] | undefined) ?? [];
+			setAvailableCommands(commands);
 		}
 	}, []);
 
@@ -98,12 +134,41 @@ export function useChat({ conn }: UseChatArgs) {
 				return;
 			}
 			setError("");
+
+			// Slash commands: handle locally if a built-in; otherwise forward as prompt.
+			if (isCommand(text)) {
+				const handled = await handleCommand(text, {
+					conn,
+					cwd,
+					sessionId: sessionIdRef.current ?? "",
+					currentModelId,
+					defaultModelId: defaultModelIdRef.current,
+					availableCommands,
+					addSystemMessage,
+					setCurrentModelId,
+					setSessionId,
+					setStatus,
+					clear,
+				});
+				if (handled) return;
+				// Project commands fall through to forward-as-prompt.
+			}
+
 			setStatus("streaming");
 			setItems((prev) => [...prev, { kind: "message", role: "user", text }]);
 			try {
 				if (!sessionIdRef.current) {
-					const ns = await conn.newSession({ cwd: "/", mcpServers: [] });
+					const ns = await conn.newSession({ cwd, mcpServers: [] });
 					sessionIdRef.current = ns.sessionId;
+					const opt = ns.configOptions?.[0];
+					const value =
+						opt && typeof (opt as { currentValue?: unknown }).currentValue === "string"
+							? (opt as { currentValue: string }).currentValue
+							: undefined;
+					if (value) {
+						defaultModelIdRef.current = value;
+						setCurrentModelId(value);
+					}
 				}
 				const result = await conn.prompt({
 					sessionId: sessionIdRef.current,
@@ -118,7 +183,7 @@ export function useChat({ conn }: UseChatArgs) {
 				setStatus("idle");
 			}
 		},
-		[conn],
+		[conn, cwd, currentModelId, availableCommands, addSystemMessage, setSessionId, clear],
 	);
 
 	const newSession = useCallback(() => {
@@ -146,15 +211,13 @@ export function useChat({ conn }: UseChatArgs) {
 					setError("server does not support session/load");
 					return;
 				}
-				await c.loadSession({ sessionId, cwd: "/", mcpServers: [] });
+				await c.loadSession({ sessionId, cwd, mcpServers: [] });
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			}
 		},
-		[conn],
+		[conn, cwd],
 	);
-
-	const reset = newSession;
 
 	return {
 		items,
@@ -164,7 +227,11 @@ export function useChat({ conn }: UseChatArgs) {
 		handleNotification,
 		newSession,
 		loadSession,
-		reset,
+		reset: newSession,
+		addSystemMessage,
+		currentModelId,
+		setDefaultModelId,
+		availableCommands,
 		currentSessionId: () => sessionIdRef.current,
 	};
 }

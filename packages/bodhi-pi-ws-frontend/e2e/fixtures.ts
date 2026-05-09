@@ -3,9 +3,12 @@ import { spawnTestServer, type TestServerHandle } from "./helpers/spawn-server";
 import { AppPage } from "./pages/AppPage";
 
 interface AppFixtures {
-	/** Per-test scenario directory under `e2e/data/<scenario>/`. Override via `test.use({ scenario: "name" })`. */
-	scenario: string | undefined;
-	/** Spawned ws-server child process bound to the resolved scenario. */
+	/**
+	 * Per-test scenario directory (or array of dirs) under `e2e/data/<scenario>/`.
+	 * Override via `test.use({ scenario: "name" })` or `test.use({ scenario: ["a", "b"] })`.
+	 */
+	scenario: string | string[] | undefined;
+	/** Spawned ws-server child process bound to the resolved scenario(s). */
 	testServer: TestServerHandle;
 	app: AppPage;
 }

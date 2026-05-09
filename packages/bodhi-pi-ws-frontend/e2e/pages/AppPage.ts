@@ -75,10 +75,6 @@ export class AppPage {
 		return this.page.locator('[data-testid="session-row"]');
 	}
 
-	async clickNewSession() {
-		await this.page.getByTestId("new-session").click();
-	}
-
 	sessionRow(sessionIdPrefix: string) {
 		return this.page.locator(`[data-testid="session-row"][data-session-id^="${sessionIdPrefix}"]`);
 	}

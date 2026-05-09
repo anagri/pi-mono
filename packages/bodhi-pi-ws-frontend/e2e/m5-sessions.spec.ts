@@ -1,27 +1,31 @@
 import { expect, test } from "./fixtures";
 
-test("create, switch, and delete sessions", async ({ app }) => {
+test("create and list sessions via slash commands", async ({ app }) => {
 	test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
 
 	await app.goto();
-	// Unique userId so this test's session list is isolated from M1/M2/M4 which use id=1.
 	await app.setSettings({ email: "m5@example.com", id: 5, sendToken: true });
 	await app.clickConnect();
 	await app.expectStatus("connected");
 
-	// Send first prompt — creates session A.
+	// First prompt — implicit newSession.
 	await app.send("Reply with the single word: alpha");
 	await app.expectChatStatus("idle");
-	const alphaText = await app.lastMessageText("assistant");
-	expect(alphaText.toLowerCase()).toContain("alpha");
+	expect((await app.lastMessageText("assistant")).toLowerCase()).toContain("alpha");
 
-	// Start a new session, send second prompt — creates session B.
-	await app.clickNewSession();
+	// Second session via /new.
+	await app.send("/new");
+	await expect(app.page.getByTestId("system-message").last()).toContainText("new session");
+
 	await app.send("Reply with the single word: bravo");
 	await app.expectChatStatus("idle");
-	const bravoText = await app.lastMessageText("assistant");
-	expect(bravoText.toLowerCase()).toContain("bravo");
+	expect((await app.lastMessageText("assistant")).toLowerCase()).toContain("bravo");
 
-	// Two sessions visible in the list.
+	// Two sessions visible in the passive sidebar list.
 	await expect(app.sessionRows()).toHaveCount(2);
+
+	// /sessions also surfaces them in a system message.
+	await app.send("/sessions");
+	const sys = app.page.getByTestId("system-message").last();
+	await expect(sys).toContainText("sessions:");
 });

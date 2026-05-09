@@ -7,6 +7,8 @@ import "./App.css";
 
 type Status = "idle" | "connecting" | "connected" | "disconnected" | "unauthorized";
 
+const SESSION_CWD = "/";
+
 function App() {
 	const { settings, update } = useSettings();
 	const [status, setStatus] = useState<Status>("idle");
@@ -15,7 +17,7 @@ function App() {
 	const [connection, setConnection] = useState<Connection | null>(null);
 	const [draft, setDraft] = useState<string>("");
 
-	const chat = useChat({ conn: connection?.conn ?? null });
+	const chat = useChat({ conn: connection?.conn ?? null, cwd: SESSION_CWD });
 	const sessions = useSessions({ conn: connection?.conn ?? null });
 
 	const onConnect = useCallback(async () => {
@@ -54,27 +56,6 @@ function App() {
 		await chat.send(text);
 		void sessions.refresh();
 	}, [draft, chat, sessions]);
-
-	const onLoad = useCallback(
-		async (sessionId: string) => {
-			await chat.loadSession(sessionId);
-		},
-		[chat],
-	);
-
-	const onDelete = useCallback(
-		async (sessionId: string) => {
-			await sessions.remove(sessionId);
-			if (chat.currentSessionId() === sessionId) {
-				chat.newSession();
-			}
-		},
-		[chat, sessions],
-	);
-
-	const onNewSession = useCallback(() => {
-		chat.newSession();
-	}, [chat]);
 
 	// Refresh session list whenever we connect.
 	useEffect(() => {
@@ -161,6 +142,7 @@ function App() {
 				data-status={status}
 				data-agent-name={agentName}
 				data-chat-status={chat.status}
+				data-current-model={chat.currentModelId}
 				style={{ padding: "0.75rem", border: "1px solid #ccc", borderRadius: 4, marginBottom: "1rem" }}
 			>
 				<div>
@@ -170,6 +152,11 @@ function App() {
 				{agentName ? (
 					<div>
 						Agent: <span data-testid="agent-name">{agentName}</span>
+					</div>
+				) : null}
+				{chat.currentModelId ? (
+					<div>
+						Model: <span data-testid="current-model">{chat.currentModelId}</span>
 					</div>
 				) : null}
 				{connectError ? (
@@ -189,11 +176,9 @@ function App() {
 							padding: "0.5rem",
 						}}
 					>
-						<div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+						<div style={{ marginBottom: "0.5rem" }}>
 							<strong>Sessions</strong>
-							<button type="button" data-testid="new-session" onClick={onNewSession}>
-								+ New
-							</button>
+							<div style={{ fontSize: "0.75rem", color: "#888" }}>(use /new, /sessions, /resume, /delete)</div>
 						</div>
 						{sessions.rows.length === 0 ? (
 							<div style={{ color: "#888", fontSize: "0.9rem" }}>No sessions yet.</div>
@@ -207,29 +192,13 @@ function App() {
 									style={{
 										padding: "0.4rem 0.25rem",
 										borderTop: "1px solid #eee",
-										display: "flex",
-										gap: "0.25rem",
-										alignItems: "center",
 										fontSize: "0.85rem",
+										fontFamily: "ui-monospace, monospace",
+										color: row.sessionId === chat.currentSessionId() ? "#1a1a1a" : "#555",
 									}}
+									title={row.sessionId}
 								>
-									<button
-										type="button"
-										data-testid="session-load"
-										onClick={() => void onLoad(row.sessionId)}
-										style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis" }}
-										title={row.sessionId}
-									>
-										{row.sessionId.slice(0, 8)} · {row.messageCount} msg
-									</button>
-									<button
-										type="button"
-										data-testid="session-delete"
-										onClick={() => void onDelete(row.sessionId)}
-										aria-label="delete session"
-									>
-										✕
-									</button>
+									{row.sessionId.slice(0, 8)} · {row.messageCount} msg
 								</li>
 							))}
 						</ul>
@@ -250,7 +219,7 @@ function App() {
 							}}
 						>
 							{chat.items.length === 0 ? (
-								<div style={{ color: "#888" }}>No messages yet.</div>
+								<div style={{ color: "#888" }}>No messages yet. Type / for commands.</div>
 							) : null}
 							{chat.items.map((it, idx) => {
 								if (it.kind === "message") {
@@ -267,6 +236,25 @@ function App() {
 											}}
 										>
 											<strong>{it.role}:</strong> {it.text}
+										</div>
+									);
+								}
+								if (it.kind === "system") {
+									return (
+										<div
+											key={`${idx}-system`}
+											data-testid="system-message"
+											style={{
+												padding: "0.5rem",
+												borderRadius: 4,
+												background: "#f4f4f4",
+												whiteSpace: "pre-wrap",
+												fontFamily: "ui-monospace, monospace",
+												fontSize: "0.85rem",
+												color: "#444",
+											}}
+										>
+											{it.text}
 										</div>
 									);
 								}
@@ -309,7 +297,7 @@ function App() {
 								rows={2}
 								style={{ flex: 1, padding: "0.5rem", font: "inherit" }}
 								disabled={chat.status === "streaming"}
-								placeholder="Type a message; press Enter to send"
+								placeholder="Type a message or slash command (/help); press Enter to send"
 							/>
 							<button
 								type="button"
