@@ -1,6 +1,6 @@
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
-import { createNodeExtensionLoader, createNodeFilesystem } from "@bodhiapp/bodhi-pi-node";
+import { createNodeExtensionLoader, createNodeFilesystem, createNodeScriptExecutor } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
@@ -41,6 +41,7 @@ export async function wireAgentForConnection(opts: WireAgentOptions): Promise<Ag
 	const filesystem = createNodeFilesystem({ rootCwd: cwd });
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
 	const extensionFactories = await createNodeExtensionLoader({ cwd });
+	const scriptExecutor = createNodeScriptExecutor();
 
 	const innerFactory = createBodhiPiAgent({
 		models: opts.models,
@@ -48,6 +49,7 @@ export async function wireAgentForConnection(opts: WireAgentOptions): Promise<Ag
 		getApiKey: opts.getApiKey,
 		sessionStore,
 		filesystem,
+		scriptExecutor,
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 	});

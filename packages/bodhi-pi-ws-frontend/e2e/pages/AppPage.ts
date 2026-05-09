@@ -61,7 +61,10 @@ export class AppPage {
 	async lastMessageText(role: "user" | "assistant"): Promise<string> {
 		const all = this.page.locator(`[data-testid="message"][data-role="${role}"]`);
 		await all.last().waitFor();
-		return (await all.last().innerText()).trim();
+		const raw = (await all.last().innerText()).trim();
+		// Strip the leading "<role>: " label rendered by App.tsx.
+		const prefix = `${role}:`;
+		return raw.startsWith(prefix) ? raw.slice(prefix.length).trim() : raw;
 	}
 
 	toolCalls(filter?: { name?: string; status?: string }) {
