@@ -28,6 +28,10 @@ setup:
 
 # Build → unit/integration → e2e for every bodhi-* workspace, in dep order.
 test:
+    @echo "▶ @mariozechner/pi-ai  — build (dep)"
+    npm --workspace @mariozechner/pi-ai run build
+    @echo "▶ @mariozechner/pi-agent-core  — build (dep)"
+    npm --workspace @mariozechner/pi-agent-core run build
     @echo "▶ @bodhiapp/bodhi-pi  — build"
     npm --workspace @bodhiapp/bodhi-pi run build
     @echo "▶ @bodhiapp/bodhi-pi  — test (unit + integration)"
