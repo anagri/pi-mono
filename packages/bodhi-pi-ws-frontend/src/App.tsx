@@ -156,24 +156,46 @@ function App() {
 							gap: "0.5rem",
 						}}
 					>
-						{chat.messages.length === 0 ? (
+						{chat.items.length === 0 ? (
 							<div style={{ color: "#888" }}>No messages yet.</div>
 						) : null}
-						{chat.messages.map((m, idx) => (
-							<div
-								key={`${idx}-${m.role}`}
-								data-testid="message"
-								data-role={m.role}
-								style={{
-									padding: "0.5rem",
-									borderRadius: 4,
-									background: m.role === "user" ? "#eef" : "#efe",
-									whiteSpace: "pre-wrap",
-								}}
-							>
-								<strong>{m.role}:</strong> {m.text}
-							</div>
-						))}
+						{chat.items.map((it, idx) => {
+							if (it.kind === "message") {
+								return (
+									<div
+										key={`${idx}-${it.role}`}
+										data-testid="message"
+										data-role={it.role}
+										style={{
+											padding: "0.5rem",
+											borderRadius: 4,
+											background: it.role === "user" ? "#eef" : "#efe",
+											whiteSpace: "pre-wrap",
+										}}
+									>
+										<strong>{it.role}:</strong> {it.text}
+									</div>
+								);
+							}
+							return (
+								<div
+									key={`${idx}-${it.toolCallId}`}
+									data-testid="tool-call"
+									data-tool-name={it.name}
+									data-tool-status={it.status}
+									data-tool-call-id={it.toolCallId}
+									style={{
+										padding: "0.5rem",
+										borderRadius: 4,
+										background: "#fff5d6",
+										fontFamily: "ui-monospace, monospace",
+										fontSize: "0.9rem",
+									}}
+								>
+									<strong>tool · {it.name}</strong> [{it.status}] · {it.title}
+								</div>
+							);
+						})}
 						{chat.error ? (
 							<div data-testid="chat-error" style={{ color: "crimson" }}>
 								{chat.error}

@@ -49,10 +49,15 @@ export class AppPage {
 	}
 
 	async lastMessageText(role: "user" | "assistant"): Promise<string> {
-		const messages = this.page.getByTestId("message").filter({ has: this.page.locator(`[data-role="${role}"]`) });
 		const all = this.page.locator(`[data-testid="message"][data-role="${role}"]`);
 		await all.last().waitFor();
-		void messages;
 		return (await all.last().innerText()).trim();
+	}
+
+	toolCalls(filter?: { name?: string; status?: string }) {
+		let sel = '[data-testid="tool-call"]';
+		if (filter?.name) sel += `[data-tool-name="${filter.name}"]`;
+		if (filter?.status) sel += `[data-tool-status="${filter.status}"]`;
+		return this.page.locator(sel);
 	}
 }

@@ -1,4 +1,4 @@
-import type { Agent, AgentSideConnection } from "@agentclientprotocol/sdk";
+import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { createNodeFilesystem } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
@@ -23,12 +23,16 @@ export type AgentFactory = (conn: AgentSideConnection) => Agent;
  *
  * Each WS connection gets its own AcpAgent + multi-tenant SqliteSessionStore (M3)
  * scoped to the authenticated userId, plus a NodeFilesystem rooted at the user's workspace.
+ *
+ * The agent's cwd is fixed to the server-side per-user workspace path. We override
+ * newSession/loadSession to ignore whatever cwd the client sends and substitute the
+ * authenticated user's workspace dir — clients don't need to know server paths.
  */
 export function wireAgentForConnection(opts: WireAgentOptions): AgentFactory {
 	const cwd = ensureUserWorkspace(opts.dataDir, opts.user.id);
 	const filesystem = createNodeFilesystem({ rootCwd: cwd });
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
-	return createBodhiPiAgent({
+	const innerFactory = createBodhiPiAgent({
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,
 		getApiKey: opts.getApiKey,
@@ -36,4 +40,20 @@ export function wireAgentForConnection(opts: WireAgentOptions): AgentFactory {
 		filesystem,
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 	});
+
+	return (conn) => {
+		const inner = innerFactory(conn);
+		return new Proxy(inner, {
+			get(target, prop, receiver) {
+				if (prop === "newSession") {
+					return (params: NewSessionRequest) => target.newSession({ ...params, cwd });
+				}
+				if (prop === "loadSession" && target.loadSession) {
+					const original = target.loadSession.bind(target);
+					return (params: LoadSessionRequest) => original({ ...params, cwd });
+				}
+				return Reflect.get(target, prop, receiver);
+			},
+		});
+	};
 }
