@@ -7,8 +7,6 @@ import "./App.css";
 
 type Status = "idle" | "connecting" | "connected" | "disconnected" | "unauthorized";
 
-const SERVER_URL = (import.meta.env.VITE_WS_SERVER_URL as string | undefined) ?? "ws://localhost:8788/agent";
-
 function App() {
 	const { settings, update } = useSettings();
 	const [status, setStatus] = useState<Status>("idle");
@@ -26,7 +24,7 @@ function App() {
 		setStatus("connecting");
 		try {
 			const c = await connect({
-				url: SERVER_URL,
+				url: settings.serverUrl,
 				user: settings.sendToken ? { id: settings.id, email: settings.email } : undefined,
 				handlers: { onSessionUpdate: chat.handleNotification },
 				onClose: () => setStatus("disconnected"),
@@ -98,6 +96,16 @@ function App() {
 
 			<section data-testid="settings" style={{ display: "grid", gap: "0.5rem", marginBottom: "1.5rem" }}>
 				<h2 style={{ fontSize: "1rem" }}>Settings</h2>
+				<label>
+					Server URL
+					<input
+						data-testid="settings-serverUrl"
+						type="text"
+						value={settings.serverUrl}
+						onChange={(e) => update("serverUrl", e.target.value)}
+						style={{ width: "100%" }}
+					/>
+				</label>
 				<label>
 					Email
 					<input

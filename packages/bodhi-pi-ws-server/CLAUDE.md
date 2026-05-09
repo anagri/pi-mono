@@ -20,16 +20,22 @@ WebSocket-hosted multi-user agent backend for `@bodhiapp/bodhi-pi`. Single Node 
 
 **`ScriptExecutor` not registered.** Multi-tenant child_process is unsafe without sandboxing.
 
+**`--workspace <dir>` is single-tenant override.** When set (CLI or `BuildServerOptions.workspaceOverride`), every connecting user uses that dir as their agent cwd, bypassing `ensureUserWorkspace`. Multi-tenant DB isolation (M3) still active. Used by e2e fixture-driven tests; do NOT enable in production.
+
+**Project extensions auto-load per WS connection.** `wireAgentForConnection` calls `createNodeExtensionLoader({ cwd })` on every accept and forwards the result as `extensionFactories` to `createBodhiPiAgent`. Each connection sees its workspace's `.bodhi-pi/extensions/*.{js,mjs,cjs}` exactly once at boot.
+
 ## Key files
 
 | Path | Role |
 |---|---|
-| `src/index.ts` | Entry: dotenv, `buildServer`, listen |
-| `src/server.ts` | `buildServer({port})` — http + ws, upgrade routing, heartbeat |
+| `src/index.ts` | Entry: dotenv, `parseArgs`, `buildServer`, listen |
+| `src/cli-args.ts` | `parseArgs(argv)` for `--port`, `--workspace`, `--data-dir`, `--help` |
+| `src/server.ts` | `buildServer({port, dataDir, workspaceOverride?, ...})` — http + ws, upgrade routing, heartbeat |
 | `src/auth/token.ts` | `encodeToken` / `decodeToken` (base64url JSON, type-validated) |
 | `src/auth/upgrade.ts` | `authenticateUpgrade(req)` reads `Sec-WebSocket-Protocol`, decodes bearer; `handleAgentUpgrade` rejects 401 or accepts |
 | `src/transport/ws-stream.ts` | `wsToStream(ws)` → `{readable, writable}` for ACP `ndJsonStream` |
-| `src/agent/handshake-agent.ts` | M1 stub `Agent` — only `initialize`. Replaced by `wireAgentForConnection` in M2. |
+| `src/filesystem/user-workspace.ts` | `resolveUserWorkspace({dataDir, userId, workspaceOverride?})` — single seam |
+| `src/agent/wire-agent.ts` | per-connection bodhi-pi factory + `createNodeExtensionLoader` |
 
 ## Source code rules
 

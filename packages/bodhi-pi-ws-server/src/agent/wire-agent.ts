@@ -1,9 +1,9 @@
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
-import { createNodeFilesystem } from "@bodhiapp/bodhi-pi-node";
+import { createNodeExtensionLoader, createNodeFilesystem } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { UserCtx } from "../auth/token.js";
-import { ensureUserWorkspace } from "../filesystem/user-workspace.js";
+import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
 import { createSqliteSessionStore, type Db } from "../sessions/sqlite-session-store.js";
 
 export interface WireAgentOptions {
@@ -14,6 +14,8 @@ export interface WireAgentOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	/** When set, all users share this dir as cwd (CLI `--workspace <dir>`). */
+	workspaceOverride?: string;
 }
 
 export type AgentFactory = (conn: AgentSideConnection) => Agent;
@@ -21,17 +23,25 @@ export type AgentFactory = (conn: AgentSideConnection) => Agent;
 /**
  * Build a per-WS-connection bodhi-pi agent factory.
  *
- * Each WS connection gets its own AcpAgent + multi-tenant SqliteSessionStore (M3)
- * scoped to the authenticated userId, plus a NodeFilesystem rooted at the user's workspace.
+ * Each connection gets its own AcpAgent + multi-tenant SqliteSessionStore (M3)
+ * scoped to the authenticated userId, plus a NodeFilesystem rooted at the user's
+ * workspace. Project-level extensions are discovered fresh from
+ * `<cwd>/.bodhi-pi/extensions/` per connection.
  *
- * The agent's cwd is fixed to the server-side per-user workspace path. We override
- * newSession/loadSession to ignore whatever cwd the client sends and substitute the
- * authenticated user's workspace dir — clients don't need to know server paths.
+ * The agent's cwd is fixed server-side (per-user dir, or single shared dir when
+ * `--workspace` is set). We override newSession/loadSession so clients don't need
+ * to know server-side absolute paths.
  */
-export function wireAgentForConnection(opts: WireAgentOptions): AgentFactory {
-	const cwd = ensureUserWorkspace(opts.dataDir, opts.user.id);
+export async function wireAgentForConnection(opts: WireAgentOptions): Promise<AgentFactory> {
+	const cwd = resolveUserWorkspace({
+		dataDir: opts.dataDir,
+		userId: opts.user.id,
+		...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
+	});
 	const filesystem = createNodeFilesystem({ rootCwd: cwd });
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
+	const extensionFactories = await createNodeExtensionLoader({ cwd });
+
 	const innerFactory = createBodhiPiAgent({
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,
@@ -39,6 +49,7 @@ export function wireAgentForConnection(opts: WireAgentOptions): AgentFactory {
 		sessionStore,
 		filesystem,
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 	});
 
 	return (conn) => {

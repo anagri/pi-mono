@@ -11,12 +11,12 @@ export interface TestServer {
 	cleanup: () => Promise<void>;
 }
 
-/**
- * Boot a server for tests with a faux LLM provider and a tmpdir data root.
- * Caller must `cleanup()` to close the server, unregister the faux provider,
- * and remove the tmpdir.
- */
-export async function startTestServer(): Promise<TestServer> {
+export interface StartTestServerOptions {
+	/** When set, every connection uses this dir as cwd (CLI `--workspace` analog). */
+	workspaceOverride?: string;
+}
+
+export async function startTestServer(opts: StartTestServerOptions = {}): Promise<TestServer> {
 	const dataDir = mkdtempSync(path.join(os.tmpdir(), "bodhi-pi-ws-server-test-"));
 	const faux = registerFauxProvider();
 	const fauxModel = faux.getModel();
@@ -28,6 +28,7 @@ export async function startTestServer(): Promise<TestServer> {
 		models: [fauxModel],
 		defaultModelId: fauxModel.id,
 		getApiKey: () => "test-key",
+		...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
 	});
 
 	return {

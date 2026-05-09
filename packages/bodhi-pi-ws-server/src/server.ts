@@ -18,6 +18,8 @@ export interface BuildServerOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	/** Single-tenant override: every connection uses this dir as cwd. */
+	workspaceOverride?: string;
 }
 
 export interface ServerHandle {
@@ -62,11 +64,11 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 		handleProtocols: (protocols) => (protocols.has(SUBPROTOCOL) ? SUBPROTOCOL : false),
 	});
 
-	function bindAgent(ws: WebSocket, ctx: UpgradeContext): void {
+	async function bindAgent(ws: WebSocket, ctx: UpgradeContext): Promise<void> {
 		upsertUser(db, ctx.user);
 		const stream = wsToStream(ws);
 		const acpStream = ndJsonStream(stream.writable, stream.readable);
-		const factory = wireAgentForConnection({
+		const factory = await wireAgentForConnection({
 			user: ctx.user,
 			dataDir: opts.dataDir,
 			db,
@@ -74,6 +76,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			defaultModelId: opts.defaultModelId,
 			getApiKey: opts.getApiKey,
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
 		});
 		new AgentSideConnection(factory, acpStream);
 		setupHeartbeat(ws);
@@ -84,7 +87,12 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			socket.destroy();
 			return;
 		}
-		handleAgentUpgrade(wss, req, socket, head, bindAgent);
+		handleAgentUpgrade(wss, req, socket, head, (ws, ctx) => {
+			void bindAgent(ws, ctx).catch((err) => {
+				console.error("[bodhi-pi-ws-server] failed to bind agent:", err);
+				ws.terminate();
+			});
+		});
 	});
 
 	await new Promise<void>((resolve, reject) => {

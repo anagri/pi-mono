@@ -6,7 +6,11 @@ export class AppPage {
 	readonly composer: Locator;
 	readonly sendButton: Locator;
 
-	constructor(public readonly page: Page) {
+	constructor(
+		public readonly page: Page,
+		/** WS URL the test fixture spawned for this test. Auto-filled in goto(). */
+		public readonly serverUrl: string,
+	) {
 		this.status = page.getByTestId("status");
 		this.composer = page.getByTestId("composer");
 		this.sendButton = page.getByTestId("send");
@@ -14,9 +18,15 @@ export class AppPage {
 
 	async goto() {
 		await this.page.goto("/");
+		// Auto-fill the Server URL slot with the fixture-bound test server URL.
+		const urlField = this.page.getByTestId("settings-serverUrl");
+		await urlField.fill(this.serverUrl);
 	}
 
-	async setSettings(opts: { email: string; id: number; sendToken: boolean }) {
+	async setSettings(opts: { email: string; id: number; sendToken: boolean; serverUrl?: string }) {
+		if (opts.serverUrl !== undefined) {
+			await this.page.getByTestId("settings-serverUrl").fill(opts.serverUrl);
+		}
 		await this.page.getByTestId("settings-email").fill(opts.email);
 		const idField = this.page.getByTestId("settings-id");
 		await idField.fill("");

@@ -4,6 +4,7 @@ export interface Settings {
 	email: string;
 	id: number;
 	sendToken: boolean;
+	serverUrl: string;
 }
 
 const STORAGE_KEY = "bodhi-pi-ws.settings";
@@ -12,6 +13,7 @@ const DEFAULT: Settings = {
 	email: "",
 	id: 1,
 	sendToken: true,
+	serverUrl: "ws://localhost:8788/agent",
 };
 
 function load(): Settings {
@@ -24,6 +26,8 @@ function load(): Settings {
 			email: typeof parsed.email === "string" ? parsed.email : DEFAULT.email,
 			id: typeof parsed.id === "number" && Number.isFinite(parsed.id) ? parsed.id : DEFAULT.id,
 			sendToken: typeof parsed.sendToken === "boolean" ? parsed.sendToken : DEFAULT.sendToken,
+			serverUrl:
+				typeof parsed.serverUrl === "string" && parsed.serverUrl.length > 0 ? parsed.serverUrl : DEFAULT.serverUrl,
 		};
 	} catch {
 		return DEFAULT;
