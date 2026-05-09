@@ -19,6 +19,10 @@ export interface CliTestHarnessOptions {
 	model: Model<Api>;
 	apiKey: string;
 	provider?: string;
+	/** Additional models to register beyond the default. Used by cross-provider e2e. */
+	extraModels?: Model<Api>[];
+	/** Override the (provider → key) lookup. Takes precedence over apiKey/provider. */
+	getApiKey?: (provider: string) => string | undefined;
 	eventHandlers?: BodhiPiEventHandlers;
 	extensionFactories?: RegisteredExtension[];
 }
@@ -27,13 +31,14 @@ export async function createCliTestHarness(opts: CliTestHarnessOptions): Promise
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-cli-e2e-"));
 	const dbPath = path.join(tmpDir, "sessions.db");
 	const provider = opts.provider ?? opts.model.provider;
+	const getApiKey = opts.getApiKey ?? ((p: string) => (p === provider ? opts.apiKey : undefined));
 
 	const agent = createCliAgent({
 		cwd: tmpDir,
 		dbPath,
-		models: [opts.model],
+		models: [opts.model, ...(opts.extraModels ?? [])],
 		defaultModelId: opts.model.id,
-		getApiKey: (p) => (p === provider ? opts.apiKey : undefined),
+		getApiKey,
 		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
 		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 	});
