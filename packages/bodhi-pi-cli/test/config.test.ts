@@ -50,4 +50,28 @@ describe("resolveConfig model resolution", () => {
 		const cfg = resolveConfig(["--db", "/tmp/custom.db"]);
 		expect(cfg.dbPath).toBe("/tmp/custom.db");
 	});
+
+	it("loadExtensions defaults to true; --no-extensions disables it", async () => {
+		vi.stubEnv("OPENAI_API_KEY", "sk-test");
+		const { resolveConfig } = await import("../src/config.js");
+		expect(resolveConfig([]).loadExtensions).toBe(true);
+		expect(resolveConfig(["--no-extensions"]).loadExtensions).toBe(false);
+	});
+
+	it("eventHandlers is undefined by default; set when --debug-events", async () => {
+		vi.stubEnv("OPENAI_API_KEY", "sk-test");
+		const { resolveConfig } = await import("../src/config.js");
+		expect(resolveConfig([]).eventHandlers).toBeUndefined();
+		const cfg = resolveConfig(["--debug-events"]);
+		expect(cfg.eventHandlers).toBeDefined();
+		// All 19 lifecycle event types should be wired.
+		expect(Object.keys(cfg.eventHandlers ?? {}).length).toBe(19);
+	});
+
+	it("BODHI_DEBUG_EVENTS=1 enables eventHandlers", async () => {
+		vi.stubEnv("OPENAI_API_KEY", "sk-test");
+		vi.stubEnv("BODHI_DEBUG_EVENTS", "1");
+		const { resolveConfig } = await import("../src/config.js");
+		expect(resolveConfig([]).eventHandlers).toBeDefined();
+	});
 });

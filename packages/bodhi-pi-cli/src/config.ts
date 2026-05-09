@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
 import { defaultDbPath } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { getEnvApiKey, getModels, getProviders } from "@mariozechner/pi-ai";
@@ -11,6 +12,9 @@ export interface ResolvedConfig {
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	dbPath: string;
+	cwd: string;
+	loadExtensions: boolean;
+	eventHandlers?: BodhiPiEventHandlers;
 }
 
 function parseArgs(argv: string[]): Record<string, string | true> {
@@ -87,7 +91,76 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 	const dbPath =
 		typeof args.db === "string" ? path.resolve(args.db.replace(/^~/, os.homedir())) : defaultDbPath("bodhi-pi-cli");
 
-	return { models: modelsWithKey, defaultModelId, getApiKey, systemPrompt, dbPath };
+	let cwd = process.cwd();
+	if (typeof args.cwd === "string") {
+		const resolved = path.resolve(args.cwd.replace(/^~/, os.homedir()));
+		if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+			process.stderr.write(`Error: --cwd "${args.cwd}" is not an existing directory\n`);
+			process.exit(1);
+		}
+		cwd = resolved;
+	}
+
+	const loadExtensions = !args["no-extensions"];
+
+	const debugEvents = args["debug-events"] === true || process.env.BODHI_DEBUG_EVENTS === "1";
+	const eventHandlers = debugEvents ? buildDebugEventHandlers() : undefined;
+
+	return {
+		models: modelsWithKey,
+		defaultModelId,
+		getApiKey,
+		systemPrompt,
+		dbPath,
+		cwd,
+		loadExtensions,
+		...(eventHandlers ? { eventHandlers } : {}),
+	};
+}
+
+/**
+ * Print one-line stderr diagnostics per lifecycle event when `--debug-events` /
+ * `BODHI_DEBUG_EVENTS=1` is on. Stays on stderr so REPL stdout (model text,
+ * tool cards) remains clean and pipe-safe.
+ */
+function buildDebugEventHandlers(): BodhiPiEventHandlers {
+	const log = (event: BodhiPiEvent) => {
+		const sid = "sessionId" in event ? String(event.sessionId).slice(0, 8) : "—";
+		let extra = "";
+		if (event.type === "tool_call" || event.type === "tool_result") extra = ` tool=${event.toolName}`;
+		if (event.type === "tool_execution_start" || event.type === "tool_execution_end")
+			extra = ` tool=${event.toolName}`;
+		if (event.type === "agent_start") extra = ` prompt=${JSON.stringify(event.userPrompt.slice(0, 40))}`;
+		if (event.type === "agent_end" && event.stopReason !== undefined) extra = ` stop=${event.stopReason}`;
+		if (event.type === "model_select") extra = ` ${event.fromModelId}→${event.toModelId}`;
+		process.stderr.write(`[event] ${event.type} sid=${sid}${extra}\n`);
+	};
+	const types = [
+		"session_start",
+		"session_shutdown",
+		"agent_start",
+		"agent_end",
+		"turn_start",
+		"turn_end",
+		"message_start",
+		"message_update",
+		"message_end",
+		"tool_execution_start",
+		"tool_execution_update",
+		"tool_execution_end",
+		"input",
+		"before_agent_start",
+		"before_provider_request",
+		"after_provider_response",
+		"tool_call",
+		"tool_result",
+		"model_select",
+	] as const;
+	const handlers: BodhiPiEventHandlers = {};
+	for (const t of types) {
+		(handlers as Record<string, Array<(e: BodhiPiEvent) => void>>)[t] = [log];
+	}
+	return handlers;
 }
 
 function printHelp(): void {
@@ -100,19 +173,25 @@ Options:
   --system-prompt <text>         System prompt for the agent
   --system-prompt-file <path>    Read system prompt from file
   --db <path>                    SQLite DB path (default: ~/.bodhi-pi-cli/sessions.db)
+  --cwd <path>                   Working directory for FS tools (default: process.cwd())
+  --no-extensions                Skip auto-loading <cwd>/.bodhi-pi/extensions/*.{js,mjs,cjs}
+  --debug-events                 Print one-line stderr diagnostics per lifecycle event
   --help, -h                     Show this help
   --version, -v                  Show version
 
 Environment:
   ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, etc.
-  BODHI_MODEL       Default model id
+  BODHI_MODEL          Default model id
   BODHI_SYSTEM_PROMPT  System prompt text
+  BODHI_DEBUG_EVENTS=1 Same as --debug-events
 
 REPL commands:
   /help             List commands
   /new              Start a new session
   /sessions         List sessions for current cwd
   /resume <id>      Resume a previous session (replays history)
+  /close            Close the current session (data persists)
+  /delete <id>      Permanently delete a session
   /model <id>       Switch model for current session
   /quit             Exit
 `);

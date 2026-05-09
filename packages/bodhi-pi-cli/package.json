@@ -17,7 +17,7 @@
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
 		"test": "vitest --run",
 		"test:e2e": "vitest --run --config vitest.e2e.config.ts",
-		"cli": "node dist/cli.js"
+		"cli": "npm run build && node dist/cli.js"
 	},
 	"dependencies": {
 		"@agentclientprotocol/sdk": "^0.21.0",
