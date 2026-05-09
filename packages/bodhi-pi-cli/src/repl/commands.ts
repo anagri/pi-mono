@@ -3,11 +3,15 @@ import type { SessionStore } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { Renderer } from "./render.js";
 
+const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
+
 export interface ReplState {
 	sessionId: string;
 	currentModelId: string;
+	defaultModelId: string;
 	models: Model<Api>[];
 	availableCommands: AvailableCommand[];
+	closed: boolean;
 }
 
 export interface CommandContext {
@@ -34,6 +38,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /new               start a new session",
 				"  /sessions          list sessions for current cwd",
 				"  /resume <id>       load a previous session (replays history)",
+				"  /close             close the current session (data persists)",
+				"  /delete <id>       permanently delete a session",
 				"  /model <id>        switch model for current session",
 				"  /quit              exit",
 			];
@@ -51,10 +57,17 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 		}
 
 		case "/new": {
-			await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+			if (!ctx.state.closed && ctx.state.sessionId) {
+				try {
+					await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+				} catch {
+					// Already-closed sessions throw; safe to ignore.
+				}
+			}
 			const { sessionId } = await ctx.clientConn.newSession({ cwd: ctx.cwd, mcpServers: [] });
 			ctx.state.sessionId = sessionId;
-			ctx.state.currentModelId = ctx.state.models[0]?.id ?? "";
+			ctx.state.currentModelId = ctx.state.defaultModelId || ctx.state.models[0]?.id || "";
+			ctx.state.closed = false;
 			process.stdout.write(`new session: ${sessionId}\n`);
 			return false;
 		}
@@ -80,11 +93,21 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				process.stdout.write("usage: /resume <session-id>\n");
 				return false;
 			}
-			await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+			if (!ctx.state.closed && ctx.state.sessionId && ctx.state.sessionId !== targetId) {
+				try {
+					await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+				} catch {
+					// already closed; ignore
+				}
+			}
 			process.stdout.write("loading session history…\n");
 			ctx.state.sessionId = targetId;
 			try {
-				await ctx.clientConn.loadSession({ sessionId: targetId, cwd: ctx.cwd });
+				const result = await ctx.clientConn.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
+				const restoredModel =
+					(result.configOptions?.[0]?.currentValue as string | undefined) ?? ctx.state.defaultModelId;
+				ctx.state.currentModelId = restoredModel;
+				ctx.state.closed = false;
 				ctx.renderer.flush();
 				process.stdout.write(`resumed session: ${targetId}\n`);
 			} catch (err) {
@@ -92,6 +115,39 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				// fall back to a fresh session
 				const { sessionId } = await ctx.clientConn.newSession({ cwd: ctx.cwd, mcpServers: [] });
 				ctx.state.sessionId = sessionId;
+				ctx.state.currentModelId = ctx.state.defaultModelId || ctx.state.models[0]?.id || "";
+				ctx.state.closed = false;
+			}
+			return false;
+		}
+
+		case "/close": {
+			try {
+				await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+				ctx.state.closed = true;
+				process.stdout.write(`closed session: ${ctx.state.sessionId.slice(0, 8)}…  (use /new or /resume <id>)\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/delete": {
+			const targetId = parts[1];
+			if (!targetId) {
+				process.stdout.write("usage: /delete <session-id>\n");
+				return false;
+			}
+			try {
+				await ctx.clientConn.extMethod(EXT_DELETE_SESSION, { sessionId: targetId });
+				process.stdout.write(`deleted session: ${targetId.slice(0, 8)}…\n`);
+				if (targetId === ctx.state.sessionId) {
+					ctx.state.closed = true;
+					// Recurse into /new so the user lands on a fresh, usable session.
+					await handleCommand("/new", ctx);
+				}
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
 			}
 			return false;
 		}

@@ -44,8 +44,10 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	const state: ReplState = {
 		sessionId: "",
 		currentModelId: opts.models[0]?.id ?? "",
+		defaultModelId: opts.models[0]?.id ?? "",
 		models: opts.models,
 		availableCommands: [],
+		closed: false,
 	};
 
 	const clientConn = new ClientSideConnection(
@@ -100,6 +102,10 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 			});
 			if (shouldExit) break;
 		} else {
+			if (state.closed) {
+				process.stdout.write("session is closed. Use /new to start a fresh one or /resume <id>.\n");
+				continue;
+			}
 			process.stdout.write("\n");
 			try {
 				const result = await clientConn.prompt({
