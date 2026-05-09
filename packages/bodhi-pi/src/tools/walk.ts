@@ -41,7 +41,11 @@ export async function* walk(fs: Filesystem, rootAbsolute: string, opts: WalkOpti
 		let children: Awaited<ReturnType<Filesystem["list"]>>;
 		try {
 			children = await fs.list(dir);
-		} catch {
+		} catch (err) {
+			// Root must surface — callers can't distinguish "empty tree" from
+			// "root unreadable" otherwise. Subdirectory failures are tolerated
+			// (skipped) so a single unreadable folder doesn't kill the walk.
+			if (dir === rootAbsolute) throw err;
 			continue;
 		}
 		for (const entry of children) {

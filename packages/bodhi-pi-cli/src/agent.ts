@@ -29,8 +29,8 @@ export interface CliAgent {
 }
 
 export function createCliAgent(opts: CliAgentOptions): CliAgent {
-	const filesystem = createNodeFilesystem(opts.cwd);
-	const sessionStore = createSqliteSessionStore(opts.dbPath);
+	const filesystem = createNodeFilesystem({ rootCwd: opts.cwd });
+	const sessionStore = createSqliteSessionStore({ dbPath: opts.dbPath });
 	const factory = createBodhiPiAgent({
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,

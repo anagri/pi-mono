@@ -13,9 +13,51 @@ export interface DexieSessionStoreOptions {
 	dbName?: string;
 }
 
+const PAGE_SIZE = 50;
+
+/** Validate a base64url-decoded cursor payload. Returns undefined for any malformed shape. */
+function parseCursor(raw: string | null | undefined): { updatedAt: number; id: string } | undefined {
+	if (!raw) return undefined;
+	let decoded: unknown;
+	try {
+		const json =
+			typeof atob === "function" ? atob(toBase64FromBase64Url(raw)) : Buffer.from(raw, "base64url").toString();
+		decoded = JSON.parse(json);
+	} catch {
+		return undefined;
+	}
+	if (!decoded || typeof decoded !== "object") return undefined;
+	const cur = decoded as { updatedAt?: unknown; id?: unknown };
+	if (typeof cur.updatedAt !== "number" || typeof cur.id !== "string") return undefined;
+	return { updatedAt: cur.updatedAt, id: cur.id };
+}
+
+function encodeCursor(value: { updatedAt: number; id: string }): string {
+	const json = JSON.stringify(value);
+	if (typeof btoa === "function") return toBase64UrlFromBase64(btoa(json));
+	return Buffer.from(json).toString("base64url");
+}
+
+function toBase64FromBase64Url(s: string): string {
+	const padded = s + "=".repeat((4 - (s.length % 4)) % 4);
+	return padded.replace(/-/g, "+").replace(/_/g, "/");
+}
+
+function toBase64UrlFromBase64(s: string): string {
+	return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 /**
  * Dexie-backed `SessionStore` for browser hosts. Persists across page reloads
  * via IndexedDB. Schema mirrors `bodhi-pi`'s `SessionRecord` / `SessionEntry`.
+ *
+ * Append-time `seq` is computed from the highest existing `seq` for the session
+ * (NOT a count), inside the read-write transaction, so concurrent appends in
+ * the same browser tab can't both pick the same `seq` and corrupt ordering.
+ *
+ * `list({cursor})` paginates with the same base64url `{updatedAt, id}` cursor
+ * shape used by `bodhi-pi-node`'s SQLite store; `messageCount` is computed via
+ * an indexed `count()` per session rather than loading every entry into memory.
  */
 export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): SessionStore {
 	const handle = openBodhiPiBrowserDb(opts.dbName ?? "bodhi-pi-browser");
@@ -52,20 +94,39 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 			await db.transaction("rw", sessions, entries, async () => {
 				const row = await sessions.get(sessionId);
 				if (!row) throw new Error(`session ${sessionId} not found (or deleted)`);
-				const seq = await entries.where({ sessionId }).count();
-				await entries.add({ sessionId, seq, entry });
+				// Highest existing `seq` (not a count). Two concurrent appends would
+				// otherwise both observe the same count and write the same `seq`.
+				const last = await entries.where({ sessionId }).reverse().sortBy("seq");
+				const nextSeq = last.length > 0 ? last[0].seq + 1 : 0;
+				await entries.add({ sessionId, seq: nextSeq, entry });
 				await sessions.update(sessionId, { updatedAt: Date.now() });
 			});
 		},
 
-		async list({ cwd }: ListSessionsRequest): Promise<ListSessionsResult> {
-			const rows = cwd ? await sessions.where("cwd").equals(cwd).toArray() : await sessions.toArray();
-			rows.sort((a, b) => b.updatedAt - a.updatedAt);
+		async list({ cwd, cursor }: ListSessionsRequest): Promise<ListSessionsResult> {
+			const cursorData = parseCursor(cursor);
+			let rows = cwd ? await sessions.where("cwd").equals(cwd).toArray() : await sessions.toArray();
+			rows.sort((a, b) => b.updatedAt - a.updatedAt || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0));
+
+			if (cursorData) {
+				rows = rows.filter(
+					(r) =>
+						r.updatedAt < cursorData.updatedAt || (r.updatedAt === cursorData.updatedAt && r.id < cursorData.id),
+				);
+			}
+
+			const hasMore = rows.length > PAGE_SIZE;
+			const page = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+			const last = page[page.length - 1];
 
 			const list = await Promise.all(
-				rows.map(async (r) => {
-					const sessionEntries = await entries.where({ sessionId: r.id }).toArray();
-					const messageCount = sessionEntries.filter((e) => e.entry.type === "message").length;
+				page.map(async (r) => {
+					// Dexie can't index nested JSON fields, so we must load entries to
+					// filter on `entry.type === "message"`. Cost is bounded by page size
+					// (was unbounded before pagination landed). Future migration: add a
+					// scalar `entryType` column or maintain `messageCount` on the row.
+					const allEntries = await entries.where({ sessionId: r.id }).toArray();
+					const messageCount = allEntries.filter((e) => e.entry.type === "message").length;
 					return {
 						sessionId: r.id,
 						cwd: r.cwd,
@@ -76,7 +137,9 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 				}),
 			);
 
-			return { sessions: list };
+			const nextCursor = hasMore && last ? encodeCursor({ updatedAt: last.updatedAt, id: last.id }) : undefined;
+
+			return { sessions: list, ...(nextCursor ? { nextCursor } : {}) };
 		},
 
 		async delete(sessionId) {

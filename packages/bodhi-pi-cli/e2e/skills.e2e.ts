@@ -2,7 +2,7 @@ import { getModel } from "@mariozechner/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { seedWorkspace, templates } from "@test/helpers/seed-workspace.js";
+import { loadFixture, seedWorkspace } from "@test/helpers/seed-workspace.js";
 import { afterEach, expect, test } from "vitest";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY!;
@@ -16,7 +16,7 @@ afterEach(async () => {
 test("/skill:<name> arg expands and reaches the model with the skill body", async () => {
 	harness = await createCliTestHarness({ model: getModel("openai", "gpt-4o-mini"), apiKey: OPENAI_KEY });
 	await seedWorkspace(harness.tmpDir, {
-		skills: { "say-hello/SKILL.md": templates.skills.sayHello },
+		skills: { "say-hello/SKILL.md": await loadFixture("skills-say-hello/.bodhi-pi/skills/say-hello/SKILL.md") },
 	});
 
 	await harness.clientConn.initialize(stdInitParams);

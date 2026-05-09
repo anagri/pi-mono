@@ -63,10 +63,11 @@ export async function createBrowserExtensionLoader(
 		const filePath = joinPosix(dir, file.name);
 		try {
 			const source = await opts.filesystem.readTextFile(filePath);
-			// btoa() handles ASCII; convert via TextEncoder + base64 for full unicode.
+			// btoa requires a binary string (1 byte per code unit); we map UTF-8 bytes
+			// 1:1 into latin1 code points (0x00–0xFF) so non-ASCII source survives the
+			// round-trip via a `data:text/javascript;base64,…` URL.
 			const bytes = new TextEncoder().encode(source);
-			let binary = "";
-			for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+			const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
 			const dataUrl = `data:text/javascript;base64,${btoa(binary)}`;
 			const mod = await import(/* @vite-ignore */ dataUrl);
 			const factory = (mod as { default?: unknown })?.default ?? mod;

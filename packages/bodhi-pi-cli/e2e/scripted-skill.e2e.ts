@@ -3,7 +3,7 @@ import { getModel } from "@mariozechner/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { seedWorkspace, templates } from "@test/helpers/seed-workspace.js";
+import { loadFixture, seedWorkspace } from "@test/helpers/seed-workspace.js";
 import { toolCallStarts } from "@test/helpers/tool-call-asserts.js";
 import { afterEach, expect, test } from "vitest";
 
@@ -26,10 +26,15 @@ test("scripted skill invokes run_script via createNodeScriptExecutor and reports
 
 	const skillDirAbsolute = path.join(harness.tmpDir, ".bodhi-pi", "skills", "days-since-birthday");
 	const scriptAbsolute = path.join(skillDirAbsolute, "script.js");
+	const skillTemplate = await loadFixture("skills-days-since-birthday/.bodhi-pi/skills/days-since-birthday/SKILL.md");
+	const scriptBody = await loadFixture("skills-days-since-birthday/.bodhi-pi/skills/days-since-birthday/script.js");
+	// SKILL.md uses {SCRIPT_PATH} placeholder — only the absolute script path
+	// is dynamic (depends on the per-test tmpdir), everything else is on-disk.
+	const interpolated = skillTemplate.replaceAll("{SCRIPT_PATH}", scriptAbsolute);
 	await seedWorkspace(harness.tmpDir, {
 		skills: {
-			"days-since-birthday/SKILL.md": templates.skills.hiddenDaysSkill(scriptAbsolute),
-			"days-since-birthday/script.js": templates.skills.hiddenDaysScript,
+			"days-since-birthday/SKILL.md": interpolated,
+			"days-since-birthday/script.js": scriptBody,
 		},
 	});
 

@@ -1,3 +1,4 @@
+import { expectTextContent } from "@test/helpers/expect-text-content.js";
 import { describe, expect, test } from "vitest";
 import type { ScriptExecuteParams, ScriptExecutor } from "@/script-executor/script-executor.js";
 import { createRunScriptTool } from "./run-script.js";
@@ -42,7 +43,7 @@ describe("createRunScriptTool", () => {
 
 		const result = await tool.execute("call-1", { path: "x.js" });
 
-		const text = (result.content[0] as { text: string }).text;
+		const text = expectTextContent(result);
 		expect(text).toContain("stdout:\nhello");
 		expect(text).toContain("stderr:\nwarn");
 		expect(text).toContain("exitCode: 0");
@@ -53,7 +54,7 @@ describe("createRunScriptTool", () => {
 		const tool = createRunScriptTool({ executor, cwd: "/proj" });
 
 		const result = await tool.execute("call-1", { path: "x.js" });
-		const text = (result.content[0] as { text: string }).text;
+		const text = expectTextContent(result);
 		expect(text).toContain("exitCode: 1");
 	});
 
@@ -62,7 +63,7 @@ describe("createRunScriptTool", () => {
 		const tool = createRunScriptTool({ executor, cwd: "/proj" });
 
 		const result = await tool.execute("call-1", { path: "x.js" });
-		const text = (result.content[0] as { text: string }).text;
+		const text = expectTextContent(result);
 		expect(text).toBe("exitCode: 1");
 	});
 
@@ -72,7 +73,7 @@ describe("createRunScriptTool", () => {
 		const tool = createRunScriptTool({ executor, cwd: "/proj" });
 
 		const result = await tool.execute("call-1", { path: "x.js" });
-		const text = (result.content[0] as { text: string }).text;
+		const text = expectTextContent(result);
 		expect(text).toContain("(truncated to");
 		expect(text.length).toBeLessThan(big.length);
 	});

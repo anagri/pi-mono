@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { pickAndPersistDirectory, reGrantPermission } from "../workspace/bootstrap";
-import type { WorkspaceConfig } from "../workspace/types";
+import type { WorkspaceProvider } from "../workspace/provider";
 
 export interface DirectoryGateProps {
 	mode: "needs-pick" | "needs-permission";
 	pendingHandle?: FileSystemDirectoryHandle;
 	pendingName?: string;
-	onGranted: (workspace: WorkspaceConfig) => void;
+	onGranted: (workspace: WorkspaceProvider) => void;
 }
 
 /**

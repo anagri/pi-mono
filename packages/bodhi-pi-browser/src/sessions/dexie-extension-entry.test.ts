@@ -1,18 +1,11 @@
 import "fake-indexeddb/auto";
 import type { ExtensionEntry, SessionEntry } from "@bodhiapp/bodhi-pi";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { resetDb } from "./_test-helpers/reset-db.js";
 import { createDexieSessionStore } from "./dexie-session-store.js";
 
 const dbName = "bodhi-pi-browser-ext-entry-test";
-
-async function reset(): Promise<void> {
-	await new Promise<void>((resolve) => {
-		const req = indexedDB.deleteDatabase(dbName);
-		req.onsuccess = () => resolve();
-		req.onerror = () => resolve();
-		req.onblocked = () => resolve();
-	});
-}
+const reset = () => resetDb(dbName);
 
 beforeEach(reset);
 afterEach(reset);

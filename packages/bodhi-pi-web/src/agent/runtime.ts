@@ -7,7 +7,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { createMessagePortStream } from "@bodhiapp/bodhi-pi-browser";
 import type { Api, Model } from "@mariozechner/pi-ai";
-import type { WorkspaceConfig } from "../workspace/types";
+import type { WorkspaceProvider } from "../workspace/provider";
 import type { InitMessage, WorkerEventMessage } from "./types";
 
 declare global {
@@ -29,14 +29,12 @@ export interface RuntimeOptions {
 	defaultModelId: string;
 	apiKeys: Record<string, string>;
 	systemPrompt?: string;
-	workspace: WorkspaceConfig;
+	workspace: WorkspaceProvider;
 	onNotification: (notif: SessionNotification) => void;
 	/**
-	 * When true, the worker registers lifecycle-event handlers and posts each
-	 * event back to the main thread, where it is appended to
-	 * `window.__bodhiPiEventLog` so Playwright specs can assert sequences.
-	 * Set automatically by `RuntimeProvider` when running against a seeded
-	 * (test) workspace.
+	 * Independent observability toggle. The host (RuntimeProvider) reads
+	 * `BootstrapResult.recordEvents` and forwards it here; the worker registers
+	 * lifecycle-event handlers iff true.
 	 */
 	recordEvents?: boolean;
 }
@@ -57,7 +55,9 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,
 		apiKeys: opts.apiKeys,
-		workspace: opts.workspace,
+		// Provider closures don't survive structured clone — wire the discriminated
+		// data record. Worker reconstructs a provider via `workspaceProviderFromData`.
+		workspace: opts.workspace.toData(),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		...(opts.recordEvents ? { recordEvents: true } : {}),
 	};

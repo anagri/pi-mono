@@ -1,15 +1,21 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixtures";
 
-const REDACT_SECRETS_JS = `export default function (pi) {
-	pi.on("tool_result", (event) => {
-		const newContent = event.result.content.map((b) =>
-			b.type === "text" ? { ...b, text: b.text.replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]") } : b
-		);
-		const changed = newContent.some((b, i) => b !== event.result.content[i]);
-		return changed ? { content: newContent } : undefined;
-	});
-}
-`;
+// See cli-node review Batch E.4 — single source of truth for fixture bytes.
+const FIXTURES_ROOT = path.resolve(
+	path.dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"..",
+	"bodhi-pi-cli",
+	"test",
+	"fixtures",
+);
+const REDACT_SECRETS_JS = fs.readFileSync(
+	path.join(FIXTURES_ROOT, "extensions-redact-secrets/.bodhi-pi/extensions/redact-secrets.js"),
+	"utf8",
+);
 
 test.describe("browser extension loader", () => {
 	test.use({

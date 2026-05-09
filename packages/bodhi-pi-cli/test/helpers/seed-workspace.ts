@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Workspace seed fed into a Node tmpdir. Mirrors the shape used by
@@ -35,93 +36,23 @@ async function writeUnder(root: string, files: Record<string, string>): Promise<
 	}
 }
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURES_ROOT = path.resolve(HERE, "..", "fixtures");
+
 /**
- * Canonical seed-template bodies — kept in lockstep with
- * `packages/bodhi-pi-web/e2e/{commands,skills,extensions}.spec.ts`. When the
- * web side centralises its templates (per cli-node + browser-web review D.1),
- * point both files at one source.
+ * Read a checked-in fixture file relative to `test/fixtures/`. Used by both
+ * cli e2e specs and (via the same path) `bodhi-pi-web` Playwright specs so the
+ * literal bytes of every fixture body live in exactly one place on disk.
+ *
+ * Examples:
+ *   loadFixture("commands-echo/.bodhi-pi/commands/echo.md")
+ *   loadFixture("skills-say-hello/.bodhi-pi/skills/say-hello/SKILL.md")
  */
-export const templates = {
-	commands: {
-		echo: [
-			"---",
-			"description: Echo a word",
-			"argument-hint: <word>",
-			"---",
-			"Reply with exactly the single word: $1",
-			"And nothing else.",
-		].join("\n"),
-		sayTuesday: [
-			"---",
-			"description: Say tuesday",
-			"---",
-			'Reply with exactly the single word "tuesday" and nothing else.',
-		].join("\n"),
-	},
-	skills: {
-		sayHello: [
-			"---",
-			"description: Say hello to a person",
-			"---",
-			"When you receive a name from the user, reply with exactly the words: hello, <name>",
-			"Replace <name> with the value the user supplied. Output nothing else.",
-		].join("\n"),
-		hiddenDaysSkill: (scriptAbsolutePath: string) =>
-			[
-				"---",
-				"description: Compute days between a YYYY-MM-DD birthday and the baseline date.",
-				"disable-model-invocation: true",
-				"---",
-				`You have a JavaScript helper at ${scriptAbsolutePath}.`,
-				"Call run_script with:",
-				"",
-				`- path: "${scriptAbsolutePath}"`,
-				'- args: ["<YYYY-MM-DD>"] where the date comes from the user\'s message.',
-				"",
-				"Reply with exactly that integer and nothing else.",
-			].join("\n"),
-		hiddenDaysScript: [
-			"const baseline = Date.UTC(2026, 4, 8);",
-			'const ms = baseline - new Date(args[0] + "T00:00:00Z").getTime();',
-			"console.log(Math.floor(ms / 86400000));",
-		].join("\n"),
-	},
-	extensions: {
-		// Standalone JS — matches the JS-only-extensions charter in skipped.md.
-		redactSecrets: `export default function (pi) {
-	pi.on("tool_result", (event) => {
-		const newContent = event.result.content.map((b) =>
-			b.type === "text" ? { ...b, text: b.text.replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]") } : b
-		);
-		const changed = newContent.some((b, i) => b !== event.result.content[i]);
-		return changed ? { content: newContent } : undefined;
-	});
+export async function loadFixture(relativePath: string): Promise<string> {
+	return fs.readFile(path.join(FIXTURES_ROOT, relativePath), "utf8");
 }
-`,
-		dynamicTools: `export default function (pi) {
-	pi.registerTool({
-		name: "bodhi_echo",
-		description: "Echo a message verbatim. Useful for testing tool-call dispatch.",
-		parameters: {
-			type: "object",
-			properties: { message: { type: "string", description: "Text to echo back" } },
-			required: ["message"],
-			additionalProperties: false,
-		},
-		execute: async (_id, params) => ({
-			content: [{ type: "text", text: "echoed: " + params.message }],
-			details: {},
-		}),
-	});
+
+/** Absolute path to the fixtures root — useful when tests need to point the harness's `cwd` at one. */
+export function fixturePath(scenario: string): string {
+	return path.join(FIXTURES_ROOT, scenario);
 }
-`,
-		pirate: `export default function (pi) {
-	pi.on("before_agent_start", (event) => {
-		const rule = "Speak like a pirate. Use words like arr, matey, ye. Stay in character at all times.";
-		const newSystem = event.systemPrompt ? event.systemPrompt + "\\n\\n" + rule : rule;
-		return { systemPrompt: newSystem };
-	});
-}
-`,
-	},
-};

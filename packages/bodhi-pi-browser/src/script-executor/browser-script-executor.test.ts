@@ -50,6 +50,20 @@ describe("createBrowserScriptExecutor", () => {
 		expect(result.stderr).toMatch(/boom/);
 	});
 
+	test("console.warn / console.error route to stderr; console.log + console.info to stdout", async () => {
+		const exec = createBrowserScriptExecutor({
+			filesystem: memoryFs({
+				"/route.js": `console.warn("w"); console.error("e"); console.info("i"); console.log("ok");`,
+			}),
+		});
+		const result = await exec.execute({ scriptPath: "/route.js", cwd: "/", args: [] });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("ok");
+		expect(result.stdout).toContain("i");
+		expect(result.stderr).toContain("w");
+		expect(result.stderr).toContain("e");
+	});
+
 	test("missing script file → exit 1", async () => {
 		const exec = createBrowserScriptExecutor({ filesystem: memoryFs({}) });
 		const result = await exec.execute({ scriptPath: "/nope.js", cwd: "/", args: [] });

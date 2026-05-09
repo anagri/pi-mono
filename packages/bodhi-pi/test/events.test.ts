@@ -16,7 +16,6 @@ import {
 	type AgentStartEvent,
 	type BeforeAgentStartEvent,
 	type BeforeProviderRequestEvent,
-	type BodhiPiEvent,
 	type BodhiPiEventHandlers,
 	createInMemoryFilesystem,
 	type InputEvent,
@@ -33,6 +32,7 @@ import {
 	type TurnStartEvent,
 } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
+import { recorder } from "./helpers/event-recorder.js";
 import { createTestHarness } from "./helpers/harness.js";
 
 let providers: FauxProviderRegistration[] = [];
@@ -67,32 +67,8 @@ function modelOf(faux: FauxProviderRegistration): Model<Api> {
 	return faux.getModel() as Model<Api>;
 }
 
-/** Records every event by type. Uses arrays so order is preserved. */
-function recorder() {
-	const log: BodhiPiEvent[] = [];
-	const handlers: BodhiPiEventHandlers = {
-		session_start: [(e) => void log.push(e)],
-		session_shutdown: [(e) => void log.push(e)],
-		agent_start: [(e) => void log.push(e)],
-		agent_end: [(e) => void log.push(e)],
-		turn_start: [(e) => void log.push(e)],
-		turn_end: [(e) => void log.push(e)],
-		message_start: [(e) => void log.push(e)],
-		message_update: [(e) => void log.push(e)],
-		message_end: [(e) => void log.push(e)],
-		tool_execution_start: [(e) => void log.push(e)],
-		tool_execution_update: [(e) => void log.push(e)],
-		tool_execution_end: [(e) => void log.push(e)],
-		input: [(e) => void log.push(e)],
-		before_agent_start: [(e) => void log.push(e)],
-		before_provider_request: [(e) => void log.push(e)],
-		after_provider_response: [(e) => void log.push(e)],
-		tool_call: [(e) => void log.push(e)],
-		tool_result: [(e) => void log.push(e)],
-		model_select: [(e) => void log.push(e)],
-	};
-	return { log, handlers };
-}
+// `recorder` lives at `test/helpers/event-recorder.ts` — the single source of
+// truth for the 19-event lifecycle. Imported above.
 
 test("session_start fires for new/load/resume; session_shutdown for close/delete", async () => {
 	const faux = newProvider();

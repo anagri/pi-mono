@@ -64,4 +64,34 @@ describe("createMessagePortStream", () => {
 		const { value } = await reader.read();
 		expect(new TextDecoder().decode(value)).toBe("plain-string");
 	});
+
+	test("port.close() during a pending read terminates the reader without hanging", async () => {
+		const { port1, port2 } = pair();
+		const b = createMessagePortStream(port2);
+
+		const reader = b.readable.getReader();
+
+		// Issue a read before any write; reader stalls until a frame arrives or
+		// the underlying port closes. Close port1 — this is the worst-case
+		// failure mode for the transport (silent hang).
+		const readPromise = reader.read();
+
+		// Give the read a microtask tick before closing.
+		await new Promise((r) => setImmediate(r));
+
+		(port1 as unknown as { close(): void }).close();
+		(port2 as unknown as { close(): void }).close();
+
+		// Race against a short timeout. If `read()` never resolves/rejects, the
+		// timeout wins and we know the transport is wedged.
+		type Settled = { kind: "ok" } | { kind: "err" } | { kind: "timeout" };
+		const settledPromise: Promise<Settled> = readPromise.then(
+			() => ({ kind: "ok" as const }),
+			() => ({ kind: "err" as const }),
+		);
+		const timeoutPromise: Promise<Settled> = new Promise((r) => setTimeout(() => r({ kind: "timeout" }), 500));
+		const result = await Promise.race([settledPromise, timeoutPromise]);
+
+		expect(result.kind, "reader must settle within 500ms of port.close()").not.toBe("timeout");
+	});
 });

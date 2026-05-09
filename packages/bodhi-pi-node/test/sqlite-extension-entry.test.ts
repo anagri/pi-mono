@@ -10,7 +10,7 @@ let store: ReturnType<typeof createSqliteSessionStore>;
 
 beforeEach(() => {
 	dbPath = path.join(os.tmpdir(), `bodhi-pi-ext-entry-${Date.now()}.db`);
-	store = createSqliteSessionStore(dbPath);
+	store = createSqliteSessionStore({ dbPath });
 });
 
 afterEach(() => {

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { parseFrontmatter } from "@/_internal/frontmatter.js";
+import { byName } from "@/_internal/sort.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { PromptTemplate } from "./prompt-templates.js";
 
@@ -69,6 +70,6 @@ export async function loadProjectCommands(fs: Filesystem, cwd: string): Promise<
 		if (template) out.push(template);
 	}
 
-	out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	out.sort(byName);
 	return out;
 }

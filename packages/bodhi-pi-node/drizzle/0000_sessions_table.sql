@@ -16,4 +16,4 @@ CREATE TABLE `sessions` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `sessions_cwd_updated_idx` ON `sessions` (`cwd`,`updated_at`);
+CREATE INDEX `sessions_cwd_updated_id_idx` ON `sessions` (`cwd`,`updated_at`,`id`);

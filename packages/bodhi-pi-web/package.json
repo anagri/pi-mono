@@ -15,6 +15,7 @@
 		"@bodhiapp/bodhi-pi": "*",
 		"@bodhiapp/bodhi-pi-browser": "*",
 		"@mariozechner/pi-ai": "*",
+		"@zenfs/core": "^2.5.0",
 		"react": "^19.2.5",
 		"react-dom": "^19.2.5",
 		"zustand": "^5.0.2"

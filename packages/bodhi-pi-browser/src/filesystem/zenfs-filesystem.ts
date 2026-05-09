@@ -1,13 +1,21 @@
 import type { DirEntry, FileStat, Filesystem } from "@bodhiapp/bodhi-pi";
 import { fs } from "@zenfs/core";
 
+/** Reserved for future opts (no current fields). Empty interface kept for shape parity with other adapters. */
+// biome-ignore lint/complexity/noBannedTypes: explicit empty options for parity with createNode/Dexie/Browser factories
+export type ZenfsFilesystemOptions = {};
+
 /**
  * Implements bodhi-pi's `Filesystem` interface by delegating to ZenFS's
  * `fs.promises` (Node-fs-shaped). The caller decides which backend(s) are
  * mounted (FSA, InMemory, OPFS, …) before building this adapter — see
  * `zenfs-mount.ts`.
+ *
+ * Accepts an optional empty options object so the call shape matches the other
+ * publishable factories (`createNodeFilesystem`, `createDexieSessionStore`, etc.) —
+ * a host can swap runtimes by changing one import line.
  */
-export function createZenfsFilesystem(): Filesystem {
+export function createZenfsFilesystem(_opts?: ZenfsFilesystemOptions): Filesystem {
 	return {
 		async readTextFile(p) {
 			return (await fs.promises.readFile(p, "utf-8")) as string;

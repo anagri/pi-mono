@@ -405,9 +405,17 @@ test("listSessions.updatedAt bumps on each prompt", async () => {
 	const initialCreatedAt = (beforeRecord as { createdAt: number }).createdAt;
 	expect(initialUpdatedAt).toBe(initialCreatedAt);
 
-	// Wait a moment so the prompt's updatedAt is strictly greater.
-	await new Promise((r) => setTimeout(r, 5));
-	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+	// Poll until the store's `updatedAt` strictly exceeds initialUpdatedAt — the
+	// prompt's `message_end` handler bumps it. Polling beats a fixed sleep
+	// because some CI clocks tick at >2 ms resolution; a 5 ms `setTimeout` was
+	// flaky under load.
+	const deadline = Date.now() + 1000;
+	while (Date.now() < deadline) {
+		await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+		const after = await store.load(sessionId);
+		if (after && after.updatedAt > initialUpdatedAt) break;
+		await new Promise((r) => setImmediate(r));
+	}
 
 	const list = await clientConn.listSessions({ cwd });
 	const entry = list.sessions.find((s: { sessionId: string }) => s.sessionId === sessionId);
@@ -460,7 +468,7 @@ test("cancel during prompt yields stopReason 'cancelled'", async () => {
 	faux.setResponses([fauxAssistantMessage("a long enough message to be interrupted by cancellation")]);
 	const model = faux.getModel() as Model<Api>;
 
-	const { clientConn } = createTestHarness({
+	const { clientConn, updates } = createTestHarness({
 		models: [model],
 		defaultModelId: model.id,
 		sessionStore: createInMemorySessionStore(),
@@ -469,8 +477,19 @@ test("cancel during prompt yields stopReason 'cancelled'", async () => {
 	const { sessionId } = await clientConn.newSession({ cwd: "/", mcpServers: [] });
 
 	const promptPromise = clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "stream" }] });
-	// Give the stream a tick or two to start.
-	await new Promise((r) => setTimeout(r, 30));
+
+	// Wait for the first agent_message_chunk notification — proves the stream is
+	// actually mid-flight. Beats a fixed `setTimeout` because slow CI runners can
+	// miss a 30 ms window even on a successful stream-start.
+	const deadline = Date.now() + 5000;
+	while (Date.now() < deadline) {
+		const seenChunk = updates.some(
+			(u) => (u.update as { sessionUpdate?: string }).sessionUpdate === "agent_message_chunk",
+		);
+		if (seenChunk) break;
+		await new Promise((r) => setImmediate(r));
+	}
+
 	await clientConn.cancel({ sessionId });
 	const result = await promptPromise;
 	expect(result.stopReason).toBe("cancelled");

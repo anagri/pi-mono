@@ -16,7 +16,59 @@ import { sessionEntries, sessions } from "./schema.js";
 
 const PAGE_SIZE = 50;
 
-export function createSqliteSessionStore(dbPath: string): SessionStore {
+/**
+ * Runtime guard for `SessionEntry` deserialised from the SQLite payload column.
+ * The payload was JSON-stringified by us, but a corrupted row, schema migration,
+ * or hand-edited DB could break the discriminated shape. Throw with a useful
+ * diagnostic so the failure surfaces at the read site, not three frames deeper.
+ */
+function parseSessionEntry(payload: string): SessionEntry {
+	const parsed: unknown = JSON.parse(payload);
+	if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") {
+		throw new Error(`SessionEntry payload missing discriminator field 'type'`);
+	}
+	return parsed as SessionEntry;
+}
+
+/**
+ * Runtime guard for `ExtensionEntry`. Stricter than {@link parseSessionEntry}
+ * because we filter by `extensionName` + `customType` afterwards — both must
+ * exist as strings.
+ */
+function parseExtensionEntry(payload: string): ExtensionEntry {
+	const parsed: unknown = JSON.parse(payload);
+	if (!parsed || typeof parsed !== "object") {
+		throw new Error(`ExtensionEntry payload is not an object`);
+	}
+	const obj = parsed as { type?: unknown; extensionName?: unknown; customType?: unknown };
+	if (obj.type !== "extension" || typeof obj.extensionName !== "string" || typeof obj.customType !== "string") {
+		throw new Error(`ExtensionEntry payload missing 'extensionName' or 'customType'`);
+	}
+	return parsed as ExtensionEntry;
+}
+
+/** Validate a base64url-decoded cursor payload. Returns undefined for any malformed shape. */
+function parseCursor(raw: string | undefined): { updatedAt: number; id: string } | undefined {
+	if (!raw) return undefined;
+	let decoded: unknown;
+	try {
+		decoded = JSON.parse(Buffer.from(raw, "base64url").toString());
+	} catch {
+		return undefined;
+	}
+	if (!decoded || typeof decoded !== "object") return undefined;
+	const cur = decoded as { updatedAt?: unknown; id?: unknown };
+	if (typeof cur.updatedAt !== "number" || typeof cur.id !== "string") return undefined;
+	return { updatedAt: cur.updatedAt, id: cur.id };
+}
+
+export interface SqliteSessionStoreOptions {
+	/** Absolute path to the SQLite database file. Parent directories are created automatically. */
+	dbPath: string;
+}
+
+export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): SessionStore {
+	const { dbPath } = opts;
 	const dir = path.dirname(dbPath);
 	fs.mkdirSync(dir, { recursive: true });
 
@@ -51,7 +103,7 @@ export function createSqliteSessionStore(dbPath: string): SessionStore {
 				cwd: row.cwd,
 				createdAt: row.createdAt,
 				updatedAt: row.updatedAt,
-				entries: entryRows.map((r) => JSON.parse(r.payload) as SessionEntry),
+				entries: entryRows.map((r) => parseSessionEntry(r.payload)),
 			};
 			return Promise.resolve(record);
 		},
@@ -91,14 +143,7 @@ export function createSqliteSessionStore(dbPath: string): SessionStore {
 		},
 
 		list({ cwd, cursor }) {
-			let cursorData: { updatedAt: number; id: string } | undefined;
-			if (cursor) {
-				try {
-					cursorData = JSON.parse(Buffer.from(cursor, "base64url").toString());
-				} catch {
-					// malformed cursor — ignore, start from beginning
-				}
-			}
+			const cursorData = parseCursor(cursor ?? undefined);
 
 			const rows = db
 				.select({
@@ -158,7 +203,7 @@ export function createSqliteSessionStore(dbPath: string): SessionStore {
 				.where(and(eq(sessionEntries.sessionId, sessionId), eq(sessionEntries.type, "extension")))
 				.orderBy(sessionEntries.ordinal)
 				.all();
-			const entries = rows.map((r) => JSON.parse(r.payload) as ExtensionEntry);
+			const entries = rows.map((r) => parseExtensionEntry(r.payload));
 			const matched = entries.filter((e) => {
 				if (filter?.extensionName !== undefined && e.extensionName !== filter.extensionName) return false;
 				if (filter?.customType !== undefined && e.customType !== filter.customType) return false;

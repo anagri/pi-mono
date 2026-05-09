@@ -7,16 +7,18 @@ import {
 	createDexieSessionStore,
 	createMessagePortStream,
 	createZenfsFilesystem,
-	mountFsaHandle,
-	mountInMemorySeed,
 } from "@bodhiapp/bodhi-pi-browser";
+import { workspaceProviderFromData } from "../workspace/provider";
 import type { InitMessage, WorkerEventMessage } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
 
 /** Build a handlers map that posts a small record of every event back to the main thread. */
 function recordingHandlers(): BodhiPiEventHandlers {
-	const post = (event: BodhiPiEvent): void => {
+	// Returns `undefined` so the same handler is type-compatible with both pure
+	// observers (e.g. `agent_start`) and mutable hooks (e.g. `tool_call`,
+	// `tool_result`, `before_agent_start`) — `undefined` means "no override".
+	const post = (event: BodhiPiEvent): undefined => {
 		const record: WorkerEventMessage["record"] = { type: event.type };
 		if ("sessionId" in event) record.sessionId = event.sessionId;
 		if (
@@ -35,6 +37,7 @@ function recordingHandlers(): BodhiPiEventHandlers {
 		}
 		const message: WorkerEventMessage = { type: "bodhi-pi-event", record };
 		self.postMessage(message);
+		return undefined;
 	};
 	return {
 		session_start: [post],
@@ -44,8 +47,10 @@ function recordingHandlers(): BodhiPiEventHandlers {
 		turn_start: [post],
 		turn_end: [post],
 		message_start: [post],
+		message_update: [post],
 		message_end: [post],
 		tool_execution_start: [post],
+		tool_execution_update: [post],
 		tool_execution_end: [post],
 		input: [post],
 		before_agent_start: [post],
@@ -61,24 +66,21 @@ self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) 
 	if (ev.data?.type !== "init") return;
 	self.removeEventListener("message", onInit);
 
-	const { agentPort, models, defaultModelId, apiKeys, systemPrompt, workspace, recordEvents } = ev.data;
+	const { agentPort, models, defaultModelId, apiKeys, systemPrompt, workspace: workspaceData, recordEvents } = ev.data;
 
 	void (async () => {
-		// Mount the granted folder (FSA) or the test seed (InMemory). bodhi-pi
-		// receives a single `Filesystem` handle that routes through ZenFS.
-		if (workspace.mode === "fsa") {
-			await mountFsaHandle({ handle: workspace.handle, mountName: workspace.mountName });
-		} else {
-			await mountInMemorySeed({ mountName: workspace.mountName, files: workspace.seed.files });
-		}
+		// Reconstruct the provider on this side of the postMessage boundary, then
+		// mount once. Downstream code never branches on FSA-vs-seed.
+		const workspace = workspaceProviderFromData(workspaceData);
+		await workspace.mount();
+
 		const filesystem = createZenfsFilesystem();
 		const sessionStore = createDexieSessionStore({ dbName: "bodhi-pi-web" });
 		const scriptExecutor = createBrowserScriptExecutor({ filesystem });
 
 		// Discover extensions from the mounted workspace's `.bodhi-pi/extensions/` dir.
 		// JS-only here; TS-via-esbuild-wasm is deferred per the M5.2 plan.
-		const cwd = workspace.mode === "fsa" ? `/mnt/${workspace.mountName}` : `/mnt/${workspace.mountName}`;
-		const extensionFactories = await createBrowserExtensionLoader({ filesystem, cwd });
+		const extensionFactories = await createBrowserExtensionLoader({ filesystem, cwd: workspace.rootPath });
 
 		const factory = createBodhiPiAgent({
 			models,

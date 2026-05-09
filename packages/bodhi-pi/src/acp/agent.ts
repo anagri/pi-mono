@@ -186,7 +186,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 				promptCapabilities: { image: false, audio: false, embeddedContext: false },
 				mcpCapabilities: { http: false, sse: false },
 				_meta: {
-					"bodhi-pi": { sessionDelete: true },
+					"bodhi-pi": {
+						sessionDelete: true,
+						extensions: { tools: true, commands: true, providers: true, events: true },
+					},
 				},
 			},
 			authMethods: [],
@@ -401,12 +404,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 
 		// Reset so a prior cancel doesn't bleed into this prompt.
 		session.cancelled = false;
-		let lastAssistantStopReason: PiStopReason | undefined;
-		let lastAssistantErrorMessage: string | undefined;
 
 		const sessionId = params.sessionId;
-		const conn = this.conn;
-		const store = this.config.sessionStore;
 		const events = this.events;
 
 		// Mutable input hook — extensions can rewrite text or short-circuit with `handled: true`.
@@ -429,7 +428,60 @@ class BodhiPiAcpAgent implements AcpAgent {
 
 		await events.emitAgentStart({ type: "agent_start", sessionId, userPrompt: promptText });
 
-		const unsubscribe = session.piAgent.subscribe(async (event) => {
+		const outcome: { stopReason?: PiStopReason; errorMessage?: string } = {};
+		const unsubscribe = this.subscribeToAgent(sessionId, session, outcome);
+
+		try {
+			await session.piAgent.prompt(promptText);
+			await session.piAgent.waitForIdle();
+			if (session.cancelled) {
+				await events.emitAgentEnd({
+					type: "agent_end",
+					sessionId,
+					stopReason: "cancelled",
+					messages: session.piAgent.state.messages,
+					...(outcome.errorMessage !== undefined ? { errorMessage: outcome.errorMessage } : {}),
+				});
+				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
+			}
+			if (outcome.stopReason === "error") {
+				await events.emitAgentEnd({
+					type: "agent_end",
+					sessionId,
+					messages: session.piAgent.state.messages,
+					errorMessage: outcome.errorMessage ?? "model error",
+				});
+				throw new RequestError(-32603, outcome.errorMessage ?? "model error");
+			}
+			const stopReason = mapStopReason(outcome.stopReason);
+			await events.emitAgentEnd({
+				type: "agent_end",
+				sessionId,
+				stopReason,
+				messages: session.piAgent.state.messages,
+			});
+			return { stopReason, userMessageId: params.messageId ?? null };
+		} finally {
+			unsubscribe();
+		}
+	}
+
+	/**
+	 * Wire the pi-agent-core subscription. Forwards every `Agent` event to its
+	 * matching {@link EventDispatcher} emitter, mirrors text deltas + tool-call
+	 * updates onto the ACP `sessionUpdate` channel, persists `message_end` to the
+	 * session store, and records the final assistant `stopReason`/`errorMessage`
+	 * into `outcome` so the caller can map to an ACP `PromptResponse`.
+	 */
+	private subscribeToAgent(
+		sessionId: string,
+		session: SessionState,
+		outcome: { stopReason?: PiStopReason; errorMessage?: string },
+	): () => void {
+		const conn = this.conn;
+		const store = this.config.sessionStore;
+		const events = this.events;
+		return session.piAgent.subscribe(async (event) => {
 			switch (event.type) {
 				case "turn_start": {
 					await events.emitTurnStart({ type: "turn_start", sessionId });
@@ -523,8 +575,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 					if (role !== "user" && role !== "assistant" && role !== "toolResult") return;
 					if (role === "assistant") {
 						const msg = event.message as { stopReason?: PiStopReason; errorMessage?: string };
-						lastAssistantStopReason = msg.stopReason;
-						lastAssistantErrorMessage = msg.errorMessage;
+						outcome.stopReason = msg.stopReason;
+						outcome.errorMessage = msg.errorMessage;
 					}
 					await store.append(sessionId, {
 						type: "message",
@@ -536,40 +588,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 				}
 			}
 		});
-
-		try {
-			await session.piAgent.prompt(promptText);
-			await session.piAgent.waitForIdle();
-			if (session.cancelled) {
-				await events.emitAgentEnd({
-					type: "agent_end",
-					sessionId,
-					stopReason: "cancelled",
-					messages: session.piAgent.state.messages,
-					...(lastAssistantErrorMessage !== undefined ? { errorMessage: lastAssistantErrorMessage } : {}),
-				});
-				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
-			}
-			if (lastAssistantStopReason === "error") {
-				await events.emitAgentEnd({
-					type: "agent_end",
-					sessionId,
-					messages: session.piAgent.state.messages,
-					errorMessage: lastAssistantErrorMessage ?? "model error",
-				});
-				throw new RequestError(-32603, lastAssistantErrorMessage ?? "model error");
-			}
-			const stopReason = mapStopReason(lastAssistantStopReason);
-			await events.emitAgentEnd({
-				type: "agent_end",
-				sessionId,
-				stopReason,
-				messages: session.piAgent.state.messages,
-			});
-			return { stopReason, userMessageId: params.messageId ?? null };
-		} finally {
-			unsubscribe();
-		}
 	}
 
 	async cancel(params: CancelNotification): Promise<void> {

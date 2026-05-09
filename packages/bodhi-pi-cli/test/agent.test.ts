@@ -1,7 +1,6 @@
 import fsNode from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { SessionNotification } from "@agentclientprotocol/sdk";
 import {
 	type Api,
 	type FauxProviderRegistration,
@@ -10,25 +9,27 @@ import {
 	registerFauxProvider,
 } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createCliAgent } from "@/agent.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
+import { type CliTestHarness, createCliTestHarness } from "./helpers/cli-harness.js";
 import { scriptToolThenDone } from "./helpers/faux-script.js";
-import { createInProcessAcpPair } from "./helpers/in-process-connection.js";
 import { chunkedAgentText } from "./helpers/notifications.js";
 import { toolCallUpdates, toolUpdateText } from "./helpers/tool-call-asserts.js";
 
 let tmpDir: string;
 let dbPath: string;
 let providers: FauxProviderRegistration[];
+let harnesses: CliTestHarness[];
 
 beforeEach(async () => {
 	tmpDir = await fsNode.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-cli-agent-test-"));
 	dbPath = path.join(tmpDir, "sessions.db");
 	providers = [];
+	harnesses = [];
 });
 
 afterEach(async () => {
 	for (const p of providers) p.unregister();
+	for (const h of harnesses) await h.cleanup();
 	await fsNode.rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -38,22 +39,16 @@ function newFaux(): FauxProviderRegistration {
 	return p;
 }
 
-function wireHarness(model: Model<Api>) {
-	const agent = createCliAgent({
+async function makeHarness(model: Model<Api>): Promise<CliTestHarness> {
+	const h = await createCliTestHarness({
+		model,
+		apiKey: "test-key",
+		getApiKey: () => "test-key",
 		cwd: tmpDir,
 		dbPath,
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: () => "test-key",
 	});
-	const updates: SessionNotification[] = [];
-	const { clientConn } = createInProcessAcpPair(agent.factory, () => ({
-		sessionUpdate: async (p) => {
-			updates.push(p);
-		},
-		requestPermission: async () => ({ outcome: { outcome: "approved" } }),
-	}));
-	return { clientConn, updates, agent };
+	harnesses.push(h);
+	return h;
 }
 
 test("write tool creates a real file on disk", async () => {
@@ -61,7 +56,7 @@ test("write tool creates a real file on disk", async () => {
 	const model = faux.getModel() as Model<Api>;
 	scriptToolThenDone(faux, "write", { path: path.join(tmpDir, "out.txt"), content: "hello node" });
 
-	const { clientConn } = wireHarness(model);
+	const { clientConn } = await makeHarness(model);
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "write it" }] });
@@ -78,7 +73,7 @@ test("read tool reads a real file from disk", async () => {
 	const model = faux.getModel() as Model<Api>;
 	scriptToolThenDone(faux, "read", { path: seedPath });
 
-	const { clientConn, updates } = wireHarness(model);
+	const { clientConn, updates } = await makeHarness(model);
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "read it" }] });
@@ -96,7 +91,7 @@ test("run_script spawns a real Node process", async () => {
 	const model = faux.getModel() as Model<Api>;
 	scriptToolThenDone(faux, "run_script", { path: scriptPath, args: ["world"] });
 
-	const { clientConn, updates } = wireHarness(model);
+	const { clientConn, updates } = await makeHarness(model);
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "run it" }] });
@@ -111,7 +106,7 @@ test("node filesystem jail blocks writes outside cwd", async () => {
 	const model = faux.getModel() as Model<Api>;
 	scriptToolThenDone(faux, "write", { path: "/etc/hacked.txt", content: "oops" });
 
-	const { clientConn, updates } = wireHarness(model);
+	const { clientConn, updates } = await makeHarness(model);
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "write it" }] });
@@ -125,7 +120,7 @@ test("SQLite db file is created on first session", async () => {
 	const model = faux.getModel() as Model<Api>;
 	faux.setResponses([fauxAssistantMessage("acknowledged")]);
 
-	const { clientConn } = wireHarness(model);
+	const { clientConn } = await makeHarness(model);
 	await clientConn.initialize(stdInitParams);
 	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
@@ -138,33 +133,20 @@ test("session history survives across two agent instances sharing the same dbPat
 	const model1 = faux1.getModel() as Model<Api>;
 	faux1.setResponses([fauxAssistantMessage("noted")]);
 
-	const { clientConn: conn1 } = wireHarness(model1);
+	const { clientConn: conn1 } = await makeHarness(model1);
 	await conn1.initialize(stdInitParams);
 	const { sessionId } = await conn1.newSession({ cwd: tmpDir, mcpServers: [] });
 	await conn1.prompt({ sessionId, prompt: [{ type: "text", text: "say noted" }] });
 
-	// Second agent instance, same dbPath
+	// Second agent instance, same dbPath.
 	const faux2 = newFaux();
 	const model2 = faux2.getModel() as Model<Api>;
 	faux2.setResponses([fauxAssistantMessage("ack")]);
 
-	const agent2 = createCliAgent({
-		cwd: tmpDir,
-		dbPath,
-		models: [model2],
-		defaultModelId: model2.id,
-		getApiKey: () => "test-key",
-	});
-	const updates2: SessionNotification[] = [];
-	const { clientConn: conn2 } = createInProcessAcpPair(agent2.factory, () => ({
-		sessionUpdate: async (p) => {
-			updates2.push(p);
-		},
-		requestPermission: async () => ({ outcome: { outcome: "approved" } }),
-	}));
+	const { clientConn: conn2, updates: updates2 } = await makeHarness(model2);
 	await conn2.initialize(stdInitParams);
 	await conn2.loadSession({ sessionId, cwd: tmpDir, mcpServers: [] });
 
-	// History from agent1 replays as notifications
+	// History from agent1 replays as notifications.
 	expect(chunkedAgentText(updates2)).toContain("noted");
 });

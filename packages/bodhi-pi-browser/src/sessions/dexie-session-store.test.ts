@@ -1,17 +1,8 @@
 import "fake-indexeddb/auto";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { resetDb as reset } from "./_test-helpers/reset-db.js";
 import { createDexieSessionStore } from "./dexie-session-store.js";
-
-// fake-indexeddb persists across tests by default; reset by deleting the DB.
-async function reset(dbName: string) {
-	await new Promise<void>((resolve) => {
-		const req = indexedDB.deleteDatabase(dbName);
-		req.onsuccess = () => resolve();
-		req.onerror = () => resolve();
-		req.onblocked = () => resolve();
-	});
-}
 
 const userMessage: AgentMessage = { role: "user", content: "hello" } as unknown as AgentMessage;
 const assistantMessage: AgentMessage = {
@@ -130,5 +121,50 @@ describe("createDexieSessionStore", () => {
 		const b = createDexieSessionStore({ dbName });
 		const loaded = await b.load(s.id);
 		expect(loaded?.entries.map((e) => e.id)).toEqual(["m1"]);
+	});
+
+	test("paginates 120 sessions across two pages via cursor; pages are contiguous + non-overlapping", async () => {
+		const store = createDexieSessionStore({ dbName });
+		const cwd = "/paginate";
+		// Create 120 sessions. Reuse the dbName so they all live in one DB.
+		for (let i = 0; i < 120; i++) {
+			await store.create({ cwd });
+		}
+
+		const page1 = await store.list({ cwd });
+		expect(page1.sessions, "first page is exactly PAGE_SIZE = 50").toHaveLength(50);
+		expect(page1.nextCursor, "nextCursor present when more rows remain").toBeDefined();
+
+		const page2 = await store.list({ cwd, cursor: page1.nextCursor });
+		expect(page2.sessions, "second page is exactly PAGE_SIZE = 50").toHaveLength(50);
+		expect(page2.nextCursor, "nextCursor present after page 2 (still 20 left)").toBeDefined();
+
+		const page3 = await store.list({ cwd, cursor: page2.nextCursor });
+		expect(page3.sessions, "third page is the remaining 20").toHaveLength(20);
+		expect(page3.nextCursor, "nextCursor absent on the last page").toBeUndefined();
+
+		// No overlap between pages.
+		const ids1 = new Set(page1.sessions.map((s) => s.sessionId));
+		const ids2 = new Set(page2.sessions.map((s) => s.sessionId));
+		const ids3 = new Set(page3.sessions.map((s) => s.sessionId));
+		for (const id of ids2) expect(ids1.has(id), "page 2 must not overlap page 1").toBe(false);
+		for (const id of ids3) {
+			expect(ids1.has(id), "page 3 must not overlap page 1").toBe(false);
+			expect(ids2.has(id), "page 3 must not overlap page 2").toBe(false);
+		}
+		// Total coverage of all 120 sessions.
+		expect(ids1.size + ids2.size + ids3.size).toBe(120);
+	});
+
+	test("malformed cursor (parseable JSON, wrong shape) resets to first page", async () => {
+		const store = createDexieSessionStore({ dbName });
+		const cwd = "/bad-cursor";
+		for (let i = 0; i < 3; i++) await store.create({ cwd });
+		const badCursor = btoa(JSON.stringify({ foo: 1 }))
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+		const result = await store.list({ cwd, cursor: badCursor });
+		expect(result.sessions).toHaveLength(3);
 	});
 });

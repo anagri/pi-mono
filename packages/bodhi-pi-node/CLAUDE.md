@@ -36,7 +36,7 @@ Mirrors `@bodhiapp/bodhi-pi-browser` shape so any host can swap runtimes by chan
 - **ESM only.** `"type": "module"`. `import`/`export`. No `require()`.
 - **`@types/node`** is a runtime dep typing-wise — every src file ultimately reaches `node:fs/promises` or `node:child_process`.
 - **No DOM types.** Public types reference Node primitives only. `tsconfig.build.json` has `lib: ["ES2022"]` (no DOM).
-- **Match `bodhi-pi-browser` shape.** Same factory-naming convention (`createXxxFilesystem`, `createXxxSessionStore`, `createXxxScriptExecutor`). Hosts switch runtimes by changing one import line.
+- **Match `bodhi-pi-browser` shape.** Same factory-naming convention (`createXxxFilesystem`, `createXxxSessionStore`, `createXxxScriptExecutor`) AND same call shape (options object on every factory). Hosts switch runtimes by changing one import line. The one genuine asymmetry is `createNodeScriptExecutor()` reads scripts from disk via `node:fs/promises` while `createBrowserScriptExecutor({filesystem})` requires an injected `Filesystem` because the browser realm has no in-process disk — document this at the factory site, do not paper over it.
 - **No silent fallbacks in `createNodeScriptExecutor`.** Missing `node` binary in PATH → throws on first execute. Same posture as bodhi-pi's "no silent defaults" pillar.
 - **`defaultDbPath` is parameterized.** `defaultDbPath("bodhi-pi-cli")` returns `~/.bodhi-pi-cli/sessions.db`. Default arg `"bodhi-pi"` keeps the package generically reusable.
 - **Migrations are part of the build artifact.** `drizzle/` lives in `files`; consumers don't need drizzle-kit at runtime, only at dev time when schema evolves.

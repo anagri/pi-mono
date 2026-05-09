@@ -16,7 +16,19 @@ export interface PortByteStream {
 export function createMessagePortStream(port: MessagePort): PortByteStream {
 	const readable = new ReadableStream<Uint8Array>({
 		start(controller) {
+			let closed = false;
+			const closeOnce = () => {
+				if (closed) return;
+				closed = true;
+				try {
+					controller.close();
+				} catch {
+					// already closed/errored — ignore
+				}
+			};
+
 			port.onmessage = (event) => {
+				if (closed) return;
 				const data = event.data as unknown;
 				if (data instanceof Uint8Array) {
 					controller.enqueue(data);
@@ -27,8 +39,23 @@ export function createMessagePortStream(port: MessagePort): PortByteStream {
 				}
 			};
 			port.onmessageerror = (event) => {
+				if (closed) return;
 				controller.error(new Error(`MessagePort message error: ${String(event.data)}`));
 			};
+			// Node `worker_threads` MessagePort emits a `close` event when either
+			// side closes; DOM `MessagePort` has no equivalent (no remote-close
+			// signal) — silent reader hang remains a DOM-side gap. Either way,
+			// once we settle on `close` we drain to `{done: true}` so a pending
+			// `reader.read()` no longer wedges.
+			const portWithEvents = port as unknown as {
+				addEventListener?: (type: string, listener: (e?: unknown) => void) => void;
+				on?: (event: string, listener: () => void) => void;
+			};
+			if (typeof portWithEvents.addEventListener === "function") {
+				portWithEvents.addEventListener("close", closeOnce);
+			} else if (typeof portWithEvents.on === "function") {
+				portWithEvents.on("close", closeOnce);
+			}
 			port.start();
 		},
 	});

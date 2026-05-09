@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { DirEntry, FileStat, Filesystem } from "@bodhiapp/bodhi-pi";
 
-export function createNodeFilesystem(rootCwd: string): Filesystem {
+export interface NodeFilesystemOptions {
+	/** Absolute root for the path-jail. Every method rejects paths outside this directory. */
+	rootCwd: string;
+}
+
+export function createNodeFilesystem(opts: NodeFilesystemOptions): Filesystem {
+	const { rootCwd } = opts;
 	function jail(absolutePath: string): string {
 		const resolved = path.resolve(absolutePath);
 		if (resolved !== rootCwd && !resolved.startsWith(rootCwd + path.sep)) {

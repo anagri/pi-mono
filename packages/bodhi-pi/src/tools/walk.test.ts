@@ -82,4 +82,29 @@ describe("walk", () => {
 		const seen = await collect(walk(fs, "/empty"));
 		expect(seen).toEqual([]);
 	});
+
+	test("missing root throws — distinguishes 'unreadable root' from 'empty tree'", async () => {
+		const fs = createInMemoryFilesystem();
+		await expect(collect(walk(fs, "/does-not-exist"))).rejects.toThrow();
+	});
+
+	test("subdirectory failure is tolerated; root succeeds", async () => {
+		// list() throws on the bad subpath but not on root; walk should swallow the
+		// subdir failure and continue, yielding root entries.
+		const real = createInMemoryFilesystem();
+		await real.writeTextFile("/keep.txt", "x");
+		await real.mkdir("/sub", { recursive: true });
+		await real.writeTextFile("/sub/inner.txt", "y");
+		const wrapped = {
+			...real,
+			list: async (p: string) => {
+				if (p === "/sub") throw new Error("simulated subdir failure");
+				return real.list(p);
+			},
+		};
+		const seen = await collect(walk(wrapped as typeof real, "/"));
+		expect(seen).toContain("/keep.txt");
+		expect(seen).toContain("/sub");
+		expect(seen).not.toContain("/sub/inner.txt");
+	});
 });

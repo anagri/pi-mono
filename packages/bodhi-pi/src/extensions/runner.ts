@@ -19,11 +19,26 @@ import type {
 } from "./types.js";
 
 /**
+ * Per-extension factory failure captured during {@link ExtensionRunner.build}.
+ * Hosts can read these via {@link ExtensionRunner.getExtensionErrors} to surface
+ * the failure to the user — without it, a bad extension is silently lost.
+ */
+export interface ExtensionFactoryError {
+	extensionName: string;
+	error: unknown;
+}
+
+/**
  * Aggregates extension contributions across factories: tools, commands, providers,
  * lifecycle event handlers, and inter-extension pub/sub bus.
  *
- * Builtin tools always win on name collision (see {@link mergeTools}).
- * Builtin slash-command/skill names always win in the same way.
+ * Collision semantics differ per surface:
+ *   - **Tools**: builtin tools win (see {@link mergeTools}). Extensions cannot
+ *     shadow `read`, `write`, etc.
+ *   - **Slash commands**: project-defined commands beat extension-registered
+ *     commands of the same name (see {@link mergeCommands}). User intent in the
+ *     working tree outranks plugin contributions.
+ *   - **Providers**: first registered wins (see {@link buildApiFor}).
  */
 export class ExtensionRunner {
 	private readonly tools: AgentTool[] = [];
@@ -33,6 +48,7 @@ export class ExtensionRunner {
 	private readonly bus = createExtensionEventBus();
 	private readonly conn: AgentSideConnection;
 	private readonly sessionStore: SessionStore;
+	private readonly errors: ExtensionFactoryError[] = [];
 
 	private constructor(opts: { conn: AgentSideConnection; sessionStore: SessionStore }) {
 		this.conn = opts.conn;
@@ -50,6 +66,9 @@ export class ExtensionRunner {
 			try {
 				await ext.factory(api);
 			} catch (err) {
+				// Capture for later programmatic inspection by the host. We also log
+				// to console so dev-tools / stderr surfaces it without explicit access.
+				runner.errors.push({ extensionName: ext.name, error: err });
 				console.error(`[bodhi-pi extension:${ext.name}] factory threw`, err);
 			}
 		}
@@ -144,12 +163,17 @@ export class ExtensionRunner {
 		return [...this.providers.values()].map((p) => p.model);
 	}
 
+	/** Per-extension factory failures captured during {@link build}. */
+	getExtensionErrors(): readonly ExtensionFactoryError[] {
+		return this.errors;
+	}
+
 	/** Provider-supplied API keys. Returns the first non-undefined match. */
-	resolveProviderKey(provider: string): string | undefined | Promise<string | undefined> {
+	async resolveProviderKey(provider: string): Promise<string | undefined> {
 		for (const cfg of this.providers.values()) {
 			if (cfg.getApiKey) {
-				const key = cfg.getApiKey(provider);
-				if (key !== undefined) return key;
+				const resolved = await cfg.getApiKey(provider);
+				if (resolved !== undefined) return resolved;
 			}
 		}
 		return undefined;

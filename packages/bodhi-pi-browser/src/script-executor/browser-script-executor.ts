@@ -61,7 +61,8 @@ export function createBrowserScriptExecutor(opts: { filesystem: Filesystem }): S
 				};
 			}
 
-			const cwd = scriptPath.slice(0, scriptPath.lastIndexOf("/")) || "/";
+			const slash = scriptPath.lastIndexOf("/");
+			const cwd = slash >= 0 ? scriptPath.slice(0, slash) || "/" : "/";
 			const run = fn(args, cwd, captured);
 
 			let timer: ReturnType<typeof setTimeout> | undefined;

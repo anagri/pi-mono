@@ -6,7 +6,7 @@ import { ChatPage } from "./ui/ChatPage";
 import { DirectoryGate } from "./ui/DirectoryGate";
 import { RuntimeProvider } from "./ui/RuntimeProvider";
 import { type BootstrapResult, bootstrapWorkspace } from "./workspace/bootstrap";
-import type { WorkspaceConfig } from "./workspace/types";
+import type { WorkspaceProvider } from "./workspace/provider";
 
 function App() {
 	const [boot, setBoot] = useState<BootstrapResult | null>(null);
@@ -26,8 +26,10 @@ function App() {
 		};
 	}, []);
 
-	function handleGranted(workspace: WorkspaceConfig) {
-		setBoot({ ready: true, workspace });
+	function handleGranted(workspace: WorkspaceProvider) {
+		// Manual grants happen post-bootstrap; recordEvents is only on for the
+		// e2e seed branch, never for an FSA picker, so default to false here.
+		setBoot({ ready: true, workspace, recordEvents: false });
 	}
 
 	async function handleUnmount() {
@@ -65,7 +67,7 @@ function App() {
 	}
 
 	return (
-		<RuntimeProvider workspace={boot.workspace} onUnmount={handleUnmount}>
+		<RuntimeProvider workspace={boot.workspace} recordEvents={boot.recordEvents} onUnmount={handleUnmount}>
 			<ChatPage />
 		</RuntimeProvider>
 	);

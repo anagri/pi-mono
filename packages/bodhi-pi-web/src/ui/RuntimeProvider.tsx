@@ -6,7 +6,7 @@ import { type AgentRuntime, startAgentRuntime } from "../agent/runtime";
 import { clearLastSessionId, readLastSessionId, writeLastSessionId } from "../agent/session-storage";
 import { readEnv } from "../env";
 import { useChatStore } from "../store/chatStore";
-import type { WorkspaceConfig } from "../workspace/types";
+import type { WorkspaceProvider } from "../workspace/provider";
 import { handleCommand, isCommand } from "./commands";
 
 interface RuntimeContextValue {
@@ -29,12 +29,14 @@ export function useRuntime(): RuntimeContextValue {
 }
 
 export interface RuntimeProviderProps {
-	workspace: WorkspaceConfig;
+	workspace: WorkspaceProvider;
+	/** Independent observability toggle. Pass through from `BootstrapResult.recordEvents`. */
+	recordEvents?: boolean;
 	onUnmount?: () => void | Promise<void>;
 	children: React.ReactNode;
 }
 
-export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProviderProps) {
+export function RuntimeProvider({ workspace, recordEvents, onUnmount, children }: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
@@ -66,8 +68,6 @@ export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProvi
 			setModels(env.models);
 			setDefaultModelId(env.defaultModelId);
 
-			// Seeded workspace = test mode → record events for Playwright specs.
-			const recordEvents = workspace.mode === "seed";
 			const runtime = await startAgentRuntime({
 				models: env.models,
 				defaultModelId: env.defaultModelId,
@@ -136,8 +136,10 @@ export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProvi
 			runtimeRef.current?.dispose();
 			runtimeRef.current = null;
 		};
+		// All captured setters are referentially stable (Zustand bound actions + useState setters);
+		// `workspace` and `recordEvents` are the only re-init triggers.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspace]);
+	}, [workspace, recordEvents]);
 
 	useEffect(() => {
 		if (status === "closed") {

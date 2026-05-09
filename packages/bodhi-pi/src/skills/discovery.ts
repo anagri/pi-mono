@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { parseFrontmatter } from "@/_internal/frontmatter.js";
+import { byName } from "@/_internal/sort.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { Skill, SkillFrontmatter } from "./skill.js";
 
@@ -70,6 +71,6 @@ export async function loadProjectSkills(fs: Filesystem, cwd: string): Promise<Sk
 		if (skill) out.push(skill);
 	}
 
-	out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	out.sort(byName);
 	return out;
 }

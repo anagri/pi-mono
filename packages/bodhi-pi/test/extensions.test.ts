@@ -146,6 +146,64 @@ test("dynamic-tools: extension-registered tool is reachable via tool_call dispat
 	expect(JSON.stringify(completed)).toContain("echoed: hi from test");
 });
 
+test("registerProvider: async getApiKey resolving to undefined falls through to next provider's getApiKey", async () => {
+	// Regression test: previously the loop returned the first provider's *unawaited*
+	// Promise, which is never `=== undefined`, so a provider whose async getApiKey
+	// resolved to undefined silently shadowed every later provider's key.
+	const fauxA = newProvider();
+	const fauxB = newProvider();
+	fauxA.setResponses([fauxAssistantMessage("ok")]);
+	fauxB.setResponses([fauxAssistantMessage("ok")]);
+	const modelA = { ...modelOf(fauxA), id: "model-a", name: "Model A" };
+	const modelB = { ...modelOf(fauxB), id: "model-b", name: "Model B", provider: "ext-target-provider" } as Model<Api>;
+
+	let firstSeen = 0;
+	let secondSeen: string | undefined;
+
+	const firstFactory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.registerProvider("first", {
+			model: modelA,
+			getApiKey: async (provider: string) => {
+				if (provider === "ext-target-provider") {
+					firstSeen += 1;
+					return undefined;
+				}
+				return undefined;
+			},
+		});
+	};
+	const secondFactory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.registerProvider("second", {
+			model: modelB,
+			getApiKey: async (provider: string) => {
+				if (provider === "ext-target-provider") {
+					secondSeen = "real-secret";
+					return "real-secret";
+				}
+				return undefined;
+			},
+		});
+	};
+
+	const harness = createTestHarness({
+		models: [modelA],
+		defaultModelId: "model-a",
+		// host has no key for ext-target-provider — only the extensions can supply it
+		getApiKey: () => undefined,
+		extensionFactories: [
+			{ name: "first", factory: firstFactory },
+			{ name: "second", factory: secondFactory },
+		],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	await harness.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: "model-b" });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+	expect(firstSeen, "first provider's async undefined consulted").toBeGreaterThanOrEqual(1);
+	expect(secondSeen, "fallthrough reached the second provider").toBe("real-secret");
+});
+
 test("registerProvider: extension-registered model is selectable and routes prompts to it", async () => {
 	// Use two faux providers so we can assert the second one is reached only after
 	// setSessionConfigOption switches to the extension-contributed model.

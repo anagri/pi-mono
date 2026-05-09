@@ -4,6 +4,7 @@ import { createNodeExtensionLoader } from "@bodhiapp/bodhi-pi-node";
 import { getModel } from "@mariozechner/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
+import { loadFixture } from "@test/helpers/seed-workspace.js";
 import { afterEach, expect, test } from "vitest";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY!;
@@ -26,17 +27,7 @@ test("CLI host loads extensions via Node loader and applies redact-secrets to a 
 	const tmpDir = await fs.mkdtemp(path.join((await import("node:os")).tmpdir(), "bodhi-pi-cli-ext-"));
 	try {
 		await seedExtensions(tmpDir, {
-			"redact-secrets.ts": `
-export default function (pi) {
-	pi.on("tool_result", (event) => {
-		const newContent = event.result.content.map((b) =>
-			b.type === "text" ? { ...b, text: b.text.replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]") } : b
-		);
-		const changed = newContent.some((b, i) => b !== event.result.content[i]);
-		return changed ? { content: newContent } : undefined;
-	});
-}
-`,
+			"redact-secrets.js": await loadFixture("extensions-redact-secrets/.bodhi-pi/extensions/redact-secrets.js"),
 		});
 
 		// Write a leak file under tmpDir for the LLM to read.
@@ -93,26 +84,7 @@ test("CLI host loads dynamic-tools extension via Node loader; LLM picks up bodhi
 	const tmpDir = await fs.mkdtemp(path.join((await import("node:os")).tmpdir(), "bodhi-pi-cli-ext-"));
 	try {
 		await seedExtensions(tmpDir, {
-			// Plain JSON-Schema literal — avoids requiring typebox in the extension's
-			// resolution scope (jiti resolves modules relative to the extension file).
-			"dynamic-tools.ts": `
-export default function (pi) {
-	pi.registerTool({
-		name: "bodhi_echo",
-		description: "Echo a message verbatim. Useful for testing tool-call dispatch.",
-		parameters: {
-			type: "object",
-			properties: { message: { type: "string", description: "Text to echo back" } },
-			required: ["message"],
-			additionalProperties: false,
-		},
-		execute: async (_id, params) => ({
-			content: [{ type: "text", text: "echoed: " + params.message }],
-			details: {},
-		}),
-	});
-}
-`,
+			"dynamic-tools.js": await loadFixture("extensions-dynamic-tools/.bodhi-pi/extensions/dynamic-tools.js"),
 		});
 
 		const factories = await createNodeExtensionLoader({ cwd: tmpDir });

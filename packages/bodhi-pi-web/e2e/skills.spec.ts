@@ -1,32 +1,26 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixtures";
 
-const SAY_HELLO_SKILL = [
-	"---",
-	"description: Say hello to a person",
-	"---",
-	"When you receive a name from the user, reply with exactly the words: hello, <name>",
-	"Replace <name> with the value the user supplied. Output nothing else.",
-].join("\n");
+// See cli-node review Batch E.4 — single source of truth for fixture bytes.
+const FIXTURES_ROOT = path.resolve(
+	path.dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"..",
+	"bodhi-pi-cli",
+	"test",
+	"fixtures",
+);
+const fixture = (rel: string): string => fs.readFileSync(path.join(FIXTURES_ROOT, rel), "utf8");
 
-const HIDDEN_DAYS_SKILL = [
-	"---",
-	"description: Compute days between a YYYY-MM-DD birthday and the baseline date.",
-	"disable-model-invocation: true",
-	"---",
-	"You have a JavaScript helper at /mnt/demo/.bodhi-pi/skills/days-since-birthday/script.js.",
-	"Call run_script with:",
-	"",
-	'- path: "/mnt/demo/.bodhi-pi/skills/days-since-birthday/script.js"',
-	'- args: ["<YYYY-MM-DD>"] where the date comes from the user\'s message.',
-	"",
-	"Reply with exactly that integer and nothing else.",
-].join("\n");
-
-const HIDDEN_DAYS_SCRIPT = [
-	"const baseline = Date.UTC(2026, 4, 8);",
-	'const ms = baseline - new Date(args[0] + "T00:00:00Z").getTime();',
-	"console.log(Math.floor(ms / 86400000));",
-].join("\n");
+const SAY_HELLO_SKILL = fixture("skills-say-hello/.bodhi-pi/skills/say-hello/SKILL.md");
+// SKILL.md uses {SCRIPT_PATH}; for the web seed mount, the script lives at
+// `/mnt/demo/.bodhi-pi/skills/days-since-birthday/script.js`.
+const HIDDEN_DAYS_SKILL = fixture(
+	"skills-days-since-birthday/.bodhi-pi/skills/days-since-birthday/SKILL.md",
+).replaceAll("{SCRIPT_PATH}", "/mnt/demo/.bodhi-pi/skills/days-since-birthday/script.js");
+const HIDDEN_DAYS_SCRIPT = fixture("skills-days-since-birthday/.bodhi-pi/skills/days-since-birthday/script.js");
 
 test.describe("M10 markdown skills", () => {
 	test.use({

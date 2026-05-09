@@ -8,7 +8,9 @@ export const sessions = sqliteTable(
 		createdAt: integer("created_at").notNull(),
 		updatedAt: integer("updated_at").notNull(),
 	},
-	(t) => [index("sessions_cwd_updated_idx").on(t.cwd, t.updatedAt)],
+	// Cursor pagination tie-breaks on `id` after `updatedAt`; include `id` in
+	// the index so the secondary order is index-served, not a scan within ties.
+	(t) => [index("sessions_cwd_updated_id_idx").on(t.cwd, t.updatedAt, t.id)],
 );
 
 export const sessionEntries = sqliteTable(

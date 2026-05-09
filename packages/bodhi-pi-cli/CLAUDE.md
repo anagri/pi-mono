@@ -8,7 +8,7 @@ Reference Node host for `@bodhiapp/bodhi-pi`. Hand-rolled REPL CLI for live-test
 
 **In-process ACP pair.** No real network transport — `repl/repl.ts` builds two `TransformStream`s and connects `AgentSideConnection` ↔ `ClientSideConnection` directly. Mirrors `bodhi-pi/test/helpers/harness.ts`. Switching to a real stdio transport is a future milestone.
 
-**Node adapters from `@bodhiapp/bodhi-pi-node`.** `createNodeFilesystem(cwd)` + `createSqliteSessionStore(dbPath)` + `createNodeScriptExecutor()`. The `createCliAgent` factory in `src/agent.ts` wires them into `createBodhiPiAgent` and returns `{ factory, sessionStore, filesystem, cwd, models }`.
+**Node adapters from `@bodhiapp/bodhi-pi-node`.** `createNodeFilesystem({rootCwd})` + `createSqliteSessionStore({dbPath})` + `createNodeScriptExecutor()`. The `createCliAgent` factory in `src/agent.ts` wires them into `createBodhiPiAgent` and returns `{ factory, sessionStore, filesystem, cwd, models }`.
 
 **Slash-command set is canonical.** `src/repl/commands.ts` is the source of truth for `/help`, `/new`, `/sessions`, `/resume`, `/model`, `/quit`. `bodhi-pi-web/src/ui/commands.ts` is a port of this — keep them in sync (drop `/quit` for the web, it has no terminal).
 

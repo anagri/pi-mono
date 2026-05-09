@@ -1,4 +1,4 @@
-import { configure, fs, InMemory, mount, umount } from "@zenfs/core";
+import { configure, mount, umount } from "@zenfs/core";
 import { WebAccess } from "@zenfs/dom";
 
 /**
@@ -26,35 +26,6 @@ export async function mountFsaHandle(opts: {
 	const rootPath = `/mnt/${opts.mountName}`;
 	const backend = await WebAccess.create({ handle: opts.handle });
 	mount(rootPath, backend);
-	return { rootPath };
-}
-
-export interface SeedFiles {
-	[absoluteOrRelativePath: string]: string;
-}
-
-export async function mountInMemorySeed(opts: { mountName: string; files?: SeedFiles }): Promise<MountResult> {
-	await ensureZenfs();
-	const rootPath = `/mnt/${opts.mountName}`;
-	const backend = InMemory.create({ label: opts.mountName });
-	mount(rootPath, backend);
-
-	const files = opts.files ?? {};
-	for (const rel of Object.keys(files).sort()) {
-		const absolute = rel.startsWith("/") ? `${rootPath}${rel}` : `${rootPath}/${rel}`;
-		const slash = absolute.lastIndexOf("/");
-		if (slash > 0) {
-			const parent = absolute.slice(0, slash);
-			try {
-				await fs.promises.mkdir(parent, { recursive: true });
-			} catch (err) {
-				const code = (err as { code?: string } | null)?.code;
-				if (code !== "EEXIST") throw err;
-			}
-		}
-		await fs.promises.writeFile(absolute, files[rel] ?? "", { encoding: "utf-8" });
-	}
-
 	return { rootPath };
 }
 

@@ -9,7 +9,7 @@ let filesystem: ReturnType<typeof createNodeFilesystem>;
 
 beforeEach(async () => {
 	root = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-cli-fs-"));
-	filesystem = createNodeFilesystem(root);
+	filesystem = createNodeFilesystem({ rootCwd: root });
 });
 
 afterEach(async () => {
@@ -112,5 +112,19 @@ describe("jail", () => {
 
 	it("rejects absolute paths outside root", async () => {
 		await expect(filesystem.readTextFile("/etc/passwd")).rejects.toMatchObject({ code: "EACCES" });
+	});
+});
+
+describe("factory signature parity", () => {
+	it("only the options-object form compiles (positional rootCwd was removed)", () => {
+		// Compile-time enforcement: this test exists to document the public contract.
+		// `createNodeFilesystem({ rootCwd })` is the only call shape that type-checks.
+		// `createNodeFilesystem(rootCwd)` (positional) would be a parity violation
+		// against `bodhi-pi-browser` factories — see both packages' CLAUDE.md.
+		const fsHandle = createNodeFilesystem({ rootCwd: root });
+		expect(typeof fsHandle.readTextFile).toBe("function");
+		// @ts-expect-error positional string is not assignable to `NodeFilesystemOptions`
+		const _shouldNotCompile = createNodeFilesystem(root);
+		expect(_shouldNotCompile).toBeDefined(); // runtime is permissive; the TS error is what we assert
 	});
 });

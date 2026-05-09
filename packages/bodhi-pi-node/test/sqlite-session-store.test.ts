@@ -10,7 +10,7 @@ let store: ReturnType<typeof createSqliteSessionStore>;
 
 beforeEach(() => {
 	dbPath = path.join(os.tmpdir(), `bodhi-pi-cli-sessions-${Date.now()}.db`);
-	store = createSqliteSessionStore(dbPath);
+	store = createSqliteSessionStore({ dbPath });
 });
 
 afterEach(() => {
@@ -65,10 +65,18 @@ describe("append", () => {
 	it("bumps updatedAt on append", async () => {
 		const record = await store.create({ cwd: "/cwd" });
 		const beforeAppend = record.updatedAt;
-		await new Promise((r) => setTimeout(r, 2));
-		await store.append(record.id, makeEntry("x"));
-		const loaded = await store.load(record.id);
-		expect(loaded!.updatedAt).toBeGreaterThan(beforeAppend);
+		// Poll instead of fixed sleep — a 2 ms `setTimeout` is below the resolution
+		// some CI runners give consistently and was a flake source.
+		const deadline = Date.now() + 1000;
+		let loaded: Awaited<ReturnType<typeof store.load>> | undefined;
+		while (Date.now() < deadline) {
+			await store.append(record.id, makeEntry(`x-${Date.now()}`));
+			loaded = await store.load(record.id);
+			if (loaded && loaded.updatedAt > beforeAppend) break;
+			// Yield so the system clock advances before the next append.
+			await new Promise((r) => setImmediate(r));
+		}
+		expect(loaded?.updatedAt).toBeGreaterThan(beforeAppend);
 	});
 
 	it("throws for unknown sessionId", async () => {
@@ -97,6 +105,16 @@ describe("list", () => {
 		await store.create({ cwd: "/y" });
 		const result = await store.list({});
 		expect(result.sessions.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it("malformed cursor (parseable JSON, wrong shape) resets to first page instead of poisoning the SQL", async () => {
+		const cwd = "/malformed-cursor";
+		for (let i = 0; i < 3; i++) await store.create({ cwd });
+		const badCursor = Buffer.from(JSON.stringify({ foo: 1 })).toString("base64url");
+		const result = await store.list({ cwd, cursor: badCursor });
+		// Without shape validation, `lt(updatedAt, undefined)` would silently
+		// produce zero rows. Validated cursor falls back to "no cursor" → all rows.
+		expect(result.sessions).toHaveLength(3);
 	});
 
 	it("paginates with cursor across 60 rows", async () => {

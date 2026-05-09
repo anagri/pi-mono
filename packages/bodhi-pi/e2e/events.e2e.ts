@@ -1,6 +1,7 @@
 import { getModel } from "@mariozechner/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { requireEnv } from "@test/helpers/env.js";
+import { recorder } from "@test/helpers/event-recorder.js";
 import { createTestHarness } from "@test/helpers/harness.js";
 import { expect, test } from "vitest";
 import {
@@ -8,37 +9,11 @@ import {
 	type AgentEndEvent,
 	type AgentStartEvent,
 	type BeforeProviderRequestEvent,
-	type BodhiPiEvent,
-	type BodhiPiEventHandlers,
 	createInMemoryFilesystem,
+	type MessageUpdateEvent,
 	type ToolCallEvent,
 	type ToolExecutionEndEvent,
 } from "@/index.js";
-
-function recorder() {
-	const log: BodhiPiEvent[] = [];
-	const push = (e: BodhiPiEvent) => void log.push(e);
-	const handlers: BodhiPiEventHandlers = {
-		session_start: [push],
-		session_shutdown: [push],
-		agent_start: [push],
-		agent_end: [push],
-		turn_start: [push],
-		turn_end: [push],
-		message_start: [push],
-		message_end: [push],
-		tool_execution_start: [push],
-		tool_execution_end: [push],
-		input: [push],
-		before_agent_start: [push],
-		before_provider_request: [push],
-		after_provider_response: [push],
-		tool_call: [push],
-		tool_result: [push],
-		model_select: [push],
-	};
-	return { log, handlers };
-}
 
 test("real LLM (gpt-4o-mini) fires the full event sequence around a single text turn", async () => {
 	const apiKey = requireEnv("OPENAI_API_KEY");
@@ -67,6 +42,7 @@ test("real LLM (gpt-4o-mini) fires the full event sequence around a single text 
 	expect(types).toContain("agent_start");
 	expect(types).toContain("turn_start");
 	expect(types).toContain("message_start");
+	expect(types).toContain("message_update");
 	expect(types).toContain("message_end");
 	expect(types).toContain("turn_end");
 	expect(types).toContain("agent_end");
@@ -75,6 +51,11 @@ test("real LLM (gpt-4o-mini) fires the full event sequence around a single text 
 	const end = log.find((e): e is AgentEndEvent => e.type === "agent_end");
 	expect(start?.userPrompt).toMatch(/Monday/);
 	expect(end?.stopReason).toBe("end_turn");
+
+	// Streaming proof: at least one `message_update` carries a `text_delta`.
+	const updates = log.filter((e): e is MessageUpdateEvent => e.type === "message_update");
+	const textDeltas = updates.filter((u) => u.assistantMessageEvent.type === "text_delta");
+	expect(textDeltas.length, "at least one text_delta indicates streaming").toBeGreaterThan(0);
 
 	const req = log.find((e): e is BeforeProviderRequestEvent => e.type === "before_provider_request");
 	const res = log.find((e): e is AfterProviderResponseEvent => e.type === "after_provider_response");
@@ -118,4 +99,12 @@ test("real LLM tool turn (gpt-4o-mini) fires tool_call + tool_execution_* + tool
 	expect(callEv).toBeDefined();
 	expect(execEnd).toBeDefined();
 	expect(execEnd?.isError).toBe(false);
+
+	// `tool_execution_start` and `tool_execution_end` should both fire for the
+	// read tool. `tool_execution_update` is fired by tools that stream partials;
+	// `read` does not, so it's not asserted here — the bodhi-pi test/events.test.ts
+	// integration suite covers the partials path against the script tool.
+	const types = log.map((e) => e.type);
+	expect(types).toContain("tool_execution_start");
+	expect(types).toContain("tool_execution_end");
 });
