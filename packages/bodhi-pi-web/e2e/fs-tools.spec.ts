@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures";
+import { loadScenario } from "./helpers/seed";
 
 test.describe("M8 FS tools surface tool-call cards", () => {
 	test.describe("write + read", () => {
@@ -38,7 +39,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test.use({
 			workspaceSeed: {
 				name: "demo",
-				files: { "/notes.txt": "hello world" },
+				files: loadScenario("fs-tools-notes-txt"),
 			},
 		});
 
@@ -76,11 +77,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test.use({
 			workspaceSeed: {
 				name: "demo",
-				files: {
-					"/notes/alpha.md": "A",
-					"/notes/beta.md": "B",
-					"/notes/gamma.md": "C",
-				},
+				files: loadScenario("fs-tools-notes-abc"),
 			},
 		});
 
@@ -116,12 +113,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test.use({
 			workspaceSeed: {
 				name: "demo",
-				files: {
-					"/docs/intro.md": "# intro",
-					"/docs/notes/draft.md": "# draft",
-					"/docs/readme.txt": "txt",
-					"/scripts/helper.js": "// js",
-				},
+				files: loadScenario("fs-tools-docs-tree"),
 			},
 		});
 
@@ -154,10 +146,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test.use({
 			workspaceSeed: {
 				name: "demo",
-				files: {
-					"/notes/a.md": "# A\nthe codeword is parrot\n",
-					"/notes/b.md": "# B\njust a draft\n",
-				},
+				files: loadScenario("fs-tools-codeword"),
 			},
 		});
 

@@ -1,7 +1,8 @@
 import { expect, test } from "./fixtures";
+import { loadScenario } from "./helpers/seed";
 
 // Override the default seed so the mount path is predictable (`/mnt/demo`).
-test.use({ workspaceSeed: { name: "demo", files: { "/readme.txt": "hello world" } } });
+test.use({ workspaceSeed: { name: "demo", files: loadScenario("workspace-readme") } });
 
 test("M7 seeded workspace mounts at /mnt/<name> and chat reaches idle", async ({ chat }) => {
 	await test.step("boot to idle", async () => {

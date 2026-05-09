@@ -1,34 +1,11 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixtures";
-
-// See cli-node review Batch E.4 — single source of truth for fixture bytes.
-const FIXTURES_ROOT = path.resolve(
-	path.dirname(fileURLToPath(import.meta.url)),
-	"..",
-	"..",
-	"bodhi-pi-cli",
-	"test",
-	"fixtures",
-);
-const fixture = (rel: string): string => fs.readFileSync(path.join(FIXTURES_ROOT, rel), "utf8");
-
-const SAY_HELLO_SKILL = fixture("skills-say-hello/.bodhi-pi/skills/say-hello/SKILL.md");
-// SKILL.md uses {SCRIPT_PATH}; for the web seed mount, the script lives at
-// `/mnt/demo/.bodhi-pi/skills/days-since-birthday/script.js`.
-const HIDDEN_DAYS_SKILL = fixture(
-	"skills-days-since-birthday/.bodhi-pi/skills/days-since-birthday/SKILL.md",
-).replaceAll("{SCRIPT_PATH}", "/mnt/demo/.bodhi-pi/skills/days-since-birthday/script.js");
-const HIDDEN_DAYS_SCRIPT = fixture("skills-days-since-birthday/.bodhi-pi/skills/days-since-birthday/script.js");
+import { loadScenario } from "./helpers/seed";
 
 test.describe("M10 markdown skills", () => {
 	test.use({
 		workspaceSeed: {
 			name: "demo",
-			files: {
-				"/.bodhi-pi/skills/say-hello/SKILL.md": SAY_HELLO_SKILL,
-			},
+			files: loadScenario("skills-say-hello"),
 		},
 	});
 
@@ -61,10 +38,7 @@ test.describe("M16 hidden skill (disable-model-invocation)", () => {
 	test.use({
 		workspaceSeed: {
 			name: "demo",
-			files: {
-				"/.bodhi-pi/skills/days-since-birthday/SKILL.md": HIDDEN_DAYS_SKILL,
-				"/.bodhi-pi/skills/days-since-birthday/script.js": HIDDEN_DAYS_SCRIPT,
-			},
+			files: loadScenario("skills-days-since-birthday"),
 		},
 	});
 

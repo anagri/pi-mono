@@ -1,32 +1,11 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixtures";
-
-// Single source of truth: read the SAME bytes the cli e2e reads. The
-// `bodhi-pi-cli/test/fixtures/` tree is the canonical fixture root for both
-// reference hosts. See cli-node review Batch E.4.
-const FIXTURES_ROOT = path.resolve(
-	path.dirname(fileURLToPath(import.meta.url)),
-	"..",
-	"..",
-	"bodhi-pi-cli",
-	"test",
-	"fixtures",
-);
-const fixture = (rel: string): string => fs.readFileSync(path.join(FIXTURES_ROOT, rel), "utf8");
-
-const ECHO_TEMPLATE = fixture("commands-echo/.bodhi-pi/commands/echo.md");
-const SAY_TUESDAY_TEMPLATE = fixture("commands-say-tuesday/.bodhi-pi/commands/say-tuesday.md");
+import { loadScenario } from "./helpers/seed";
 
 test.describe("M9 project slash commands", () => {
 	test.use({
 		workspaceSeed: {
 			name: "demo",
-			files: {
-				"/.bodhi-pi/commands/echo.md": ECHO_TEMPLATE,
-				"/.bodhi-pi/commands/say-tuesday.md": SAY_TUESDAY_TEMPLATE,
-			},
+			files: { ...loadScenario("commands-echo"), ...loadScenario("commands-say-tuesday") },
 		},
 	});
 
@@ -76,9 +55,7 @@ test.describe("M16 commands re-emit on /resume", () => {
 	test.use({
 		workspaceSeed: {
 			name: "demo",
-			files: {
-				"/.bodhi-pi/commands/echo.md": ECHO_TEMPLATE,
-			},
+			files: loadScenario("commands-echo"),
 		},
 	});
 
