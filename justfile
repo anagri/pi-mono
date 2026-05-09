@@ -1,6 +1,28 @@
 default:
     @just --list
 
+# Copy untracked .env* files from the main worktree into the current worktree.
+setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+    here=$(git rev-parse --show-toplevel)
+    if [ "$main" = "$here" ]; then
+        echo "Already in main worktree ($main); nothing to copy."
+        exit 0
+    fi
+    echo "Copying .env* from $main → $here"
+    cd "$main"
+    find . -type f -name '.env*' -not -name '*.example' \
+        -not -path '*/node_modules/*' -not -path '*/.git/*' -print0 |
+    while IFS= read -r -d '' f; do
+        rel=${f#./}
+        dest="$here/$rel"
+        mkdir -p "$(dirname "$dest")"
+        cp "$f" "$dest"
+        echo "  $rel"
+    done
+
 # Build → unit/integration → e2e for every bodhi-* workspace, in dep order.
 test:
     @echo "▶ @bodhiapp/bodhi-pi  — build"

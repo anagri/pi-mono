@@ -10,18 +10,34 @@ import { wsToStream } from "./ws-stream";
 
 export const SUBPROTOCOL = "bodhi-pi.v1";
 
-class NoopClient implements Client {
-	async requestPermission(_params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-		throw new Error("not implemented in M1");
+export interface ClientHandlers {
+	onSessionUpdate?: (n: SessionNotification) => void;
+	onPermissionRequest?: (r: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
+}
+
+class WireClient implements Client {
+	private readonly handlers: ClientHandlers;
+	constructor(handlers: ClientHandlers) {
+		this.handlers = handlers;
 	}
-	async sessionUpdate(_params: SessionNotification): Promise<void> {
-		// noop in M1
+	async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+		if (this.handlers.onPermissionRequest) return this.handlers.onPermissionRequest(params);
+		// Auto-approve: pick the first option (typical "allow" / "always allow").
+		const optionId = params.options[0]?.optionId;
+		if (optionId) {
+			return { outcome: { outcome: "selected", optionId } };
+		}
+		return { outcome: { outcome: "cancelled" } };
+	}
+	async sessionUpdate(params: SessionNotification): Promise<void> {
+		this.handlers.onSessionUpdate?.(params);
 	}
 }
 
 export interface ConnectOptions {
 	url: string;
 	user?: UserCtx;
+	handlers?: ClientHandlers;
 	onClose?: (ev: CloseEvent) => void;
 }
 
@@ -45,7 +61,7 @@ export function connect(opts: ConnectOptions): Promise<Connection> {
 			opened = true;
 			const stream = wsToStream(ws);
 			const acpStream = ndJsonStream(stream.writable, stream.readable);
-			const conn = new ClientSideConnection(() => new NoopClient(), acpStream);
+			const conn = new ClientSideConnection(() => new WireClient(opts.handlers ?? {}), acpStream);
 			resolve({ ws, conn });
 		});
 

@@ -3,9 +3,13 @@ import { expect } from "@playwright/test";
 
 export class AppPage {
 	readonly status: Locator;
+	readonly composer: Locator;
+	readonly sendButton: Locator;
 
 	constructor(public readonly page: Page) {
 		this.status = page.getByTestId("status");
+		this.composer = page.getByTestId("composer");
+		this.sendButton = page.getByTestId("send");
 	}
 
 	async goto() {
@@ -33,5 +37,22 @@ export class AppPage {
 
 	async expectAgentName(name: string) {
 		await expect(this.status).toHaveAttribute("data-agent-name", name);
+	}
+
+	async send(text: string) {
+		await this.composer.fill(text);
+		await this.sendButton.click();
+	}
+
+	async expectChatStatus(status: "idle" | "streaming") {
+		await expect(this.status).toHaveAttribute("data-chat-status", status);
+	}
+
+	async lastMessageText(role: "user" | "assistant"): Promise<string> {
+		const messages = this.page.getByTestId("message").filter({ has: this.page.locator(`[data-role="${role}"]`) });
+		const all = this.page.locator(`[data-testid="message"][data-role="${role}"]`);
+		await all.last().waitFor();
+		void messages;
+		return (await all.last().innerText()).trim();
 	}
 }

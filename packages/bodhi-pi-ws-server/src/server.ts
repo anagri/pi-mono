@@ -1,20 +1,26 @@
 import { createServer, type Server } from "node:http";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { type WebSocket, WebSocketServer } from "ws";
-import { HandshakeAgent } from "./agent/handshake-agent.js";
+import { wireAgentForConnection } from "./agent/wire-agent.js";
 import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
 import { wsToStream } from "./transport/ws-stream.js";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
+export interface BuildServerOptions {
+	port?: number;
+	dataDir: string;
+	models: Model<Api>[];
+	defaultModelId: string;
+	getApiKey: (provider: string) => string | undefined;
+	systemPrompt?: string;
+}
+
 export interface ServerHandle {
 	httpServer: Server;
 	close(): Promise<void>;
 	port(): number;
-}
-
-export interface BuildServerOptions {
-	port?: number;
 }
 
 function setupHeartbeat(ws: WebSocket): void {
@@ -33,14 +39,7 @@ function setupHeartbeat(ws: WebSocket): void {
 	ws.on("close", () => clearInterval(interval));
 }
 
-function bindAgent(ws: WebSocket, _ctx: UpgradeContext): void {
-	const stream = wsToStream(ws);
-	const acpStream = ndJsonStream(stream.writable, stream.readable);
-	new AgentSideConnection(() => new HandshakeAgent(), acpStream);
-	setupHeartbeat(ws);
-}
-
-export async function buildServer(opts: BuildServerOptions = {}): Promise<ServerHandle> {
+export async function buildServer(opts: BuildServerOptions): Promise<ServerHandle> {
 	const httpServer = createServer((req, res) => {
 		if (req.url === "/healthz") {
 			res.writeHead(200, { "content-type": "text/plain" });
@@ -55,6 +54,21 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Server
 		noServer: true,
 		handleProtocols: (protocols) => (protocols.has(SUBPROTOCOL) ? SUBPROTOCOL : false),
 	});
+
+	function bindAgent(ws: WebSocket, ctx: UpgradeContext): void {
+		const stream = wsToStream(ws);
+		const acpStream = ndJsonStream(stream.writable, stream.readable);
+		const factory = wireAgentForConnection({
+			user: ctx.user,
+			dataDir: opts.dataDir,
+			models: opts.models,
+			defaultModelId: opts.defaultModelId,
+			getApiKey: opts.getApiKey,
+			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		});
+		new AgentSideConnection(factory, acpStream);
+		setupHeartbeat(ws);
+	}
 
 	httpServer.on("upgrade", (req, socket, head) => {
 		if (req.url !== "/agent") {

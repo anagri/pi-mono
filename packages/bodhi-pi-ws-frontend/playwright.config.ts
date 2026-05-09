@@ -1,4 +1,11 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
+import { config as loadEnv } from "dotenv";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+// Load OPENAI_API_KEY etc. from the ws-server's .env so test.skip(!OPENAI_API_KEY) sees it.
+loadEnv({ path: path.resolve(here, "../bodhi-pi-ws-server/.env") });
 
 const FRONTEND_PORT = 35273;
 const WS_SERVER_PORT = 8788;
