@@ -39,9 +39,14 @@ function mapToolStatus(raw: string | undefined): ToolCallStatus {
 }
 
 function deriveToolName(title: string, kind?: string): string {
-	if (kind && kind.length > 0) return kind;
-	const first = title.split(/\s+/)[0] ?? "tool";
-	return first.replace(/[^a-zA-Z0-9_-]/g, "");
+	// Title is shaped "<tool-name> <location-hint>" (see bodhi-pi/src/acp/agent.ts).
+	// First word of the title is the tool name; `kind` is a higher-level category
+	// (e.g., "edit", "fetch") that's less precise. Match bodhi-pi-web's deriveToolName.
+	if (title && title.length > 0) {
+		const first = title.trim().split(/\s+/)[0];
+		if (first) return first.replace(/[^a-zA-Z0-9_-]/g, "");
+	}
+	return kind ?? "tool";
 }
 
 export function useChat({ conn, cwd }: UseChatArgs) {
