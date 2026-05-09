@@ -41,6 +41,7 @@ Mirrors `@bodhiapp/bodhi-pi-browser` shape so any host can swap runtimes by chan
 - **`defaultDbPath` is parameterized.** `defaultDbPath("bodhi-pi-cli")` returns `~/.bodhi-pi-cli/sessions.db`. Default arg `"bodhi-pi"` keeps the package generically reusable.
 - **Migrations are part of the build artifact.** `drizzle/` lives in `files`; consumers don't need drizzle-kit at runtime, only at dev time when schema evolves.
 - **No `as` casts in entry-payload deserialization.** Use type guards or zod-style runtime checks if the payload shape grows complex (current shape is small enough for `JSON.parse` + structural assumptions).
+- **Test fixtures stay out of the publishable surface.** Helpers that exist solely to support vitest specs (in-memory mocks, fake-fs seeds, fixture generators) belong under `test/`, NOT `src/`. The default barrel (`src/index.ts`) is production-only. No `vitest`/test-only conditional branches in `src/`. Test-only deps stay in `devDependencies`. If a single helper is genuinely dual-purpose (e.g. `runMigrations` runs at production startup AND inside tests), document the dual role with a one-line comment at the export site.
 
 ## Test conventions
 

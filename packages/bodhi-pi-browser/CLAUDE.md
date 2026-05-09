@@ -39,6 +39,7 @@ Mirrors `@bodhiapp/bodhi-pi-node` shape so any host can swap runtimes by changin
 - **`requestPermission` requires a user gesture.** Document this on the helper. The browser host (e.g. `bodhi-pi-web/DirectoryGate.tsx`) is responsible for invoking from a click handler. We do NOT call `requestPermission` after `showDirectoryPicker({mode:"readwrite"})` — the picker dialog already grants the requested mode and consumes the activation.
 - **AsyncFunction-based executor needs `unsafe-eval` CSP.** Document for prod consumers. No nested-Worker fallback in v1.
 - **Compose, don't subclass `Dexie`.** tsgo's class-extension resolution against Dexie's `var Dexie: DexieConstructor` typing breaks. `openBodhiPiBrowserDb` returns `{ db, sessions, entries }` — see `db.ts`.
+- **Test fixtures stay out of the publishable surface.** Helpers that exist solely to support vitest/Playwright (in-memory seeds, mocks, fixture generators) live under `src/_test-helpers/` and ship via a dedicated `exports["./test-helpers"]` entry, NOT from `src/index.ts`. The default barrel is production-only. No `vitest`/`fake-indexeddb`/test-only conditional branches in production `src/` paths. Test-only deps stay in `devDependencies`. **`mountInMemorySeed` is test-only** and currently leaks via `src/index.ts`; it should move to `_test-helpers/zenfs-seed.ts`.
 
 ## Test conventions
 

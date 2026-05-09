@@ -52,6 +52,7 @@ Reference Node host for `@bodhiapp/bodhi-pi`. Hand-rolled REPL CLI for live-test
 - **Real tmpdirs, real SQLite.** No mocking the FS or DB. Mocks defeat the purpose of a "live test" tool.
 - **Assert side-effects + stable substrings, not exact model text.** Same rule as bodhi-pi's e2e.
 - **e2e `.env.test`** is gitignored. Source `.env.test.example` describes required keys.
+- **Test workspaces live as real files under `test/fixtures/<scenario>/`.** Each scenario is a checked-in directory with `.bodhi-pi/{commands,skills,extensions}` populated as actual files; specs point the harness at it via `createCliTestHarness({ fixtureDir })` (cwd = fixtureDir, dbPath stays ephemeral in `os.tmpdir()` so concurrent specs never lock-conflict). Runtime templating via a `templates`-style constant in `seed-workspace.ts` is reserved only for cases that bake an absolute tmpdir-derived path into the fixture body (e.g. scripted-skill's `{SCRIPT_PATH}` placeholder). The same fixture tree is the source of truth for `bodhi-pi-web/e2e/{commands,skills,extensions}.spec.ts` — both reference clients consume identical bytes.
 
 ## Feature workflow
 
