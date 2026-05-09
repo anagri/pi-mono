@@ -1,9 +1,12 @@
 import { createServer, type Server } from "node:http";
+import path from "node:path";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import type { Api, Model } from "@mariozechner/pi-ai";
+import type Database from "better-sqlite3";
 import { type WebSocket, WebSocketServer } from "ws";
 import { wireAgentForConnection } from "./agent/wire-agent.js";
 import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
+import { type Db, openDb, upsertUser } from "./sessions/sqlite-session-store.js";
 import { wsToStream } from "./transport/ws-stream.js";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -21,6 +24,7 @@ export interface ServerHandle {
 	httpServer: Server;
 	close(): Promise<void>;
 	port(): number;
+	db: Db;
 }
 
 function setupHeartbeat(ws: WebSocket): void {
@@ -40,6 +44,9 @@ function setupHeartbeat(ws: WebSocket): void {
 }
 
 export async function buildServer(opts: BuildServerOptions): Promise<ServerHandle> {
+	const dbPath = path.resolve(opts.dataDir, "sessions.db");
+	const { db, sqlite } = openDb({ dbPath });
+
 	const httpServer = createServer((req, res) => {
 		if (req.url === "/healthz") {
 			res.writeHead(200, { "content-type": "text/plain" });
@@ -56,11 +63,13 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 	});
 
 	function bindAgent(ws: WebSocket, ctx: UpgradeContext): void {
+		upsertUser(db, ctx.user);
 		const stream = wsToStream(ws);
 		const acpStream = ndJsonStream(stream.writable, stream.readable);
 		const factory = wireAgentForConnection({
 			user: ctx.user,
 			dataDir: opts.dataDir,
+			db,
 			models: opts.models,
 			defaultModelId: opts.defaultModelId,
 			getApiKey: opts.getApiKey,
@@ -94,6 +103,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 
 	return {
 		httpServer,
+		db,
 		port() {
 			const addr = httpServer.address();
 			if (typeof addr === "object" && addr !== null) return addr.port;
@@ -107,6 +117,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			await new Promise<void>((resolve, reject) => {
 				httpServer.close((err) => (err ? reject(err) : resolve()));
 			});
+			(sqlite as Database.Database).close();
 		},
 	};
 }
