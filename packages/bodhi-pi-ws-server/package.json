@@ -1,0 +1,30 @@
+{
+	"name": "@bodhiapp/bodhi-pi-ws-server",
+	"version": "0.0.1",
+	"private": true,
+	"description": "WebSocket-hosted multi-user agent backend for bodhi-pi",
+	"type": "module",
+	"main": "./dist/index.js",
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json",
+		"dev": "tsx watch src/index.ts",
+		"start": "node dist/index.js",
+		"test": "vitest --run"
+	},
+	"dependencies": {
+		"@agentclientprotocol/sdk": "^0.21.0",
+		"dotenv": "^16.4.5",
+		"ws": "^8.18.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.3.0",
+		"@types/ws": "^8.5.13",
+		"tsx": "^4.20.3",
+		"typescript": "^5.7.3",
+		"vitest": "^3.2.4"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}

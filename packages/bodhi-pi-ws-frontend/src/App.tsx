@@ -1,122 +1,124 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState } from "react";
+import { connect, type Connection } from "./lib/transport";
+import { useSettings } from "./hooks/useSettings";
+import "./App.css";
+
+type Status = "idle" | "connecting" | "connected" | "disconnected" | "unauthorized";
+
+const SERVER_URL = (import.meta.env.VITE_WS_SERVER_URL as string | undefined) ?? "ws://localhost:8788/agent";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { settings, update } = useSettings();
+  const [status, setStatus] = useState<Status>("idle");
+  const [agentName, setAgentName] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [connection, setConnection] = useState<Connection | null>(null);
+
+  async function onConnect() {
+    setError("");
+    setAgentName("");
+    setStatus("connecting");
+    try {
+      const c = await connect({
+        url: SERVER_URL,
+        user: settings.sendToken ? { id: settings.id, email: settings.email } : undefined,
+        onClose: () => setStatus("disconnected"),
+      });
+      setConnection(c);
+      const result = await c.conn.initialize({ protocolVersion: 1, clientCapabilities: {} });
+      setAgentName(result.agentInfo?.name ?? "");
+      setStatus("connected");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      setStatus(settings.sendToken ? "disconnected" : "unauthorized");
+    }
+  }
+
+  function onDisconnect() {
+    connection?.ws.close();
+    setConnection(null);
+    setStatus("disconnected");
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
+    <main style={{ maxWidth: 640, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui, sans-serif" }}>
+      <h1>bodhi-pi WS frontend</h1>
+
+      <section data-testid="settings" style={{ display: "grid", gap: "0.5rem", marginBottom: "1.5rem" }}>
+        <h2 style={{ fontSize: "1rem" }}>Settings</h2>
+        <label>
+          Email
+          <input
+            data-testid="settings-email"
+            type="email"
+            value={settings.email}
+            onChange={(e) => update("email", e.target.value)}
+            style={{ width: "100%" }}
+          />
+        </label>
+        <label>
+          User id
+          <input
+            data-testid="settings-id"
+            type="number"
+            value={settings.id}
+            onChange={(e) => update("id", Number(e.target.value))}
+            style={{ width: "100%" }}
+          />
+        </label>
+        <label>
+          <input
+            data-testid="settings-sendToken"
+            type="checkbox"
+            checked={settings.sendToken}
+            onChange={(e) => update("sendToken", e.target.checked)}
+          />{" "}
+          Send token on connect
+        </label>
+      </section>
+
+      <section style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "1rem" }}>
         <button
           type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+          data-testid="connect"
+          onClick={onConnect}
+          disabled={status === "connecting" || status === "connected"}
         >
-          Count is {count}
+          Connect
+        </button>
+        <button
+          type="button"
+          data-testid="disconnect"
+          onClick={onDisconnect}
+          disabled={status !== "connected"}
+        >
+          Disconnect
         </button>
       </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <section
+        data-testid="status"
+        data-status={status}
+        data-agent-name={agentName}
+        style={{ padding: "0.75rem", border: "1px solid #ccc", borderRadius: 4 }}
+      >
+        <div>
+          Status: <strong data-testid="status-text">{status}</strong>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
+        {agentName ? (
+          <div>
+            Agent: <span data-testid="agent-name">{agentName}</span>
+          </div>
+        ) : null}
+        {error ? (
+          <div data-testid="error" style={{ color: "crimson", marginTop: "0.5rem" }}>
+            {error}
+          </div>
+        ) : null}
       </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    </main>
+  );
 }
 
-export default App
+export default App;
