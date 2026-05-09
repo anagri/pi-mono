@@ -1,3 +1,5 @@
+import { mkdtempSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
@@ -9,6 +11,8 @@ loadEnv({ path: path.resolve(here, "../bodhi-pi-ws-server/.env") });
 
 const FRONTEND_PORT = 35273;
 const WS_SERVER_PORT = 8788;
+// Fresh tmpdir per Playwright invocation so SQLite + per-user workspaces are isolated.
+const SERVER_DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "bodhi-pi-ws-e2e-"));
 
 export default defineConfig({
   testDir: "./e2e",
@@ -24,7 +28,11 @@ export default defineConfig({
     {
       command: "npm --workspace=@bodhiapp/bodhi-pi-ws-server run dev",
       cwd: "../..",
-      env: { PORT: String(WS_SERVER_PORT) },
+      env: {
+        PORT: String(WS_SERVER_PORT),
+        BODHI_PI_SERVER_DATA_DIR: SERVER_DATA_DIR,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
+      },
       url: `http://localhost:${WS_SERVER_PORT}/healthz`,
       reuseExistingServer: false,
       timeout: 30_000,

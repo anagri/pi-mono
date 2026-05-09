@@ -23,7 +23,6 @@ export type ChatStatus = "idle" | "streaming";
 
 interface UseChatArgs {
 	conn: ClientSideConnection | null;
-	cwd: string;
 }
 
 function mapToolStatus(raw: string | undefined): ToolCallStatus {
@@ -38,7 +37,7 @@ function deriveToolName(title: string, kind?: string): string {
 	return first.replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
-export function useChat({ conn, cwd }: UseChatArgs) {
+export function useChat({ conn }: UseChatArgs) {
 	const [items, setItems] = useState<ChatItem[]>([]);
 	const [status, setStatus] = useState<ChatStatus>("idle");
 	const [error, setError] = useState<string>("");
@@ -48,16 +47,17 @@ export function useChat({ conn, cwd }: UseChatArgs) {
 		const update = n.update as Record<string, unknown>;
 		const kind = update.sessionUpdate as string | undefined;
 
-		if (kind === "agent_message_chunk") {
+		if (kind === "agent_message_chunk" || kind === "user_message_chunk") {
 			const content = update.content as { type?: string; text?: string } | undefined;
 			if (content?.type !== "text" || !content.text) return;
+			const role = kind === "user_message_chunk" ? "user" : "assistant";
 			const chunk = content.text;
 			setItems((prev) => {
 				const last = prev[prev.length - 1];
-				if (last?.kind === "message" && last.role === "assistant") {
+				if (last?.kind === "message" && last.role === role) {
 					return [...prev.slice(0, -1), { ...last, text: last.text + chunk }];
 				}
-				return [...prev, { kind: "message", role: "assistant", text: chunk }];
+				return [...prev, { kind: "message", role, text: chunk }];
 			});
 			return;
 		}
@@ -102,7 +102,7 @@ export function useChat({ conn, cwd }: UseChatArgs) {
 			setItems((prev) => [...prev, { kind: "message", role: "user", text }]);
 			try {
 				if (!sessionIdRef.current) {
-					const ns = await conn.newSession({ cwd, mcpServers: [] });
+					const ns = await conn.newSession({ cwd: "/", mcpServers: [] });
 					sessionIdRef.current = ns.sessionId;
 				}
 				const result = await conn.prompt({
@@ -118,15 +118,53 @@ export function useChat({ conn, cwd }: UseChatArgs) {
 				setStatus("idle");
 			}
 		},
-		[conn, cwd],
+		[conn],
 	);
 
-	const reset = useCallback(() => {
+	const newSession = useCallback(() => {
 		setItems([]);
 		setError("");
 		setStatus("idle");
 		sessionIdRef.current = null;
 	}, []);
 
-	return { items, status, error, send, handleNotification, reset };
+	const loadSession = useCallback(
+		async (sessionId: string) => {
+			if (!conn) {
+				setError("not connected");
+				return;
+			}
+			setError("");
+			setItems([]);
+			sessionIdRef.current = sessionId;
+			try {
+				type LoadCapable = {
+					loadSession?: (params: { sessionId: string; cwd: string; mcpServers: never[] }) => Promise<unknown>;
+				};
+				const c = conn as unknown as LoadCapable;
+				if (typeof c.loadSession !== "function") {
+					setError("server does not support session/load");
+					return;
+				}
+				await c.loadSession({ sessionId, cwd: "/", mcpServers: [] });
+			} catch (err) {
+				setError(err instanceof Error ? err.message : String(err));
+			}
+		},
+		[conn],
+	);
+
+	const reset = newSession;
+
+	return {
+		items,
+		status,
+		error,
+		send,
+		handleNotification,
+		newSession,
+		loadSession,
+		reset,
+		currentSessionId: () => sessionIdRef.current,
+	};
 }

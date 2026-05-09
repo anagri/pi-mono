@@ -60,4 +60,16 @@ export class AppPage {
 		if (filter?.status) sel += `[data-tool-status="${filter.status}"]`;
 		return this.page.locator(sel);
 	}
+
+	sessionRows() {
+		return this.page.locator('[data-testid="session-row"]');
+	}
+
+	async clickNewSession() {
+		await this.page.getByTestId("new-session").click();
+	}
+
+	sessionRow(sessionIdPrefix: string) {
+		return this.page.locator(`[data-testid="session-row"][data-session-id^="${sessionIdPrefix}"]`);
+	}
 }
