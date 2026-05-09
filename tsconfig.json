@@ -41,6 +41,7 @@
 		"packages/bodhi-pi-cli/**/*",
 		"packages/bodhi-pi-node/**/*",
 		"packages/bodhi-pi-browser/**/*",
-		"packages/bodhi-pi-web/**/*"
+		"packages/bodhi-pi-web/**/*",
+		"packages/bodhi-pi-ws-frontend/**/*"
 	]
 }
