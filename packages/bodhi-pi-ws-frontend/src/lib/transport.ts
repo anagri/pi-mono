@@ -6,6 +6,7 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { encodeToken, type UserCtx } from "./auth";
+import { createEventLog, type EventLog } from "./event-log";
 import { wsToStream } from "./ws-stream";
 
 export const SUBPROTOCOL = "bodhi-pi.v1";
@@ -44,6 +45,7 @@ export interface ConnectOptions {
 export interface Connection {
 	ws: WebSocket;
 	conn: ClientSideConnection;
+	eventLog: EventLog;
 }
 
 export function connect(opts: ConnectOptions): Promise<Connection> {
@@ -57,12 +59,16 @@ export function connect(opts: ConnectOptions): Promise<Connection> {
 	return new Promise((resolve, reject) => {
 		let opened = false;
 
+		const eventLog = createEventLog();
+
 		ws.addEventListener("open", () => {
 			opened = true;
-			const stream = wsToStream(ws);
+			const stream = wsToStream(ws, (direction, raw) => {
+				eventLog.publish({ direction, raw, ts: Date.now() });
+			});
 			const acpStream = ndJsonStream(stream.writable, stream.readable);
 			const conn = new ClientSideConnection(() => new WireClient(opts.handlers ?? {}), acpStream);
-			resolve({ ws, conn });
+			resolve({ ws, conn, eventLog });
 		});
 
 		ws.addEventListener("close", (ev) => {

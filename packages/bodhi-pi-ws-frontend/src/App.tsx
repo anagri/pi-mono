@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { connect, type Connection } from "./lib/transport";
+import * as lastSession from "./lib/last-session";
 import { useSettings } from "./hooks/useSettings";
 import { useChat } from "./hooks/useChat";
 import { useSessions } from "./hooks/useSessions";
+import { EventStreamPanel } from "./components/EventStreamPanel";
 import "./App.css";
 
 type Status = "idle" | "connecting" | "connected" | "disconnected" | "unauthorized";
@@ -16,8 +18,18 @@ function App() {
 	const [connectError, setConnectError] = useState<string>("");
 	const [connection, setConnection] = useState<Connection | null>(null);
 	const [draft, setDraft] = useState<string>("");
+	const settingsRef = useRef(settings);
+	useEffect(() => {
+		settingsRef.current = settings;
+	}, [settings]);
 
-	const chat = useChat({ conn: connection?.conn ?? null, cwd: SESSION_CWD });
+	const onSessionIdChange = useCallback((id: string | null) => {
+		if (!id) return;
+		const s = settingsRef.current;
+		lastSession.write(s.serverUrl, s.id, id);
+	}, []);
+
+	const chat = useChat({ conn: connection?.conn ?? null, cwd: SESSION_CWD, onSessionIdChange });
 	const sessions = useSessions({ conn: connection?.conn ?? null });
 
 	const onConnect = useCallback(async () => {
@@ -64,6 +76,29 @@ function App() {
 		}
 	}, [status, sessions]);
 
+	// Auto-resume last session on connect.
+	const { loadSession, addSystemMessage } = chat;
+	useEffect(() => {
+		if (status !== "connected") return;
+		const last = lastSession.read(settings.serverUrl, settings.id);
+		if (!last) return;
+		let cancelled = false;
+		void (async () => {
+			try {
+				await loadSession(last);
+				if (cancelled) return;
+				addSystemMessage(`resumed session: ${last.slice(0, 8)}…`);
+			} catch {
+				if (cancelled) return;
+				lastSession.clear(settings.serverUrl, settings.id);
+				addSystemMessage(`previous session ${last.slice(0, 8)}… not available; starting fresh`);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [status, settings.serverUrl, settings.id, loadSession, addSystemMessage]);
+
 	return (
 		<main
 			style={{
@@ -71,6 +106,7 @@ function App() {
 				margin: "2rem auto",
 				padding: "0 1rem",
 				fontFamily: "system-ui, sans-serif",
+				marginRight: status === "connected" ? 440 : "auto",
 			}}
 		>
 			<h1>bodhi-pi WS frontend</h1>
@@ -143,6 +179,7 @@ function App() {
 				data-agent-name={agentName}
 				data-chat-status={chat.status}
 				data-current-model={chat.currentModelId}
+				data-current-session-id={chat.sessionId ?? ""}
 				style={{ padding: "0.75rem", border: "1px solid #ccc", borderRadius: 4, marginBottom: "1rem" }}
 			>
 				<div>
@@ -311,6 +348,8 @@ function App() {
 					</div>
 				</div>
 			) : null}
+
+			<EventStreamPanel log={status === "connected" ? (connection?.eventLog ?? null) : null} />
 		</main>
 	);
 }

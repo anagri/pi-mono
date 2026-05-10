@@ -3,6 +3,8 @@ export interface WsStream {
 	writable: WritableStream<Uint8Array>;
 }
 
+export type FrameTap = (direction: "inbound" | "outbound", raw: string) => void;
+
 async function toUint8Array(data: unknown): Promise<Uint8Array> {
 	if (data instanceof ArrayBuffer) return new Uint8Array(data);
 	if (data instanceof Uint8Array) return data;
@@ -11,14 +13,24 @@ async function toUint8Array(data: unknown): Promise<Uint8Array> {
 	throw new Error(`unexpected ws message type: ${typeof data}`);
 }
 
-export function wsToStream(ws: WebSocket): WsStream {
+export function wsToStream(ws: WebSocket, tap?: FrameTap): WsStream {
 	ws.binaryType = "arraybuffer";
+	const decoder = new TextDecoder("utf-8");
 
 	const readable = new ReadableStream<Uint8Array>({
 		start(controller) {
 			ws.addEventListener("message", (ev) => {
 				toUint8Array(ev.data).then(
-					(chunk) => controller.enqueue(chunk),
+					(chunk) => {
+						if (tap) {
+							try {
+								tap("inbound", decoder.decode(chunk, { stream: false }));
+							} catch {
+								// tap failures must never break the transport
+							}
+						}
+						controller.enqueue(chunk);
+					},
 					(err) => controller.error(err),
 				);
 			});
@@ -49,6 +61,13 @@ export function wsToStream(ws: WebSocket): WsStream {
 			const copy = new Uint8Array(chunk.byteLength);
 			copy.set(chunk);
 			ws.send(copy);
+			if (tap) {
+				try {
+					tap("outbound", decoder.decode(copy, { stream: false }));
+				} catch {
+					// tap failures must never break the transport
+				}
+			}
 		},
 		close() {
 			ws.close();
