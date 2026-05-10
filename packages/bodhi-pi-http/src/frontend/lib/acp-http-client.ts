@@ -105,6 +105,16 @@ export class AcpHttpClient {
 		return this.call("session/cancel", { sessionId });
 	}
 
+	closeSession(sessionId: string): Promise<unknown> {
+		return this.call("session/close", { sessionId });
+	}
+
+	setSessionConfigOption(params: { sessionId: string; configId: string; value: string }): Promise<{
+		configOptions: { id: string; currentValue: string; options?: { value: string; name?: string }[] }[];
+	}> {
+		return this.call("session/setSessionConfigOption", params as unknown as Record<string, unknown>);
+	}
+
 	private notificationHandlers = new Set<SessionNotificationHandler>();
 
 	onSessionUpdate(handler: SessionNotificationHandler): () => void {

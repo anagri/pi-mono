@@ -16,7 +16,10 @@ export interface ToolCard {
 	preview?: string;
 }
 
-export type ChatItem = { type: "message"; message: ChatMessage } | { type: "tool"; tool: ToolCard };
+export type ChatItem =
+	| { type: "message"; message: ChatMessage }
+	| { type: "tool"; tool: ToolCard }
+	| { type: "system"; system: { id: string; text: string } };
 
 export interface UseChatResult {
 	items: ChatItem[];
@@ -26,6 +29,7 @@ export interface UseChatResult {
 	cancel: () => void;
 	loadSession: (sessionId: string) => Promise<void>;
 	clear: () => void;
+	addSystemMessage: (text: string) => void;
 }
 
 /**
@@ -106,7 +110,11 @@ export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResul
 		setStatus("idle");
 	}, []);
 
-	return { items, status, error, send, cancel, loadSession, clear };
+	const addSystemMessage = useCallback((text: string) => {
+		setItems((prev) => [...prev, { type: "system", system: { id: `sys-${Date.now()}-${Math.random()}`, text } }]);
+	}, []);
+
+	return { items, status, error, send, cancel, loadSession, clear, addSystemMessage };
 }
 
 function applyUpdate(
