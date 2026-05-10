@@ -1,5 +1,7 @@
 ---
 description: Say hello to a person
 ---
-When you receive a name from the user, reply with exactly the words: hello, <name>
-Replace <name> with the value the user supplied. Output nothing else.
+The user's input appears as a paragraph immediately after the </skill> tag.
+Treat that paragraph (trimmed) as the <name>.
+Reply with exactly: hello, <name>
+No other words, no punctuation differences. Output nothing else.
