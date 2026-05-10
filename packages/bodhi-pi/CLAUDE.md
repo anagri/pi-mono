@@ -18,13 +18,14 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 
 ## Reference clients & publishable adapters
 
-`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, ScriptExecutor are host-injected. Three reference hosts and two adapter packages prove every feature works across Node, browser-only, and split (server + browser) deployments:
+`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, ScriptExecutor are host-injected. Four reference hosts and two adapter packages prove every feature works across Node, browser-only, and split (server + browser, two transports) deployments:
 
 | Package | Role | Status |
 |---|---|---|
 | `packages/bodhi-pi-cli` | Reference Node host (REPL CLI) | private workspace package |
 | `packages/bodhi-pi-web` | Reference browser host (Vite/React + Web Worker, single-tenant) | private workspace package |
 | `packages/bodhi-pi-ws-server` + `packages/bodhi-pi-ws-frontend` | Reference split host — Node WS server (multi-tenant SQLite, ACP over WebSocket) + thin React frontend | private workspace package pair |
+| `packages/bodhi-pi-http` | Reference HTTP+SSE split host — single Node project (server+frontend in one package), ACP over MCP-Streamable-HTTP, **per-turn agent rebuild** (proves serialize/deserialize deployment) | private workspace package |
 | `packages/bodhi-pi-node` | Publishable Node adapters (`@bodhiapp/bodhi-pi-node`) — `createNodeFilesystem`, `createSqliteSessionStore`, `createNodeScriptExecutor` | publishable npm package |
 | `packages/bodhi-pi-browser` | Publishable browser adapters (`@bodhiapp/bodhi-pi-browser`) — `createZenfsFilesystem`, `createDexieSessionStore`, `createBrowserScriptExecutor`, `createMessagePortStream` | publishable npm package |
 
@@ -32,13 +33,13 @@ The adapter packages exist so any third-party host (a different CLI, a desktop w
 
 ## Runtime-host parity rule
 
-Every user-visible feature MUST land in **all three reference hosts**: `bodhi-pi-cli`, `bodhi-pi-web`, and the `bodhi-pi-ws-server` + `bodhi-pi-ws-frontend` pair. Functional parity is required, technical parity is not — different runtimes (Node CLI vs. browser worker vs. WebSocket split) get to use whichever transport / storage / extension-loader fits, but the user-observable behavior and the e2e assertions MUST line up.
+Every user-visible feature MUST land in **all four reference hosts**: `bodhi-pi-cli`, `bodhi-pi-web`, the `bodhi-pi-ws-server` + `bodhi-pi-ws-frontend` pair, and `bodhi-pi-http`. Functional parity is required, technical parity is not — different runtimes (Node CLI vs. browser worker vs. WebSocket split vs. HTTP+SSE split) get to use whichever transport / storage / extension-loader fits, but the user-observable behavior and the e2e assertions MUST line up.
 
 A PR that adds a feature to one host without the others is a regression by default. Either:
 - include parity changes in the same PR (preferred), or
 - explicitly justify and file follow-up work for the missing hosts in the PR description.
 
-Each host's CLAUDE.md carries its own per-runtime feature inventory; treat those inventories as one set of three lenses on the same surface.
+Each host's CLAUDE.md carries its own per-runtime feature inventory; treat those inventories as one set of four lenses on the same surface. `bodhi-pi-http` is the **deployment-portability lens**: same agent, same features, but state lives in storage between every turn (per-turn agent rebuild from SQLite).
 
 ## Feature workflow (TDD across the matrix)
 
@@ -50,6 +51,7 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 4. **`bodhi-pi-browser/`** — same surface, browser-shaped (ZenFS, Dexie, AsyncFunction). Add unit tests in `bodhi-pi-browser/src/**/*.test.ts` (vitest + fake-indexeddb).
 5. **`bodhi-pi-cli/e2e/*.e2e.ts`** — Node host wires through the new feature. Real LLM, real adapters, asserts the feature reaches the user.
 6. **`bodhi-pi-web/e2e/*.spec.ts`** — Playwright spec, same shape as the CLI e2e but driven through Chrome + the worker. Real LLM, seeded `window.__bodhiPiWebSeed` workspace.
+7. **`bodhi-pi-http/test/integration/*.test.ts`** — server-side integration test (faux provider) proving the feature works under per-turn agent rebuild (each prompt = fresh agent re-hydrated from SQLite). Add `bodhi-pi-http/e2e/*.e2e.ts` for cross-turn behaviors that need a real LLM (e.g., history continuity).
 
 **Why both reference clients?** Browser-only quirks (FSA permission re-grant after picker, ZenFS async-only, AsyncFunction CSP needs) and Node-only quirks (better-sqlite3 native bindings, child_process spawn ergonomics) only surface in the host. The agent's own e2e can't catch them. The two reference clients are our cross-runtime regression net.
 

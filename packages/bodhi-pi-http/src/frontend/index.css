@@ -1,0 +1,52 @@
+:root {
+	font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	color-scheme: light dark;
+}
+
+body {
+	margin: 0;
+	background: #fafafa;
+	color: #1a1a1a;
+}
+
+@media (prefers-color-scheme: dark) {
+	body {
+		background: #16171d;
+		color: #f3f4f6;
+	}
+}
+
+#root {
+	min-height: 100vh;
+}
+
+input[type="email"],
+input[type="number"],
+input[type="text"] {
+	padding: 0.35rem 0.5rem;
+	font: inherit;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+}
+
+button {
+	padding: 0.35rem 0.85rem;
+	font: inherit;
+	cursor: pointer;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+	button {
+		background: #232531;
+		color: #f3f4f6;
+		border-color: #3a3d4a;
+	}
+}
+
+button:disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+}
