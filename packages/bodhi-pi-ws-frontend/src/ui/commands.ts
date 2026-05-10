@@ -7,6 +7,9 @@ const EXT_SESSION_CLONE = "_bodhi-pi/session/clone";
 const EXT_SESSION_ENTRIES = "_bodhi-pi/session/entries";
 const EXT_SESSION_TREE = "_bodhi-pi/session/tree";
 const EXT_SESSION_NAVIGATE = "_bodhi-pi/session/navigate";
+const EXT_SESSION_SET_NAME = "_bodhi-pi/session/setName";
+const EXT_SESSION_STATS = "_bodhi-pi/session/stats";
+const EXT_SESSION_EXPORT = "_bodhi-pi/session/export";
 
 export interface UiCommandContext {
 	conn: ClientSideConnection;
@@ -68,6 +71,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /goto <entryId>    move the leaf to <entryId>; subsequent prompts branch from there",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
+				"  /name <text>       set the session display name",
+				"  /session           show session stats (counts + leaf id)",
+				"  /export            copy the session JSONL to clipboard",
 			];
 			if (ctx.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -318,6 +324,62 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					sessionId: ctx.sessionId,
 				})) as { newSessionId: string };
 				ctx.addSystemMessage(`cloned: ${result.newSessionId}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/name": {
+			const name = parts.slice(1).join(" ").trim();
+			if (!name) {
+				ctx.addSystemMessage("usage: /name <display name>");
+				return true;
+			}
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_SET_NAME, {
+					sessionId: ctx.sessionId,
+					name,
+				})) as { name: string };
+				ctx.addSystemMessage(`session name set to: ${result.name}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/session": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_STATS, {
+					sessionId: ctx.sessionId,
+				})) as { messageCount: number; toolCallCount: number; leafId: string; name?: string };
+				const lines = [
+					`session: ${ctx.sessionId}`,
+					...(result.name ? [`  name: ${result.name}`] : []),
+					`  messages: ${result.messageCount}`,
+					`  tool calls: ${result.toolCallCount}`,
+					`  leaf: ${result.leafId}`,
+				];
+				ctx.addSystemMessage(lines.join("\n"));
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/export": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_EXPORT, {
+					sessionId: ctx.sessionId,
+				})) as { format: string; content: string };
+				try {
+					await navigator.clipboard.writeText(result.content);
+					ctx.addSystemMessage(
+						`exported (${result.format}, ${result.content.length} bytes) — copied to clipboard`,
+					);
+				} catch {
+					ctx.addSystemMessage(`exported (${result.format}, ${result.content.length} bytes)\n${result.content}`);
+				}
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

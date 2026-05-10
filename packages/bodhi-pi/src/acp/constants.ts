@@ -21,3 +21,12 @@ export const EXT_SESSION_TREE = "_bodhi-pi/session/tree";
 
 /** Move the session's leaf pointer to a target entry id; subsequent appends branch from there. */
 export const EXT_SESSION_NAVIGATE = "_bodhi-pi/session/navigate";
+
+/** Set the session's display name (writes a `session_info` entry). */
+export const EXT_SESSION_SET_NAME = "_bodhi-pi/session/setName";
+
+/** Return computed stats `{ messageCount, toolCallCount, leafId, name? }`. */
+export const EXT_SESSION_STATS = "_bodhi-pi/session/stats";
+
+/** Serialize the session to JSONL (header line + entry lines on the active branch). */
+export const EXT_SESSION_EXPORT = "_bodhi-pi/session/export";

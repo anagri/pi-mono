@@ -4,8 +4,11 @@ import {
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_ENTRIES,
+	EXT_SESSION_EXPORT,
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_SET_NAME,
+	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
@@ -72,6 +75,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /goto <entryId>    move the leaf to <entryId>; subsequent prompts branch from there",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
+				"  /name <text>       set the session display name",
+				"  /session           show session stats (counts + leaf id)",
+				"  /export            copy the session JSONL to clipboard",
 			];
 			if (ctx.state.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -304,6 +310,62 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					sessionId: ctx.state.sessionId,
 				})) as { newSessionId: string };
 				ctx.addSystemMessage(`cloned: ${result.newSessionId}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/name": {
+			const name = parts.slice(1).join(" ").trim();
+			if (!name) {
+				ctx.addSystemMessage("usage: /name <display name>");
+				return true;
+			}
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_SET_NAME, {
+					sessionId: ctx.state.sessionId,
+					name,
+				})) as { name: string };
+				ctx.addSystemMessage(`session name set to: ${result.name}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/session": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_STATS, {
+					sessionId: ctx.state.sessionId,
+				})) as { messageCount: number; toolCallCount: number; leafId: string; name?: string };
+				const lines = [
+					`session: ${ctx.state.sessionId}`,
+					...(result.name ? [`  name: ${result.name}`] : []),
+					`  messages: ${result.messageCount}`,
+					`  tool calls: ${result.toolCallCount}`,
+					`  leaf: ${result.leafId}`,
+				];
+				ctx.addSystemMessage(lines.join("\n"));
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/export": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_EXPORT, {
+					sessionId: ctx.state.sessionId,
+				})) as { format: string; content: string };
+				try {
+					await navigator.clipboard.writeText(result.content);
+					ctx.addSystemMessage(
+						`exported (${result.format}, ${result.content.length} bytes) — copied to clipboard`,
+					);
+				} catch {
+					ctx.addSystemMessage(`exported (${result.format}, ${result.content.length} bytes)\n${result.content}`);
+				}
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

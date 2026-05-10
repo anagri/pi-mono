@@ -65,8 +65,11 @@ import {
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_ENTRIES,
+	EXT_SESSION_EXPORT,
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_SET_NAME,
+	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
 } from "./constants.js";
@@ -404,7 +407,94 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (method === EXT_SESSION_NAVIGATE) {
 			return await this.handleSessionNavigate(params);
 		}
+		if (method === EXT_SESSION_SET_NAME) {
+			return await this.handleSessionSetName(params);
+		}
+		if (method === EXT_SESSION_STATS) {
+			return await this.handleSessionStats(params);
+		}
+		if (method === EXT_SESSION_EXPORT) {
+			return await this.handleSessionExport(params);
+		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
+	}
+
+	private async handleSessionSetName(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		const name = params.name;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_SET_NAME}: sessionId must be a string`);
+		}
+		if (typeof name !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_SET_NAME}: name must be a string`);
+		}
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new RequestError(-32602, `session ${sessionId} is not loaded. Call session/load first.`);
+		}
+		await this.appendEntry(sessionId, session, {
+			type: "session_info",
+			id: randomUUID(),
+			parentId: session.leafId,
+			timestamp: Date.now(),
+			name,
+		});
+		return { ok: true, name };
+	}
+
+	private async handleSessionStats(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_STATS}: sessionId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const path = walkPath(record.entries, record.leafId ?? null);
+		let messageCount = 0;
+		let toolCallCount = 0;
+		let name: string | undefined;
+		for (const entry of path) {
+			if (entry.type === "message") {
+				const role = entry.message.role;
+				if (role === "user" || role === "assistant") messageCount++;
+				if (role === "assistant") {
+					for (const block of entry.message.content) {
+						if (block.type === "toolCall") toolCallCount++;
+					}
+				}
+			} else if (entry.type === "session_info" && entry.name !== undefined) {
+				name = entry.name;
+			}
+		}
+		const leafId = record.leafId ?? record.entries[record.entries.length - 1]?.id ?? null;
+		return {
+			messageCount,
+			toolCallCount,
+			leafId,
+			...(name !== undefined ? { name } : {}),
+		};
+	}
+
+	private async handleSessionExport(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_EXPORT}: sessionId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const path = walkPath(record.entries, record.leafId ?? null);
+		const lines: string[] = [
+			JSON.stringify({
+				type: "session",
+				version: 1,
+				id: record.id,
+				cwd: record.cwd,
+				createdAt: record.createdAt,
+				...(record.parentSessionId !== undefined ? { parentSessionId: record.parentSessionId } : {}),
+			}),
+		];
+		for (const entry of path) lines.push(JSON.stringify(entry));
+		return { format: "jsonl", content: lines.join("\n") };
 	}
 
 	private async handleSessionTree(params: Record<string, unknown>): Promise<Record<string, unknown>> {

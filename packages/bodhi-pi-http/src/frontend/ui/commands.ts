@@ -47,6 +47,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /tree              show the full session DAG (all entries)",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
+				"  /name <text>       set the session display name",
+				"  /session           show session stats (counts + leaf id)",
+				"  /export            copy the session JSONL to clipboard",
 			];
 			if (ctx.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -282,6 +285,67 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 			try {
 				const result = await ctx.client.cloneSession({ sessionId: ctx.sessionId });
 				ctx.addSystemMessage(`cloned: ${result.newSessionId}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/name": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			const name = parts.slice(1).join(" ").trim();
+			if (!name) {
+				ctx.addSystemMessage("usage: /name <display name>");
+				return true;
+			}
+			try {
+				const result = await ctx.client.setSessionName({ sessionId: ctx.sessionId, name });
+				ctx.addSystemMessage(`session name set to: ${result.name}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/session": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			try {
+				const result = await ctx.client.getSessionStats({ sessionId: ctx.sessionId });
+				const lines = [
+					`session: ${ctx.sessionId}`,
+					...(result.name ? [`  name: ${result.name}`] : []),
+					`  messages: ${result.messageCount}`,
+					`  tool calls: ${result.toolCallCount}`,
+					`  leaf: ${result.leafId ?? "(none)"}`,
+				];
+				ctx.addSystemMessage(lines.join("\n"));
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/export": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			try {
+				const result = await ctx.client.exportSession({ sessionId: ctx.sessionId });
+				try {
+					await navigator.clipboard.writeText(result.content);
+					ctx.addSystemMessage(
+						`exported (${result.format}, ${result.content.length} bytes) — copied to clipboard`,
+					);
+				} catch {
+					ctx.addSystemMessage(`exported (${result.format}, ${result.content.length} bytes)\n${result.content}`);
+				}
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

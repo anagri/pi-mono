@@ -4,8 +4,11 @@ import {
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_ENTRIES,
+	EXT_SESSION_EXPORT,
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_SET_NAME,
+	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
@@ -54,6 +57,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /goto <entryId>    move the leaf to <entryId>; subsequent prompts branch from there",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
+				"  /name <text>       set the session display name",
+				"  /session           show session stats (counts + leaf id)",
+				"  /export            print the session as JSONL to stdout",
 				"  /quit              exit",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -303,6 +309,57 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				process.stdout.write(`error: ${String(err)}\n`);
 			}
 			return false;
+
+		case "/name": {
+			const name = parts.slice(1).join(" ").trim();
+			if (!name) {
+				process.stdout.write("usage: /name <display name>\n");
+				return false;
+			}
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_SET_NAME, {
+					sessionId: ctx.state.sessionId,
+					name,
+				})) as { name: string };
+				process.stdout.write(`session name set to: ${result.name}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/session": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_STATS, {
+					sessionId: ctx.state.sessionId,
+				})) as { messageCount: number; toolCallCount: number; leafId: string; name?: string };
+				process.stdout.write(
+					[
+						`  session: ${ctx.state.sessionId}`,
+						...(result.name ? [`  name: ${result.name}`] : []),
+						`  messages: ${result.messageCount}`,
+						`  tool calls: ${result.toolCallCount}`,
+						`  leaf: ${result.leafId}`,
+					].join("\n"),
+				);
+				process.stdout.write("\n");
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/export": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_EXPORT, {
+					sessionId: ctx.state.sessionId,
+				})) as { format: string; content: string };
+				process.stdout.write(`${result.content}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
 
 		case "/quit":
 		case "/exit":
