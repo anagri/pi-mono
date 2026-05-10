@@ -117,20 +117,21 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/sessions": {
 			try {
-				const result = await ctx.conn.listSessions({ cwd: ctx.cwd });
-				const sessions = result.sessions;
-				if (sessions.length === 0) {
-					ctx.addSystemMessage("(no sessions for this cwd)");
-				} else {
-					const lines = ["sessions:"];
-					for (const s of sessions) {
+				const lines = ["sessions:"];
+				let cursor: string | undefined;
+				let total = 0;
+				do {
+					const result = await ctx.conn.listSessions({ cwd: ctx.cwd, ...(cursor ? { cursor } : {}) });
+					for (const s of result.sessions) {
 						const marker = s.sessionId === ctx.state.sessionId ? "*" : " ";
 						const updated = s.updatedAt ? formatAge(Date.parse(s.updatedAt)) : "";
 						// Full sessionId is included so /resume <id> can be copy-pasted.
 						lines.push(`${marker} ${s.sessionId}  ${updated}`);
 					}
-					ctx.addSystemMessage(lines.join("\n"));
-				}
+					total += result.sessions.length;
+					cursor = result.nextCursor ?? undefined;
+				} while (cursor);
+				ctx.addSystemMessage(total === 0 ? "(no sessions for this cwd)" : lines.join("\n"));
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

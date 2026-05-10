@@ -33,8 +33,9 @@ type LoadSessionCapable = {
 	loadSession?: (params: { sessionId: string; cwd: string; mcpServers: never[] }) => Promise<{
 		configOptions?: { currentValue?: string }[];
 	}>;
-	listSessions?: (params: { cwd?: string }) => Promise<{
+	listSessions?: (params: { cwd?: string; cursor?: string }) => Promise<{
 		sessions: { sessionId: string; cwd: string; updatedAt?: number }[];
+		nextCursor?: string;
 	}>;
 	closeSession?: (params: { sessionId: string }) => Promise<unknown>;
 };
@@ -117,19 +118,21 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = await c.listSessions({});
-				const sessions = result.sessions ?? [];
-				if (sessions.length === 0) {
-					ctx.addSystemMessage("(no sessions)");
-				} else {
-					const lines = ["sessions:"];
+				const lines = ["sessions:"];
+				let cursor: string | undefined;
+				let total = 0;
+				do {
+					const result = await c.listSessions(cursor ? { cursor } : {});
+					const sessions = result.sessions ?? [];
 					for (const s of sessions) {
 						const marker = s.sessionId === ctx.sessionId ? "*" : " ";
 						const updated = typeof s.updatedAt === "number" ? formatAge(s.updatedAt) : "";
 						lines.push(`${marker} ${s.sessionId}  ${updated}`);
 					}
-					ctx.addSystemMessage(lines.join("\n"));
-				}
+					total += sessions.length;
+					cursor = result.nextCursor;
+				} while (cursor);
+				ctx.addSystemMessage(total === 0 ? "(no sessions)" : lines.join("\n"));
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

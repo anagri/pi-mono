@@ -86,8 +86,15 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 				cwd: row.cwd,
 				createdAt: row.createdAt,
 				updatedAt: row.updatedAt,
+				leafId: row.leafId ?? null,
 				entries: rows.map((e) => e.entry),
 			};
+		},
+
+		async setLeafId(sessionId, entryId) {
+			const row = await sessions.get(sessionId);
+			if (!row) throw new Error(`session ${sessionId} not found (or deleted)`);
+			await sessions.update(sessionId, { leafId: entryId });
 		},
 
 		async append(sessionId: string, entry: SessionEntry) {
@@ -168,7 +175,8 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 				const copied = position === "before" ? chain.slice(0, -1) : chain;
 				const newId = crypto.randomUUID();
 				const now = Date.now();
-				await sessions.put({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now });
+				const newLeafId = copied.length > 0 ? copied[copied.length - 1].entry.id : null;
+				await sessions.put({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now, leafId: newLeafId });
 				for (let i = 0; i < copied.length; i++) {
 					await entries.add({ sessionId: newId, seq: i, entry: copied[i].entry });
 				}

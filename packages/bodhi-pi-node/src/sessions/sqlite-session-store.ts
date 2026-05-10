@@ -103,9 +103,15 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 				cwd: row.cwd,
 				createdAt: row.createdAt,
 				updatedAt: row.updatedAt,
+				leafId: row.leafId ?? null,
 				entries: entryRows.map((r) => parseSessionEntry(r.payload)),
 			};
 			return Promise.resolve(record);
+		},
+
+		setLeafId(sessionId, entryId) {
+			db.update(sessions).set({ leafId: entryId }).where(eq(sessions.id, sessionId)).run();
+			return Promise.resolve();
 		},
 
 		append(sessionId, entry) {
@@ -222,8 +228,11 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 
 				const newId = crypto.randomUUID();
 				const now = Date.now();
+				const newLeafId = copied.length > 0 ? copied[copied.length - 1].entry.id : null;
 				db.transaction((tx) => {
-					tx.insert(sessions).values({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now }).run();
+					tx.insert(sessions)
+						.values({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now, leafId: newLeafId })
+						.run();
 					for (let i = 0; i < copied.length; i++) {
 						const node = copied[i];
 						tx.insert(sessionEntries)

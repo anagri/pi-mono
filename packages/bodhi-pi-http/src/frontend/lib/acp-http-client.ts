@@ -183,6 +183,12 @@ export class AcpHttpClient {
 		}>;
 	}
 
+	navigateSession(params: { sessionId: string; targetEntryId: string }): Promise<{ leafId: string }> {
+		return this.call("_bodhi-pi/session/navigate", params as unknown as Record<string, unknown>) as Promise<{
+			leafId: string;
+		}>;
+	}
+
 	setSessionName(params: { sessionId: string; name: string }): Promise<{ ok: true; name: string }> {
 		return this.call("_bodhi-pi/session/setName", params as unknown as Record<string, unknown>) as Promise<{
 			ok: true;

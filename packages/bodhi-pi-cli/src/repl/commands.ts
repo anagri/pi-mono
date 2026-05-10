@@ -92,17 +92,19 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 		}
 
 		case "/sessions": {
-			const result = await ctx.sessionStore.list({ cwd: ctx.cwd });
-			if (result.sessions.length === 0) {
-				process.stdout.write("  (no sessions for this directory)\n");
-			} else {
+			let cursor: string | undefined;
+			let total = 0;
+			do {
+				const result = await ctx.sessionStore.list({ cwd: ctx.cwd, ...(cursor ? { cursor } : {}) });
 				for (const s of result.sessions) {
 					const ago = formatAge(s.updatedAt);
 					const active = s.sessionId === ctx.state.sessionId ? " *" : "";
 					process.stdout.write(`  ${s.sessionId.slice(0, 8)}…  ${s.messageCount} msgs  ${ago}${active}\n`);
 				}
-				if (result.nextCursor) process.stdout.write("  (more — use /sessions with cursor support TBD)\n");
-			}
+				total += result.sessions.length;
+				cursor = result.nextCursor;
+			} while (cursor);
+			if (total === 0) process.stdout.write("  (no sessions for this directory)\n");
 			return false;
 		}
 

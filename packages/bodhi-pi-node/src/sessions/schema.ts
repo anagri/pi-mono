@@ -7,6 +7,7 @@ export const sessions = sqliteTable(
 		cwd: text("cwd").notNull(),
 		createdAt: integer("created_at").notNull(),
 		updatedAt: integer("updated_at").notNull(),
+		leafId: text("leaf_id"),
 	},
 	// Cursor pagination tie-breaks on `id` after `updatedAt`; include `id` in
 	// the index so the secondary order is index-served, not a scan within ties.

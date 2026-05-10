@@ -81,7 +81,10 @@ test(`${EXT_SESSION_NAVIGATE} moves the leaf; subsequent prompts branch from the
 		sessionId,
 		targetEntryId: firstUserId,
 	})) as { leafId: string };
-	expect(nav.leafId).toBe(firstUserId);
+	// Cross-branch /goto auto-appends a branch_summary entry on the new branch,
+	// so leafId post-navigate points at that summary (not at the target id).
+	expect(typeof nav.leafId).toBe("string");
+	expect(nav.leafId).not.toBe(firstUserId);
 
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "branch turn" }] });
 

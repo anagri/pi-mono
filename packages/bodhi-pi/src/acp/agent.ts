@@ -35,7 +35,14 @@ import {
 	type BeforeToolCallResult,
 	type Agent as PiAgent,
 } from "@mariozechner/pi-agent-core";
-import type { Api, Model, StopReason as PiStopReason, ProviderResponse } from "@mariozechner/pi-ai";
+import {
+	type Api,
+	type AssistantMessage,
+	isContextOverflow,
+	type Model,
+	type StopReason as PiStopReason,
+	type ProviderResponse,
+} from "@mariozechner/pi-ai";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
@@ -45,6 +52,7 @@ import { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import { detectCrossBranch, runBranchSummary } from "@/sessions/branch-summary.js";
 import { buildSessionContext, walkPath } from "@/sessions/build-context.js";
 import {
 	type CompactionSettings,
@@ -120,6 +128,8 @@ interface SessionState {
 	cancelled: boolean;
 	/** Current head of the session DAG; `null` for a fresh session. Bumped on every entry append. */
 	leafId: string | null;
+	/** True after one auto-compact retry; reset at the start of each prompt() to allow per-turn recovery. */
+	overflowRecoveryAttempted: boolean;
 }
 
 function toAvailableCommand(t: PromptTemplate): AvailableCommand {
@@ -546,9 +556,44 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const target = record.entries.find((e) => e.id === targetEntryId);
 		if (!target) throw new RequestError(-32602, `unknown entry: ${targetEntryId}`);
 
+		const session = this.sessions.get(sessionId);
+		const oldLeaf = session?.leafId ?? record.leafId ?? null;
+
+		// If navigation crosses branches, summarize the abandoned tail and append
+		// a branch_summary entry on the new branch BEFORE moving the leaf.
+		const cross = detectCrossBranch(record.entries, oldLeaf, targetEntryId);
+		if (cross && session) {
+			try {
+				const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
+				if (apiKey) {
+					const result = await runBranchSummary(cross.abandonedTail, session.piAgent.state.model, apiKey);
+					if (result.summary) {
+						session.leafId = targetEntryId;
+						await this.config.sessionStore.setLeafId?.(sessionId, targetEntryId);
+						await this.appendEntry(sessionId, session, {
+							type: "branch_summary",
+							id: randomUUID(),
+							parentId: targetEntryId,
+							timestamp: Date.now(),
+							fromId: cross.commonAncestorId,
+							summary: result.summary,
+							...(result.details ? { details: result.details } : {}),
+						});
+						const refreshed = await this.config.sessionStore.load(sessionId);
+						if (refreshed) {
+							const ctx = buildSessionContext(refreshed, session.leafId);
+							session.piAgent.state.messages = ctx.messages;
+						}
+						return { leafId: session.leafId };
+					}
+				}
+			} catch {
+				// Non-fatal: fall through to plain navigate
+			}
+		}
+
 		await this.config.sessionStore.setLeafId?.(sessionId, targetEntryId);
 
-		const session = this.sessions.get(sessionId);
 		if (session) {
 			session.leafId = targetEntryId;
 			const refreshed = await this.config.sessionStore.load(sessionId);
@@ -741,6 +786,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 
 		// Reset so a prior cancel doesn't bleed into this prompt.
 		session.cancelled = false;
+		// Each user prompt gets one shot at overflow auto-compact recovery.
+		session.overflowRecoveryAttempted = false;
 
 		const sessionId = params.sessionId;
 		const events = this.events;
@@ -782,6 +829,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
 			}
 			if (outcome.stopReason === "error") {
+				const recovered = await this.tryOverflowRecovery(sessionId, session, promptText, outcome);
+				if (recovered) {
+					return { stopReason: "end_turn", userMessageId: params.messageId ?? null };
+				}
 				await events.emitAgentEnd({
 					type: "agent_end",
 					sessionId,
@@ -841,6 +892,83 @@ class BodhiPiAcpAgent implements AcpAgent {
 		} catch {
 			// Auto-compact errors are non-fatal — leave the session uncompacted.
 		}
+	}
+
+	/**
+	 * Catch context-overflow errors from the provider, run an emergency compaction,
+	 * and retry the same prompt once. Subsequent overflows fall through to the
+	 * caller's error path. The retry suppresses the original `agent_end` (caller
+	 * already emitted one for the failed turn); a successful retry emits its own.
+	 */
+	private async tryOverflowRecovery(
+		sessionId: string,
+		session: SessionState,
+		promptText: string,
+		outcome: { stopReason?: PiStopReason; errorMessage?: string },
+	): Promise<boolean> {
+		if (session.overflowRecoveryAttempted) return false;
+		const messages = session.piAgent.state.messages;
+		const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+		if (!lastAssistant) return false;
+		const contextWindow = (session.piAgent.state.model as Model<Api> & { contextWindow?: number }).contextWindow ?? 0;
+		if (!isContextOverflow(lastAssistant as AssistantMessage, contextWindow > 0 ? contextWindow : undefined)) {
+			return false;
+		}
+		session.overflowRecoveryAttempted = true;
+
+		// Drop the failed assistant message so the retry doesn't replay it as history.
+		session.piAgent.state.messages = messages.slice(0, -1);
+
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) return false;
+		const path = walkPath(record.entries, session.leafId);
+		const preparation = prepareCompaction(path, this.compactionSettings);
+		if (!preparation) return false;
+		const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
+		if (!apiKey) return false;
+		try {
+			const result = await runCompaction(preparation, session.piAgent.state.model, apiKey);
+			const compactionEntry: CompactionEntry = {
+				type: "compaction",
+				id: randomUUID(),
+				parentId: session.leafId,
+				timestamp: Date.now(),
+				summary: result.summary,
+				firstKeptEntryId: result.firstKeptEntryId,
+				tokensBefore: result.tokensBefore,
+				...(result.details ? { details: result.details } : {}),
+			};
+			await this.appendEntry(sessionId, session, compactionEntry);
+			const refreshed = await this.config.sessionStore.load(sessionId);
+			if (refreshed) {
+				const ctx = buildSessionContext(refreshed, session.leafId);
+				session.piAgent.state.messages = ctx.messages;
+			}
+		} catch {
+			return false;
+		}
+
+		// Retry the same user prompt once. A re-overflow falls through.
+		const retryOutcome: { stopReason?: PiStopReason; errorMessage?: string } = {};
+		const unsubscribe = this.subscribeToAgent(sessionId, session, retryOutcome);
+		try {
+			await session.piAgent.prompt(promptText);
+			await session.piAgent.waitForIdle();
+		} finally {
+			unsubscribe();
+		}
+		if (retryOutcome.stopReason === "error") {
+			outcome.stopReason = retryOutcome.stopReason;
+			outcome.errorMessage = retryOutcome.errorMessage;
+			return false;
+		}
+		await this.events.emitAgentEnd({
+			type: "agent_end",
+			sessionId,
+			stopReason: mapStopReason(retryOutcome.stopReason),
+			messages: session.piAgent.state.messages,
+		});
+		return true;
 	}
 
 	/**
@@ -1111,6 +1239,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			skills,
 			cancelled: false,
 			leafId,
+			overflowRecoveryAttempted: false,
 		});
 	}
 

@@ -8,6 +8,13 @@
       "when": 1748358000000,
       "tag": "0000_sessions_table",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778413200000,
+      "tag": "0001_drop_recreate_with_leaf_id",
+      "breakpoints": true
     }
   ]
 }

@@ -46,7 +46,9 @@ test("/tree lists all entries with a single leaf marker; /goto moves the leaf an
 		sessionId,
 		targetEntryId: firstUserId,
 	})) as { leafId: string };
-	expect(nav.leafId).toBe(firstUserId);
+	// Cross-branch /goto auto-appends a branch_summary; leafId points there now.
+	expect(typeof nav.leafId).toBe("string");
+	expect(nav.leafId).not.toBe(firstUserId);
 
 	await harness.clientConn.prompt({
 		sessionId,

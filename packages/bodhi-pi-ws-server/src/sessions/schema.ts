@@ -15,6 +15,7 @@ export const sessions = sqliteTable(
 		cwd: text("cwd").notNull(),
 		createdAt: integer("created_at").notNull(),
 		updatedAt: integer("updated_at").notNull(),
+		leafId: text("leaf_id"),
 	},
 	(t) => [index("sessions_user_updated_idx").on(t.userId, t.updatedAt, t.id)],
 );

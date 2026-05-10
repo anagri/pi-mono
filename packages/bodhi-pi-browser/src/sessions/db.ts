@@ -19,6 +19,7 @@ export interface SessionRow {
 	cwd: string;
 	createdAt: number;
 	updatedAt: number;
+	leafId?: string | null;
 }
 
 export interface EntryRow {

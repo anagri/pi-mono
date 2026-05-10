@@ -45,6 +45,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /compact [hint]    summarize earlier turns to free context",
 				"  /entries           list message entry ids on the current branch",
 				"  /tree              show the full session DAG (all entries)",
+				"  /goto <entryId>    move the leaf to <entryId>; subsequent prompts branch from there",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
 				"  /name <text>       set the session display name",
@@ -90,19 +91,21 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/sessions": {
 			try {
-				const result = await ctx.client.listSessions({});
-				const sessions = result.sessions ?? [];
-				if (sessions.length === 0) {
-					ctx.addSystemMessage("(no sessions)");
-				} else {
-					const lines = ["sessions:"];
+				const lines = ["sessions:"];
+				let cursor: string | undefined;
+				let total = 0;
+				do {
+					const result = await ctx.client.listSessions(cursor ? { cursor } : {});
+					const sessions = result.sessions ?? [];
 					for (const s of sessions) {
 						const marker = s.sessionId === ctx.sessionId ? "*" : " ";
 						const updated = formatAge(s.updatedAt);
 						lines.push(`${marker} ${s.sessionId}  ${updated}`);
 					}
-					ctx.addSystemMessage(lines.join("\n"));
-				}
+					total += sessions.length;
+					cursor = result.nextCursor;
+				} while (cursor);
+				ctx.addSystemMessage(total === 0 ? "(no sessions)" : lines.join("\n"));
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}
@@ -250,6 +253,25 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					}
 					ctx.addSystemMessage(lines.join("\n"));
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/goto": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			const targetEntryId = parts[1];
+			if (!targetEntryId) {
+				ctx.addSystemMessage("usage: /goto <entry-id>");
+				return true;
+			}
+			try {
+				const result = await ctx.client.navigateSession({ sessionId: ctx.sessionId, targetEntryId });
+				ctx.addSystemMessage(`leaf moved to: ${result.leafId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

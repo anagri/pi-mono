@@ -129,9 +129,18 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 				cwd: row.cwd,
 				createdAt: row.createdAt,
 				updatedAt: row.updatedAt,
+				leafId: row.leafId ?? null,
 				entries: entryRows.map((r) => parseSessionEntry(r.payload)),
 			};
 			return Promise.resolve(record);
+		},
+
+		setLeafId(sessionId, entryId) {
+			if (!ownsSession(sessionId)) {
+				return Promise.reject(new Error(`session ${sessionId} not found for user ${userId}`));
+			}
+			db.update(sessions).set({ leafId: entryId }).where(eq(sessions.id, sessionId)).run();
+			return Promise.resolve();
 		},
 
 		append(sessionId, entry) {
@@ -261,9 +270,10 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 				const copied = position === "before" ? chain.slice(0, -1) : chain;
 				const newId = crypto.randomUUID();
 				const now = Date.now();
+				const newLeafId = copied.length > 0 ? copied[copied.length - 1].entry.id : null;
 				db.transaction((tx) => {
 					tx.insert(sessions)
-						.values({ id: newId, userId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now })
+						.values({ id: newId, userId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now, leafId: newLeafId })
 						.run();
 					for (let i = 0; i < copied.length; i++) {
 						const node = copied[i];
