@@ -48,7 +48,9 @@ import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { buildSessionContext, walkPath } from "@/sessions/build-context.js";
 import {
 	type CompactionSettings,
+	calculateContextTokens,
 	DEFAULT_COMPACTION_SETTINGS,
+	getLastAssistantUsage,
 	prepareCompaction,
 	runCompaction,
 } from "@/sessions/compaction.js";
@@ -795,9 +797,49 @@ class BodhiPiAcpAgent implements AcpAgent {
 				stopReason,
 				messages: session.piAgent.state.messages,
 			});
+			await this.checkAutoCompact(sessionId, session);
 			return { stopReason, userMessageId: params.messageId ?? null };
 		} finally {
 			unsubscribe();
+		}
+	}
+
+	private async checkAutoCompact(sessionId: string, session: SessionState): Promise<void> {
+		const settings = this.compactionSettings;
+		if (!settings.enabled) return;
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) return;
+		const path = walkPath(record.entries, session.leafId);
+		const usage = getLastAssistantUsage(path);
+		if (!usage) return;
+		const contextTokens = calculateContextTokens(usage);
+		const contextWindow = (session.piAgent.state.model as Model<Api> & { contextWindow?: number }).contextWindow ?? 0;
+		if (contextWindow <= 0) return;
+		if (contextTokens <= contextWindow - settings.reserveTokens) return;
+		const preparation = prepareCompaction(path, settings);
+		if (!preparation) return;
+		const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
+		if (!apiKey) return;
+		try {
+			const result = await runCompaction(preparation, session.piAgent.state.model, apiKey);
+			const compactionEntry: CompactionEntry = {
+				type: "compaction",
+				id: randomUUID(),
+				parentId: session.leafId,
+				timestamp: Date.now(),
+				summary: result.summary,
+				firstKeptEntryId: result.firstKeptEntryId,
+				tokensBefore: result.tokensBefore,
+				...(result.details ? { details: result.details } : {}),
+			};
+			await this.appendEntry(sessionId, session, compactionEntry);
+			const refreshed = await this.config.sessionStore.load(sessionId);
+			if (refreshed) {
+				const ctx = buildSessionContext(refreshed, session.leafId);
+				session.piAgent.state.messages = ctx.messages;
+			}
+		} catch {
+			// Auto-compact errors are non-fatal — leave the session uncompacted.
 		}
 	}
 

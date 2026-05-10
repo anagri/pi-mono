@@ -1,6 +1,7 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import {
 	type BodhiPiEventHandlers,
+	type CompactionSettings,
 	createBodhiPiAgent,
 	createInMemoryFilesystem,
 	createInMemorySessionStore,
@@ -28,6 +29,7 @@ export interface TestHarnessOptions {
 	scriptExecutor?: ScriptExecutor;
 	eventHandlers?: BodhiPiEventHandlers;
 	extensionFactories?: RegisteredExtension[];
+	compaction?: Partial<CompactionSettings>;
 }
 
 /**
@@ -54,6 +56,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			...(opts.scriptExecutor ? { scriptExecutor: opts.scriptExecutor } : {}),
 			...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
 			...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
+			...(opts.compaction ? { compaction: opts.compaction } : {}),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {

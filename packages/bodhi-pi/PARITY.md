@@ -13,6 +13,7 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | Feature | ACP method | All hosts | Notes |
 |---|---|---|---|
 | Manual context compaction | `_bodhi-pi/session/compact` | ✅ | Faux-mocked LLM in core; real `gpt-4o-mini` per host (Phase A). |
+| Auto-compaction (token threshold) | (post-`agent_end` hook in core) | ✅ core only | Triggers when last assistant `Usage.totalTokens` > `contextWindow - reserveTokens`. Settings: `enabled`, `reserveTokens` (default 16384), `keepRecentTokens` (default 20000). Faux-provider integration tests in `bodhi-pi/test/auto-compact.test.ts`; per-host e2e is intentionally skipped (rigging real-LLM context windows is flaky). |
 | Branch creation by user-message rewind (`/fork`) | `_bodhi-pi/session/fork` | ✅ | Returns `{ newSessionId, selectedText? }`. Position `"before"` excludes the target message; `"at"` includes it (alias used by `/clone`). |
 | Full-chain duplication (`/clone`) | `_bodhi-pi/session/clone` | ✅ | New session id with the same entries copied through `forkRecord`. |
 | Active-branch entry list (`/entries`) | `_bodhi-pi/session/entries` | ✅ | Hosts use this as the blackbox seam to capture entry ids for `/fork`. |
@@ -30,7 +31,7 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | `/import` (re-create a session from JSONL) | Out of scope for the Phase B–D minimum. Round-trip with `/export` requires schema validation and security review (untrusted bytes); revisit if a real consumer needs it. |
 | `/goto` persistence in the http host | The http host rebuilds the agent per turn, so the in-memory leaf is lost across requests. Persisting `leaf_id` in the SQLite stores would unblock it (one-column schema migration in `bodhi-pi-node`, `bodhi-pi-ws-server`, and `bodhi-pi-http` plus `setLeafId` impls). |
 | LLM-generated `branch_summary` on cross-branch navigation | `/tree` + `/goto` work without summarization. Adding a summarization LLM call on navigation can land if a host needs the abandoned-branch context surfaced. |
-| Auto-compaction (token-threshold + overflow recovery) | Phase E (not yet shipped). Will use the faux-provider context-window knobs in `bodhi-pi/test/` only — per-host e2e is not planned for this feature. |
+| Overflow-driven compaction recovery | Token-threshold auto-compaction shipped (Phase E). Provider-overflow detection + auto-retry of the failed call (per coding-agent's `isContextOverflow`) is a follow-up. |
 | HTML export | Host concern; out of scope for the agent. A separate `@bodhiapp/bodhi-pi-export-html` helper can be added if a host wants it. |
 | `/share` (gist upload) | Auth + GitHub integration; out of scope. |
 | Auth credential store / OAuth refresh | Hosts inject API keys via `getApiKey`; persistent credential storage is a host concern for now. |
