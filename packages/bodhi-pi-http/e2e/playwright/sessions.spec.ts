@@ -1,10 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("session lifecycle slash commands", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("/new creates a session; /sessions lists it; /close + /resume continues across requests", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

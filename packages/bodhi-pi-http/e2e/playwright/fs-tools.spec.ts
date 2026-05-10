@@ -1,10 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("fs tools surface tool-call cards (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("write + read round-trip", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

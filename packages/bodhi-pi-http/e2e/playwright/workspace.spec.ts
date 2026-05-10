@@ -1,9 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("seeded workspace via --workspace (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
 	test.use({ scenario: "workspace-readme" });
 
 	test("agent reads a file seeded into the spawned server's workspace", async ({ app }) => {

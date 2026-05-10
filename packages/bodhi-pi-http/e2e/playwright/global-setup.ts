@@ -7,15 +7,21 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(here, "../..");
 
 /**
- * Build the frontend before any spec runs. Each spawned bodhi-pi-http server
- * serves `dist/public/` from the package root, so this single build covers
- * every per-test spawn.
- *
- * If `dist/public/index.html` already exists and BODHI_PI_HTTP_E2E_REBUILD is
- * unset, we skip — fast iteration during local dev. CI sets the flag to force
- * a rebuild every run.
+ * Build the frontend once before any spec runs (each spawned server serves it)
+ * and fail-fast if any required API key is missing. Fail-fast — not skip — is
+ * the policy for parity-host e2e: a missing key is a setup error, not a test
+ * the runner should silently elide. Mirrors `bodhi-pi-ws-frontend/e2e/global-setup.ts`.
  */
 async function globalSetup(): Promise<void> {
+	const required = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
+	const missing = required.filter((k) => !process.env[k]);
+	if (missing.length > 0) {
+		throw new Error(
+			`Missing required env vars for bodhi-pi-http e2e: ${missing.join(", ")}. ` +
+				`Set them in packages/bodhi-pi-http/.env or .env.test.`,
+		);
+	}
+
 	const indexHtml = path.join(PKG_ROOT, "dist", "public", "index.html");
 	const force = process.env.BODHI_PI_HTTP_E2E_REBUILD === "1";
 	if (!force && existsSync(indexHtml)) return;

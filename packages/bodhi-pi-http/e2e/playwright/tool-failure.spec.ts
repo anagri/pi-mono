@@ -1,10 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("tool-call failure (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("read tool against a missing file surfaces failed status", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

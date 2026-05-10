@@ -1,10 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("tool-call replay on /resume (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("tool-call cards from a prior session re-render as completed on /resume", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

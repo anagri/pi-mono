@@ -1,11 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_OPENAI = Boolean(process.env.OPENAI_API_KEY);
-const HAS_ANTHROPIC = Boolean(process.env.ANTHROPIC_API_KEY);
-
 test.describe("cross-provider chat in same session", () => {
-	test.skip(!(HAS_OPENAI && HAS_ANTHROPIC), "requires OPENAI_API_KEY + ANTHROPIC_API_KEY");
-
 	test("threads openai and anthropic responses in the same session", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

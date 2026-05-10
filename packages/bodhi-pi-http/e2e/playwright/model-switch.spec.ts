@@ -1,11 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_OPENAI = Boolean(process.env.OPENAI_API_KEY);
-const HAS_ANTHROPIC = Boolean(process.env.ANTHROPIC_API_KEY);
-
 test.describe("/model command (real providers)", () => {
-	test.skip(!(HAS_OPENAI && HAS_ANTHROPIC), "requires OPENAI_API_KEY + ANTHROPIC_API_KEY");
-
 	test("/model switches between providers and updates the status bar", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

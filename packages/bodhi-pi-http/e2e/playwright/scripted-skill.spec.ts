@@ -1,9 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("scripted skill via run_script (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
 	test.use({ scenario: "skills-days-since-birthday" });
 
 	test("/skill:days-since-birthday invokes run_script and returns an integer", async ({ app }) => {

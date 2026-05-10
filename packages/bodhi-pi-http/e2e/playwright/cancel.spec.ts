@@ -1,10 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("cancel mid-stream", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("clicking Stop returns chat status to idle", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

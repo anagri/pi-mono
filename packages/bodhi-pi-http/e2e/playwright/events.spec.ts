@@ -1,7 +1,5 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("EventsPanel: lifecycle + wire tabs", () => {
 	test("captures initialize handshake on connect (wire tab)", async ({ app }) => {
 		await app.goto();
@@ -18,8 +16,6 @@ test.describe("EventsPanel: lifecycle + wire tabs", () => {
 	});
 
 	test.describe("real-LLM round-trip", () => {
-		test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 		test("captures session/prompt + session/update frames around a prompt", async ({ app }) => {
 			await app.goto();
 			await app.setSettings();

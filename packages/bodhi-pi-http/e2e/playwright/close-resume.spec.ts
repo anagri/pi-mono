@@ -1,7 +1,5 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 /**
  * HTTP-specific proof: a session can be /closed (server-side runtime state
  * dropped) and /resumed in a later prompt round-trip — and the conversation
@@ -12,8 +10,6 @@ const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
  * proof matching the HTTP host's "stateless between turns" architecture.
  */
 test.describe("close + resume continues across HTTP requests (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("/close → /resume <id> recalls the prior turn's context via SQLite hydration", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

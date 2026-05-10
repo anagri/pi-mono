@@ -1,9 +1,6 @@
 import { expect, test } from "./fixtures.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
 test.describe("project slash commands (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
 	test.use({ scenario: ["commands-echo", "commands-say-tuesday"] });
 
 	test("/<known> arg expands $1 and reaches the model", async ({ app }) => {
@@ -32,8 +29,6 @@ test.describe("project slash commands (real LLM)", () => {
 });
 
 test.describe("unknown slash command falls through (real LLM)", () => {
-	test.skip(!HAS_KEY, "requires OPENAI_API_KEY");
-
 	test("/<unknown> passes through verbatim to the agent", async ({ app }) => {
 		await app.goto();
 		await app.setSettings();

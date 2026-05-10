@@ -4,9 +4,7 @@ import { ssePrompt } from "../test/helpers/sse-client.js";
 import { rpc } from "../test/helpers/test-server.js";
 import { type RealServer, startRealServer } from "./helpers/real-server.js";
 
-const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
-
-describe.skipIf(!HAS_KEY)("real-LLM chat round-trip via HTTP+SSE", () => {
+describe("real-LLM chat round-trip via HTTP+SSE", () => {
 	let rs: RealServer;
 
 	beforeEach(async () => {
