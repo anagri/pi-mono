@@ -1,8 +1,6 @@
 import { expect, test } from "./fixtures";
 
 test("create and list sessions via slash commands", async ({ app }) => {
-	test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 	await app.goto();
 	await app.setSettings({ email: "m5@example.com", id: 5, sendToken: true });
 	await app.clickConnect();

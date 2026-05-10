@@ -30,7 +30,7 @@ test.describe("M5.2 worker bridges the 19-event lifecycle to window.__bodhiPiEve
 	}) => {
 		await test.step("boot lands on idle and the log array is initialised", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			const logExists = await page.evaluate(() =>
 				Array.isArray((window as { __bodhiPiEventLog?: unknown }).__bodhiPiEventLog),
 			);
@@ -45,7 +45,7 @@ test.describe("M5.2 worker bridges the 19-event lifecycle to window.__bodhiPiEve
 		await test.step("a text-only prompt surfaces the agent + provider + message events", async () => {
 			await chat.send("Reply with the single word: ping");
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 
 			const log = await readLog(page);
 			const types = log.map((r) => r[RECORD_TYPE]);
@@ -74,7 +74,7 @@ test.describe("M5.2 worker bridges the 19-event lifecycle to window.__bodhiPiEve
 		await test.step("a tool round-trip surfaces tool_call, tool_result, and tool_execution_{start,end}", async () => {
 			await chat.send("Use the read tool to read /mnt/demo/notes.txt and tell me the secret word.");
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 
 			const log = await readLog(page);
 			const types = log.map((r) => r[RECORD_TYPE]);
@@ -91,7 +91,7 @@ test.describe("M5.2 worker bridges the 19-event lifecycle to window.__bodhiPiEve
 
 		await test.step("/close fires session_shutdown", async () => {
 			await chat.send("/close");
-			await chat.waitForState("closed", 30_000);
+			await chat.waitForState("closed");
 
 			const types = (await readLog(page)).map((r) => r[RECORD_TYPE]);
 			expect(types).toContain("session_shutdown");
@@ -101,7 +101,7 @@ test.describe("M5.2 worker bridges the 19-event lifecycle to window.__bodhiPiEve
 	test("/model <other> fires model_select with fromModelId/toModelId populated", async ({ chat, page }) => {
 		await test.step("boot defaults to gpt-4o-mini", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 		});
 

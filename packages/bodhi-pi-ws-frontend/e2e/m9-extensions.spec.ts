@@ -4,8 +4,6 @@ test.describe("M9 project extensions (redact-secrets)", () => {
 	test.use({ scenario: "extensions-redact-secrets" });
 
 	test("extension hooks tool_result; assistant cannot leak the original secret", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 		await app.clickConnect();

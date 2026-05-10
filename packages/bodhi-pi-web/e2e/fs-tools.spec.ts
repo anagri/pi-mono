@@ -8,7 +8,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test("agent writes a file then reads it back", async ({ chat }) => {
 			await test.step("boot", async () => {
 				await chat.goto();
-				await chat.waitForState("idle", 60_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("send write+read prompt", async () => {
@@ -18,7 +18,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 						"Step 3: reply with the file's content verbatim.",
 				);
 				await chat.waitForState("streaming");
-				await chat.waitForState("idle", 90_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("write tool ran and completed", async () => {
@@ -46,7 +46,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test("agent edits a file and verifies via read", async ({ chat }) => {
 			await test.step("boot", async () => {
 				await chat.goto();
-				await chat.waitForState("idle", 60_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("send edit+read prompt", async () => {
@@ -56,7 +56,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 						"Step 3: reply with the resulting file content verbatim and nothing else.",
 				);
 				await chat.waitForState("streaming");
-				await chat.waitForState("idle", 90_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("edit tool ran and completed", async () => {
@@ -84,7 +84,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test("agent lists three seeded files", async ({ chat }) => {
 			await test.step("boot", async () => {
 				await chat.goto();
-				await chat.waitForState("idle", 60_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("send ls prompt", async () => {
@@ -93,7 +93,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 						"Reply with the filenames separated by single spaces and nothing else.",
 				);
 				await chat.waitForState("streaming");
-				await chat.waitForState("idle", 90_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("ls tool ran and completed", async () => {
@@ -120,7 +120,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test("agent finds .md files under /mnt/demo", async ({ chat }) => {
 			await test.step("boot", async () => {
 				await chat.goto();
-				await chat.waitForState("idle", 60_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("send find prompt", async () => {
@@ -129,7 +129,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 						"Reply with just the integer count of .md files and nothing else.",
 				);
 				await chat.waitForState("streaming");
-				await chat.waitForState("idle", 90_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("find tool ran and completed", async () => {
@@ -153,7 +153,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 		test("agent greps for a codeword", async ({ chat }) => {
 			await test.step("boot", async () => {
 				await chat.goto();
-				await chat.waitForState("idle", 60_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("send grep prompt", async () => {
@@ -162,7 +162,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 						"Then reply with the codeword value only and nothing else.",
 				);
 				await chat.waitForState("streaming");
-				await chat.waitForState("idle", 90_000);
+				await chat.waitForState("idle");
 			});
 
 			await test.step("grep tool surfaced as a card", async () => {

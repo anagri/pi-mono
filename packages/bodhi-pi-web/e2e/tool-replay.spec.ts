@@ -6,7 +6,7 @@ test.describe("M15 tool-call replay across /resume", () => {
 	test("write tool_call replays as a completed card after /resume", async ({ chat }) => {
 		await test.step("boot to idle", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("session A: write a file (creates a tool_call entry)", async () => {
@@ -15,7 +15,7 @@ test.describe("M15 tool-call replay across /resume", () => {
 					"After the write, reply with exactly: ok",
 			);
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 90_000);
+			await chat.waitForState("idle");
 			await expect(chat.toolCalls({ name: "write", status: "completed" })).toHaveCount(1);
 		});
 
@@ -32,7 +32,7 @@ test.describe("M15 tool-call replay across /resume", () => {
 
 		await test.step("/new clears the tool-call cards", async () => {
 			await chat.send("/new");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			// Auto-retrying assertion: clear() + the subsequent system message
 			// land in two React commits; toHaveCount waits for the steady state.
 			await expect(chat.toolCalls()).toHaveCount(0);
@@ -40,7 +40,7 @@ test.describe("M15 tool-call replay across /resume", () => {
 
 		await test.step("/resume A replays the write tool_call as completed", async () => {
 			await chat.send(`/resume ${sessionA}`);
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			await expect(chat.toolCalls({ name: "write", status: "completed" })).toHaveCount(1);
 		});
 	});

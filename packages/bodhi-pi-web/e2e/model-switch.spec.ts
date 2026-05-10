@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures";
 test("M4 multi-model switching with /model", async ({ chat }) => {
 	await test.step("boot defaults to gpt-4o-mini", async () => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 	});
 
@@ -16,7 +16,7 @@ test("M4 multi-model switching with /model", async ({ chat }) => {
 	await test.step("first turn against gpt-4o-mini", async () => {
 		await chat.send("Reply with the single word: alpha");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("alpha");
 	});
 
@@ -35,7 +35,7 @@ test("M4 multi-model switching with /model", async ({ chat }) => {
 	await test.step("second turn routes to gpt-4o", async () => {
 		await chat.send("Reply with the single word: beta");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("beta");
 	});
 

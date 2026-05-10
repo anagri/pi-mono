@@ -4,8 +4,6 @@ test.describe("M8 markdown skills", () => {
 	test.use({ scenario: "skills-say-hello" });
 
 	test("/skill:say-hello triggers the skill prompt and the model echoes", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 		await app.clickConnect();

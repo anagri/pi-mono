@@ -10,21 +10,16 @@ loadEnv({ path: path.resolve(here, "../bodhi-pi-ws-server/.env") });
 // e2e/.env.test (gitignored) layers on top — required for M12 anthropic-gated specs.
 loadEnv({ path: path.resolve(here, "e2e/.env.test"), override: true });
 
-if (!process.env.ANTHROPIC_API_KEY) {
-	throw new Error(
-		"ANTHROPIC_API_KEY is required for ws-frontend e2e tests. " +
-			"Copy packages/bodhi-pi/e2e/.env.test → packages/bodhi-pi-ws-frontend/e2e/.env.test.",
-	);
-}
-
 const FRONTEND_PORT = 35273;
 
 export default defineConfig({
 	testDir: "./e2e",
+	globalSetup: "./e2e/global-setup.ts",
 	fullyParallel: false,
 	workers: 1,
 	reporter: "list",
 	timeout: 60_000,
+	expect: { timeout: 30_000 },
 	use: {
 		baseURL: `http://localhost:${FRONTEND_PORT}`,
 		trace: "retain-on-failure",

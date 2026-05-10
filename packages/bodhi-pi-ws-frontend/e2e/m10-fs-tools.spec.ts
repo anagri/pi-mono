@@ -3,7 +3,6 @@ import { expect, test } from "./fixtures";
 test.describe("M10 fs tools surface tool-call cards", () => {
 	test.describe("write + read", () => {
 		test("agent writes a file then reads it back", async ({ app }) => {
-			test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
 			await app.goto();
 			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 			await app.clickConnect();
@@ -15,7 +14,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 					"Step 3: reply with the file's content verbatim.",
 			);
 			await app.expectChatStatus("streaming");
-			await app.expectChatStatus("idle", 90_000);
+			await app.expectChatStatus("idle");
 
 			await expect(app.toolCalls({ name: "write" }).first()).toHaveAttribute("data-tool-status", "completed");
 			await expect(app.toolCalls({ name: "read" }).first()).toHaveAttribute("data-tool-status", "completed");
@@ -27,7 +26,6 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-notes-txt" });
 
 		test("agent edits a file and verifies via read", async ({ app }) => {
-			test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
 			await app.goto();
 			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 			await app.clickConnect();
@@ -39,7 +37,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 					"Step 3: reply with the resulting file content verbatim and nothing else.",
 			);
 			await app.expectChatStatus("streaming");
-			await app.expectChatStatus("idle", 90_000);
+			await app.expectChatStatus("idle");
 
 			await expect(app.toolCalls({ name: "edit" }).first()).toHaveAttribute("data-tool-status", "completed");
 			await expect(app.toolCalls({ name: "read" }).first()).toHaveAttribute("data-tool-status", "completed");
@@ -51,7 +49,6 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-notes-abc" });
 
 		test("agent lists notes/", async ({ app }) => {
-			test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
 			await app.goto();
 			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 			await app.clickConnect();
@@ -62,7 +59,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 					"Reply with the filenames separated by single spaces and nothing else.",
 			);
 			await app.expectChatStatus("streaming");
-			await app.expectChatStatus("idle", 90_000);
+			await app.expectChatStatus("idle");
 
 			await expect(app.toolCalls({ name: "ls" }).first()).toHaveAttribute("data-tool-status", "completed");
 			const reply = (await app.lastMessageText("assistant")).toLowerCase();
@@ -76,7 +73,6 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-codeword" });
 
 		test("agent greps for a codeword and surfaces the result in the tool card preview", async ({ app }) => {
-			test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
 			await app.goto();
 			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 			await app.clickConnect();
@@ -87,7 +83,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 					"Then reply with the codeword value only and nothing else.",
 			);
 			await app.expectChatStatus("streaming");
-			await app.expectChatStatus("idle", 90_000);
+			await app.expectChatStatus("idle");
 
 			const grepCard = app.toolCalls({ name: "grep" }).first();
 			await expect(grepCard).toHaveAttribute("data-tool-status", "completed");
@@ -100,7 +96,6 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-docs-tree" });
 
 		test("agent finds .md files under the workspace", async ({ app }) => {
-			test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
 			await app.goto();
 			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 			await app.clickConnect();
@@ -111,7 +106,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 					"Reply with just the integer count of .md files and nothing else.",
 			);
 			await app.expectChatStatus("streaming");
-			await app.expectChatStatus("idle", 90_000);
+			await app.expectChatStatus("idle");
 
 			await expect(app.toolCalls({ name: "find" }).first()).toHaveAttribute("data-tool-status", "completed");
 			// Two .md files seeded: docs/intro.md and docs/notes/draft.md.

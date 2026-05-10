@@ -5,10 +5,10 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 
 	await test.step("session A: prompt with a fact", async () => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		await chat.send("Remember the codeword 'aurora'. Reply only with: noted");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("noted");
 	});
 
@@ -43,7 +43,7 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 	await test.step("after resume, context is alive", async () => {
 		await chat.send("What was the codeword? Reply with just the word.");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("aurora");
 	});
 
@@ -74,16 +74,16 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 test("M6 reload resumes the last session via Dexie + sessionStorage", async ({ chat }) => {
 	await test.step("seed a session with a known fact", async () => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		await chat.send("Remember the codeword 'cobalt'. Reply only with: noted");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("noted");
 	});
 
 	await test.step("reload the page", async () => {
 		await chat.page.reload();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 	});
 
 	await test.step("history replays via session/load", async () => {
@@ -96,7 +96,7 @@ test("M6 reload resumes the last session via Dexie + sessionStorage", async ({ c
 	await test.step("post-reload context is alive", async () => {
 		await chat.send("What was the codeword? Reply with just the word.");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("cobalt");
 	});
 });

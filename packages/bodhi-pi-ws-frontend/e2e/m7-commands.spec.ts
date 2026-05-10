@@ -4,8 +4,6 @@ test.describe("M7 project slash commands", () => {
 	test.use({ scenario: ["commands-echo", "commands-say-tuesday"] });
 
 	test("/<known> arg expands $1 and reaches the model", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 		await app.clickConnect();
@@ -35,8 +33,6 @@ test.describe("M7 project slash commands", () => {
 test.describe("M7 unknown slash command falls through", () => {
 	// No fixtures — empty workspace. Ensures unknown / commands forward to LLM as text.
 	test("/<unknown> passes through verbatim", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 		await app.clickConnect();

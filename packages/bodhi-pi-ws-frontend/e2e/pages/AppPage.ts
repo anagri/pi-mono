@@ -54,8 +54,8 @@ export class AppPage {
 		await this.sendButton.click();
 	}
 
-	async expectChatStatus(status: "idle" | "streaming", timeoutMs = 30_000) {
-		await expect(this.status).toHaveAttribute("data-chat-status", status, { timeout: timeoutMs });
+	async expectChatStatus(status: "idle" | "streaming") {
+		await expect(this.status).toHaveAttribute("data-chat-status", status);
 	}
 
 	async lastMessageText(role: "user" | "assistant"): Promise<string> {

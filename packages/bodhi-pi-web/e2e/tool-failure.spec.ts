@@ -6,7 +6,7 @@ test.describe("M15 tool-failure rendering", () => {
 	test("a failed read tool surfaces as a failed card", async ({ chat }) => {
 		await test.step("boot to idle on empty workspace", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("ask agent to read a missing file", async () => {
@@ -16,7 +16,7 @@ test.describe("M15 tool-failure rendering", () => {
 					"After the failure, reply with exactly the words: file-missing",
 			);
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 90_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("read tool card lands as failed", async () => {

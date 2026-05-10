@@ -1,15 +1,13 @@
 import { expect, test } from "./fixtures";
 
 test("M12 tool-call cards from a prior session re-render as completed on /resume", async ({ app }) => {
-	test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 	await app.goto();
 	await app.setSettings({ email: "replay@example.com", id: 330, sendToken: true });
 	await app.clickConnect();
 	await app.expectStatus("connected");
 
 	await app.send("Use the write tool to create a file note.txt with the contents 'replay-marker'.");
-	await app.expectChatStatus("idle", 60_000);
+	await app.expectChatStatus("idle");
 	await expect(app.toolCalls({ name: "write" }).first()).toHaveAttribute("data-tool-status", "completed");
 
 	const sessionId = await app.status.getAttribute("data-current-session-id");
@@ -23,7 +21,5 @@ test("M12 tool-call cards from a prior session re-render as completed on /resume
 	await expect(app.page.getByTestId("system-message").filter({ hasText: "resumed session" }).last()).toBeVisible();
 
 	// Replayed tool-call card from session history is rendered with completed status.
-	await expect(app.toolCalls({ name: "write" }).first()).toHaveAttribute("data-tool-status", "completed", {
-		timeout: 10_000,
-	});
+	await expect(app.toolCalls({ name: "write" }).first()).toHaveAttribute("data-tool-status", "completed");
 });

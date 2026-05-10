@@ -7,7 +7,7 @@ test.use({ workspaceSeed: { name: "demo", files: loadScenario("workspace-readme"
 test("M7 seeded workspace mounts at /mnt/<name> and chat reaches idle", async ({ chat }) => {
 	await test.step("boot to idle", async () => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 	});
 
 	await test.step("status bar reflects the mount path", async () => {
@@ -19,7 +19,7 @@ test("M7 seeded workspace mounts at /mnt/<name> and chat reaches idle", async ({
 			"Use the read tool to read /mnt/demo/readme.txt. Reply with the file's content verbatim and nothing else.",
 		);
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("hello world");
 	});
 });

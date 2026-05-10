@@ -4,8 +4,6 @@ test.describe("M8 scripted skill (run_script)", () => {
 	test.use({ scenario: "skills-days-since-birthday" });
 
 	test("/skill:days-since-birthday invokes run_script and returns the integer", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 		await app.clickConnect();

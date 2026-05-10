@@ -20,8 +20,6 @@ test.describe("M11 event stream panel", () => {
 	});
 
 	test("captures session/prompt + agent_message_chunk frames around a prompt", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "m11-events@example.com", id: 111, sendToken: true });
 		await app.clickConnect();

@@ -4,8 +4,6 @@ test.describe("M10 seeded workspace", () => {
 	test.use({ scenario: "workspace-readme" });
 
 	test("agent reads readme.txt seeded into the workspace", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
 		await app.clickConnect();
@@ -13,7 +11,7 @@ test.describe("M10 seeded workspace", () => {
 
 		await app.send("Use the read tool to read readme.txt. Reply with the file's content verbatim and nothing else.");
 		await app.expectChatStatus("streaming");
-		await app.expectChatStatus("idle", 90_000);
+		await app.expectChatStatus("idle");
 
 		await expect(app.toolCalls({ name: "read" }).first()).toHaveAttribute("data-tool-status", "completed");
 		expect((await app.lastMessageText("assistant")).toLowerCase()).toContain("hello world");

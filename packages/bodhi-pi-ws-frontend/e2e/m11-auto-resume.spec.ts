@@ -2,8 +2,6 @@ import { expect, test } from "./fixtures";
 
 test.describe("M11 auto-resume last session", () => {
 	test("resumes prior session on reload + reconnect", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "resume@example.com", id: 211, sendToken: true });
 		await app.clickConnect();
@@ -24,15 +22,13 @@ test.describe("M11 auto-resume last session", () => {
 		await app.expectStatus("connected");
 
 		// The auto-resume effect should restore the same sessionId.
-		await expect(app.status).toHaveAttribute("data-current-session-id", sessionId ?? "", { timeout: 10_000 });
+		await expect(app.status).toHaveAttribute("data-current-session-id", sessionId ?? "");
 
 		// And surface a "resumed session" system message.
 		await expect(app.page.getByTestId("system-message").filter({ hasText: "resumed session" }).last()).toBeVisible();
 	});
 
 	test("scopes resume key by user id (different user → empty session)", async ({ app }) => {
-		test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 		await app.goto();
 		await app.setSettings({ email: "userA@example.com", id: 220, sendToken: true });
 		await app.clickConnect();
@@ -69,9 +65,7 @@ test.describe("M11 auto-resume last session", () => {
 
 		// Resume effect tries loadSession, server errors, frontend logs system message
 		// and clears the stale pointer.
-		await expect(app.page.getByTestId("system-message").filter({ hasText: "starting fresh" }).last()).toBeVisible({
-			timeout: 10_000,
-		});
+		await expect(app.page.getByTestId("system-message").filter({ hasText: "starting fresh" }).last()).toBeVisible();
 
 		const stored = await app.page.evaluate(
 			([url, userId]) => window.localStorage.getItem(`bodhi-pi-ws:lastSession:${url}:${userId}`),

@@ -7,15 +7,19 @@ import { config as loadEnv } from "dotenv";
 // confusing in-test "missing key" symptom.
 loadEnv();
 
-if (!process.env.VITE_OPENAI_API_KEY) {
+const requiredEnv = ["VITE_OPENAI_API_KEY", "VITE_ANTHROPIC_API_KEY"] as const;
+const missingEnv = requiredEnv.filter((k) => !process.env[k]);
+if (missingEnv.length > 0) {
 	throw new Error(
-		"VITE_OPENAI_API_KEY is required for bodhi-pi-web e2e. Copy packages/bodhi-pi-cli/.env to packages/bodhi-pi-web/.env and re-prefix keys with VITE_.",
+		`Missing required env vars for bodhi-pi-web e2e: ${missingEnv.join(", ")}. ` +
+			`Copy packages/bodhi-pi-cli/.env to packages/bodhi-pi-web/.env and re-prefix keys with VITE_.`,
 	);
 }
 
 export default defineConfig({
 	testDir: "./e2e",
 	timeout: 120_000,
+	expect: { timeout: 30_000 },
 	fullyParallel: false,
 	retries: 0,
 	workers: 1,

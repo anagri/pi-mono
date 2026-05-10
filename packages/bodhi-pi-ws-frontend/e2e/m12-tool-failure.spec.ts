@@ -1,8 +1,6 @@
 import { expect, test } from "./fixtures";
 
 test("M12 tool-call card surfaces failed status when read targets a nonexistent file", async ({ app }) => {
-	test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 	await app.goto();
 	await app.setSettings({ email: "tool-failure@example.com", id: 320, sendToken: true });
 	await app.clickConnect();
@@ -13,7 +11,7 @@ test("M12 tool-call card surfaces failed status when read targets a nonexistent 
 			"Do not write the file first. Just attempt the read once.",
 	);
 	await app.expectChatStatus("streaming");
-	await app.expectChatStatus("idle", 60_000);
+	await app.expectChatStatus("idle");
 
 	const failed = app.toolCalls({ name: "read", status: "failed" });
 	await expect(failed.first()).toBeVisible();

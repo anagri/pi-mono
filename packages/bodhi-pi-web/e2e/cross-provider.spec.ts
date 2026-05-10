@@ -6,14 +6,14 @@ test("M13 cross-provider switch: gpt-4o-mini → claude-haiku-4-5", async ({ cha
 
 	await test.step("boot defaults to gpt-4o-mini", async () => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 	});
 
 	await test.step("OpenAI turn says openai", async () => {
 		await chat.send(provenance);
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("openai");
 	});
 
@@ -25,7 +25,7 @@ test("M13 cross-provider switch: gpt-4o-mini → claude-haiku-4-5", async ({ cha
 	await test.step("Anthropic turn says anthropic", async () => {
 		await chat.send(provenance);
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("anthropic");
 	});
 });

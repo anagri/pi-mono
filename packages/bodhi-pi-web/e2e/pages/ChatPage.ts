@@ -27,8 +27,8 @@ export class ChatPage {
 		await this.page.goto("/");
 	}
 
-	async waitForState(state: TestState, timeout = 30_000) {
-		await expect(this.chatPage).toHaveAttribute("data-test-state", state, { timeout });
+	async waitForState(state: TestState) {
+		await expect(this.chatPage).toHaveAttribute("data-test-state", state);
 	}
 
 	messages(role: MessageRole) {

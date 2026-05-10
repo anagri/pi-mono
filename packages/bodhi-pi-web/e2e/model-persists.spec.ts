@@ -6,7 +6,7 @@ test.describe("M16 model_change persists across /resume", () => {
 	test("status bar reflects the prior model after /new + /resume", async ({ chat }) => {
 		await test.step("boot defaults to gpt-4o-mini", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 		});
 
@@ -15,7 +15,7 @@ test.describe("M16 model_change persists across /resume", () => {
 			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o");
 			await chat.send("Reply with the single word: alpha");
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		let sessionA = "";
@@ -33,13 +33,13 @@ test.describe("M16 model_change persists across /resume", () => {
 
 		await test.step("/new resets to default", async () => {
 			await chat.send("/new");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 		});
 
 		await test.step("/resume A restores gpt-4o", async () => {
 			await chat.send(`/resume ${sessionA}`);
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			// loadSession's response carries configOptions[0].currentValue =
 			// the latest model_change entry. commands.ts:/resume reads it and
 			// calls setCurrentModelId — status bar's data-current-model flips.

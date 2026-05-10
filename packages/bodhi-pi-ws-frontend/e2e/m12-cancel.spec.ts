@@ -1,8 +1,6 @@
 import { expect, test } from "./fixtures";
 
 test("Stop button cancels an in-flight prompt", async ({ app }) => {
-	test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
-
 	await app.goto();
 	await app.setSettings({ email: "cancel@example.com", id: 312, sendToken: true });
 	await app.clickConnect();
@@ -17,7 +15,7 @@ test("Stop button cancels an in-flight prompt", async ({ app }) => {
 	await stop.click();
 
 	// Server should stop streaming and the finally block in send() flips status to idle.
-	await app.expectChatStatus("idle", 30_000);
+	await app.expectChatStatus("idle");
 
 	// Composer re-enables and Send button comes back.
 	await expect(app.composer).toBeEnabled();

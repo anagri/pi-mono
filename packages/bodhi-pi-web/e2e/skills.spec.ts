@@ -12,7 +12,7 @@ test.describe("M10 markdown skills", () => {
 	test("/skill:<name> wraps body and reaches the model", async ({ chat }) => {
 		await test.step("boot", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("/help advertises skill:say-hello", async () => {
@@ -23,7 +23,7 @@ test.describe("M10 markdown skills", () => {
 		await test.step("/skill:say-hello world produces 'hello, world'", async () => {
 			await chat.send("/skill:say-hello world");
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 			// Tolerate transient gpt-4o-mini variations on punctuation/casing —
 			// the e2e contract is that 'hello' and 'world' both show up in the
 			// reply, proving the skill body reached the model.
@@ -45,7 +45,7 @@ test.describe("M16 hidden skill (disable-model-invocation)", () => {
 	test("hidden skill is still advertised in /help and invokable via /skill:", async ({ chat }) => {
 		await test.step("boot", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("/help advertises the hidden skill name", async () => {
@@ -58,7 +58,7 @@ test.describe("M16 hidden skill (disable-model-invocation)", () => {
 		await test.step("/skill:days-since-birthday 2000-01-01 returns 9624", async () => {
 			await chat.send("/skill:days-since-birthday 2000-01-01");
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 90_000);
+			await chat.waitForState("idle");
 			await expect(chat.toolCalls({ name: "run_script" }).first()).toBeVisible();
 			expect(await chat.lastMessage("assistant")).toContain("9624");
 		});
@@ -70,10 +70,10 @@ test.describe("M16 unknown /skill: passthrough", () => {
 
 	test("/skill:nonexistent forwards the literal text to the LLM", async ({ chat }) => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		await chat.send("/skill:nonexistent Reply with the single word: gravy");
 		await chat.waitForState("streaming");
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		// No skill matches → expandSkillCommand returns the text unchanged →
 		// the LLM follows the inlined instruction.
 		expect((await chat.lastMessage("assistant")).toLowerCase()).toContain("gravy");

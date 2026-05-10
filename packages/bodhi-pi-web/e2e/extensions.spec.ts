@@ -15,13 +15,13 @@ test.describe("browser extension loader", () => {
 	}) => {
 		await test.step("boot lands on idle state", async () => {
 			await chat.goto();
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("send a prompt that triggers the read tool on /leak.txt", async () => {
 			await chat.send("Read the file leak.txt and tell me what's there verbatim.");
 			await chat.waitForState("streaming");
-			await chat.waitForState("idle", 60_000);
+			await chat.waitForState("idle");
 		});
 
 		await test.step("the tool-call card shows redacted text, not the original secret", async () => {

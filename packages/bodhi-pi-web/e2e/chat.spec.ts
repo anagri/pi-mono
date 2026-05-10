@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures";
 test("M3 agent round trip with gpt-4o-mini", async ({ chat }) => {
 	await test.step("boot lands on idle state", async () => {
 		await chat.goto();
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 	});
 
@@ -16,7 +16,7 @@ test("M3 agent round trip with gpt-4o-mini", async ({ chat }) => {
 	});
 
 	await test.step("returns to idle when complete", async () => {
-		await chat.waitForState("idle", 60_000);
+		await chat.waitForState("idle");
 	});
 
 	await test.step("user message landed", async () => {
