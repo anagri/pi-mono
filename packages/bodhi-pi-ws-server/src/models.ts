@@ -21,7 +21,7 @@ export function resolveModelsFromEnv(): ModelsResolution {
 		models.push(getModel("openai", "gpt-4o-mini"));
 	}
 	if (process.env.ANTHROPIC_API_KEY) {
-		models.push(getModel("anthropic", "claude-3-5-haiku-latest"));
+		models.push(getModel("anthropic", "claude-haiku-4-5"));
 	}
 	if (models.length === 0) {
 		throw new Error("No model providers configured. Set OPENAI_API_KEY (and/or ANTHROPIC_API_KEY) in .env.");

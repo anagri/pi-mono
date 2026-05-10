@@ -19,6 +19,12 @@ test.describe("M9 project extensions (redact-secrets)", () => {
 		const completed = app.toolCalls({ status: "completed" });
 		await expect(completed.first()).toBeVisible();
 
+		// The redacted text appears in the tool-call card preview itself
+		// (M12 port of bodhi-pi-web/src/agent/render.ts:extractContentText).
+		const preview = completed.first().getByTestId("tool-call-preview");
+		await expect(preview).toContainText("[REDACTED]");
+		await expect(preview).not.toContainText("sk-PLAINTEXTSECRETXYZ123");
+
 		// ...and the assistant's final answer reflects the REDACTED token,
 		// proving the extension's tool_result hook ran on the Node side.
 		const text = await app.lastMessageText("assistant");

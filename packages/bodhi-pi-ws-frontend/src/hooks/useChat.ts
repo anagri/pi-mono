@@ -1,5 +1,6 @@
 import type { AvailableCommand, ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { extractContentText } from "../lib/render";
 import { handleCommand, isCommand } from "../ui/commands";
 
 export interface MessageItem {
@@ -21,6 +22,7 @@ export interface ToolCallItem {
 	name: string;
 	title: string;
 	status: ToolCallStatus;
+	preview?: string;
 }
 
 export type ChatItem = MessageItem | SystemItem | ToolCallItem;
@@ -120,14 +122,19 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 			const toolKind = update.kind as string | undefined;
 			const name = deriveToolName(title, toolKind);
 			const status = mapToolStatus(update.status as string | undefined);
+			const preview = extractContentText(update.content).slice(0, 400);
 			setItems((prev) => {
 				const existingIdx = prev.findIndex((it) => it.kind === "tool" && it.toolCallId === toolCallId);
+				const item: ToolCallItem = { kind: "tool", toolCallId, name, title, status };
+				if (preview) item.preview = preview;
 				if (existingIdx >= 0) {
 					const next = [...prev];
-					next[existingIdx] = { kind: "tool", toolCallId, name, title, status };
+					const prior = prev[existingIdx];
+					if (!preview && prior.kind === "tool" && prior.preview) item.preview = prior.preview;
+					next[existingIdx] = item;
 					return next;
 				}
-				return [...prev, { kind: "tool", toolCallId, name, title, status }];
+				return [...prev, item];
 			});
 			return;
 		}
@@ -136,8 +143,14 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 			const toolCallId = update.toolCallId as string | undefined;
 			if (!toolCallId) return;
 			const status = mapToolStatus(update.status as string | undefined);
+			const preview = extractContentText(update.content).slice(0, 400);
 			setItems((prev) =>
-				prev.map((it) => (it.kind === "tool" && it.toolCallId === toolCallId ? { ...it, status } : it)),
+				prev.map((it) => {
+					if (it.kind !== "tool" || it.toolCallId !== toolCallId) return it;
+					const next: ToolCallItem = { ...it, status };
+					if (preview) next.preview = preview;
+					return next;
+				}),
 			);
 			return;
 		}
@@ -214,6 +227,16 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 		updateSessionId(null);
 	}, [updateSessionId]);
 
+	const cancel = useCallback(async () => {
+		const sid = sessionIdRef.current;
+		if (!sid || !conn) return;
+		try {
+			await conn.cancel({ sessionId: sid });
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	}, [conn]);
+
 	const loadSession = useCallback(
 		async (sessionId: string) => {
 			if (!conn) {
@@ -246,6 +269,7 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 		status,
 		error,
 		send,
+		cancel,
 		handleNotification,
 		newSession,
 		loadSession,

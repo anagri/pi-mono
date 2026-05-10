@@ -72,6 +72,30 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		});
 	});
 
+	test.describe("grep finds the codeword", () => {
+		test.use({ scenario: "fs-tools-codeword" });
+
+		test("agent greps for a codeword and surfaces the result in the tool card preview", async ({ app }) => {
+			test.skip(!process.env.OPENAI_API_KEY, "needs OPENAI_API_KEY");
+			await app.goto();
+			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
+			await app.clickConnect();
+			await app.expectStatus("connected");
+
+			await app.send(
+				"Use the grep tool with a regex to find which file under notes mentions 'codeword'. " +
+					"Then reply with the codeword value only and nothing else.",
+			);
+			await app.expectChatStatus("streaming");
+			await app.expectChatStatus("idle", 90_000);
+
+			const grepCard = app.toolCalls({ name: "grep" }).first();
+			await expect(grepCard).toHaveAttribute("data-tool-status", "completed");
+			await expect(grepCard.getByTestId("tool-call-preview")).toContainText("parrot");
+			expect((await app.lastMessageText("assistant")).toLowerCase()).toContain("parrot");
+		});
+	});
+
 	test.describe("find returns matching files", () => {
 		test.use({ scenario: "fs-tools-docs-tree" });
 

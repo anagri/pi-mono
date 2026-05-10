@@ -31,6 +31,8 @@ function App() {
 
 	const chat = useChat({ conn: connection?.conn ?? null, cwd: SESSION_CWD, onSessionIdChange });
 	const sessions = useSessions({ conn: connection?.conn ?? null });
+	const { refresh: refreshSessions } = sessions;
+	const { send: sendChat, cancel: cancelChat, reset: resetChat, handleNotification } = chat;
 
 	const onConnect = useCallback(async () => {
 		setConnectError("");
@@ -40,7 +42,7 @@ function App() {
 			const c = await connect({
 				url: settings.serverUrl,
 				user: settings.sendToken ? { id: settings.id, email: settings.email } : undefined,
-				handlers: { onSessionUpdate: chat.handleNotification },
+				handlers: { onSessionUpdate: handleNotification },
 				onClose: () => setStatus("disconnected"),
 			});
 			setConnection(c);
@@ -52,29 +54,27 @@ function App() {
 			setConnectError(msg);
 			setStatus(settings.sendToken ? "disconnected" : "unauthorized");
 		}
-	}, [settings, chat.handleNotification]);
+	}, [settings, handleNotification]);
 
 	const onDisconnect = useCallback(() => {
 		connection?.ws.close();
 		setConnection(null);
 		setStatus("disconnected");
-		chat.reset();
-	}, [connection, chat]);
+		resetChat();
+	}, [connection, resetChat]);
 
 	const onSend = useCallback(async () => {
 		const text = draft.trim();
 		if (!text) return;
 		setDraft("");
-		await chat.send(text);
-		void sessions.refresh();
-	}, [draft, chat, sessions]);
+		await sendChat(text);
+	}, [draft, sendChat]);
 
-	// Refresh session list whenever we connect.
+	// Refresh session list whenever we connect, or when a new session is created.
 	useEffect(() => {
-		if (status === "connected") {
-			void sessions.refresh();
-		}
-	}, [status, sessions]);
+		if (status !== "connected") return;
+		void refreshSessions();
+	}, [status, chat.sessionId, refreshSessions]);
 
 	// Auto-resume last session on connect.
 	const { loadSession, addSystemMessage } = chat;
@@ -311,6 +311,23 @@ function App() {
 										}}
 									>
 										<strong>tool · {it.name}</strong> [{it.status}] · {it.title}
+										{it.preview ? (
+											<pre
+												data-testid="tool-call-preview"
+												style={{
+													margin: "0.4rem 0 0",
+													padding: "0.4rem 0.5rem",
+													background: "#fffaf0",
+													border: "1px solid #f0e4c0",
+													borderRadius: 3,
+													whiteSpace: "pre-wrap",
+													wordBreak: "break-word",
+													fontSize: "0.8rem",
+												}}
+											>
+												{it.preview}
+											</pre>
+										) : null}
 									</div>
 								);
 							})}
@@ -336,14 +353,15 @@ function App() {
 								disabled={chat.status === "streaming"}
 								placeholder="Type a message or slash command (/help); press Enter to send"
 							/>
-							<button
-								type="button"
-								data-testid="send"
-								onClick={onSend}
-								disabled={chat.status === "streaming" || !draft.trim()}
-							>
-								Send
-							</button>
+							{chat.status === "streaming" ? (
+								<button type="button" data-testid="composer-stop" onClick={() => void cancelChat()}>
+									Stop
+								</button>
+							) : (
+								<button type="button" data-testid="send" onClick={onSend} disabled={!draft.trim()}>
+									Send
+								</button>
+							)}
 						</section>
 					</div>
 				</div>

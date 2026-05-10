@@ -16,6 +16,9 @@ dist-ssr
 test-results
 playwright-report
 
+# Test env (keys live in e2e/.env.test, never committed)
+e2e/.env.test
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
