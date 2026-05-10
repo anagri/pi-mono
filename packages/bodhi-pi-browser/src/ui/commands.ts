@@ -1,5 +1,5 @@
 import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
-import { EXT_DELETE_SESSION } from "@bodhiapp/bodhi-pi";
+import { EXT_DELETE_SESSION, EXT_SESSION_COMPACT } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ChatState } from "../store/chatStore";
 
@@ -58,6 +58,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /resume <id>       load a previous session (replays history)",
 				"  /close             close the current session (data persists)",
 				"  /delete <id>       permanently delete a session",
+				"  /compact [hint]    summarize earlier turns to free context",
 			];
 			if (ctx.state.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -182,6 +183,21 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					// Recurse into /new to leave the user on a fresh, usable session.
 					await handleCommand("/new", ctx);
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/compact": {
+			const customInstructions = parts.slice(1).join(" ").trim() || undefined;
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_COMPACT, {
+					sessionId: ctx.state.sessionId,
+					...(customInstructions ? { customInstructions } : {}),
+				})) as { summary?: string; tokensBefore?: number };
+				const tokens = typeof result.tokensBefore === "number" ? ` (was ~${result.tokensBefore} tokens)` : "";
+				ctx.addSystemMessage(`compacted${tokens}\n\n${result.summary ?? ""}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

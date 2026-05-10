@@ -1,6 +1,6 @@
 export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
-export { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "./acp/constants.js";
+export { EXT_DELETE_SESSION, EXT_SESSION_COMPACT, MODEL_CONFIG_ID } from "./acp/constants.js";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,
@@ -48,14 +48,29 @@ export type {
 	ScriptExecuteResult,
 	ScriptExecutor,
 } from "./script-executor/script-executor.js";
+export { buildSessionContext, type SessionContext } from "./sessions/build-context.js";
+export {
+	type CompactionResult,
+	type CompactionSettings,
+	DEFAULT_COMPACTION_SETTINGS,
+} from "./sessions/compaction.js";
 export { createInMemorySessionStore } from "./sessions/in-memory-session-store.js";
 export type {
+	BaseEntry,
+	BranchSummaryEntry,
+	CompactionDetails,
+	CompactionEntry,
+	CustomMessageEntry,
 	ExtensionEntry,
+	LabelEntry,
 	ListSessionsRequest,
 	ListSessionsResult,
+	MessageEntry,
+	ModelChangeEntry,
 	ReadExtensionEntriesFilter,
 	SessionEntry,
 	SessionInfo,
+	SessionInfoEntry,
 	SessionRecord,
 	SessionStore,
 } from "./sessions/session-store.js";

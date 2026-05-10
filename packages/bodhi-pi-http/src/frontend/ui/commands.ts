@@ -42,6 +42,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /resume <id>       load a previous session (replays history)",
 				"  /close             close the current session (data persists)",
 				"  /delete <id>       permanently delete a session",
+				"  /compact [hint]    summarize earlier turns to free context",
 			];
 			if (ctx.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -179,6 +180,24 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				if (targetId === ctx.sessionId) {
 					await handleCommand("/new", ctx);
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/compact": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			const customInstructions = parts.slice(1).join(" ").trim() || undefined;
+			try {
+				const result = await ctx.client.compactSession({
+					sessionId: ctx.sessionId,
+					...(customInstructions ? { customInstructions } : {}),
+				});
+				ctx.addSystemMessage(`compacted (was ~${result.tokensBefore} tokens)\n\n${result.summary}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

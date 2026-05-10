@@ -45,6 +45,14 @@ import { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import { buildSessionContext, walkPath } from "@/sessions/build-context.js";
+import {
+	type CompactionSettings,
+	DEFAULT_COMPACTION_SETTINGS,
+	prepareCompaction,
+	runCompaction,
+} from "@/sessions/compaction.js";
+import type { CompactionEntry, SessionEntry } from "@/sessions/entries.js";
 import type { SessionStore } from "@/sessions/session-store.js";
 import { loadProjectSkills } from "@/skills/discovery.js";
 import { expandSkillCommand } from "@/skills/invocation.js";
@@ -52,7 +60,7 @@ import type { Skill } from "@/skills/skill.js";
 import { composeSystemPrompt } from "@/skills/system-prompt.js";
 import { createBuiltinTools, toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
-import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "./constants.js";
+import { EXT_DELETE_SESSION, EXT_SESSION_COMPACT, MODEL_CONFIG_ID } from "./constants.js";
 import {
 	agentToolContentForAcp,
 	extractText,
@@ -82,6 +90,8 @@ export interface BodhiPiConfig {
 	 * its own discovery + loading and passes the resulting factories here.
 	 */
 	extensionFactories?: RegisteredExtension[];
+	/** Compaction thresholds. Defaults to `DEFAULT_COMPACTION_SETTINGS`. */
+	compaction?: Partial<CompactionSettings>;
 }
 
 interface SessionState {
@@ -94,6 +104,8 @@ interface SessionState {
 	skills: Skill[];
 	/** Set by `cancel()`; read by `prompt()` to return `stopReason: "cancelled"`. Reset before each prompt. */
 	cancelled: boolean;
+	/** Current head of the session DAG; `null` for a fresh session. Bumped on every entry append. */
+	leafId: string | null;
 }
 
 function toAvailableCommand(t: PromptTemplate): AvailableCommand {
@@ -133,6 +145,7 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
 	private readonly events: EventDispatcher;
+	private readonly compactionSettings: CompactionSettings;
 	private extensionRunner?: ExtensionRunner;
 	private extensionRunnerReady?: Promise<void>;
 
@@ -144,6 +157,18 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// AND extension-registered handlers merged. Extension handlers are added
 		// asynchronously via `ensureExtensionRunner()` on first session use.
 		this.events = new EventDispatcher(config.eventHandlers);
+		this.compactionSettings = { ...DEFAULT_COMPACTION_SETTINGS, ...(config.compaction ?? {}) };
+	}
+
+	/**
+	 * Persist `entry` with `parentId` set to the session's current leaf, then
+	 * advance the leaf to `entry.id`. The store and runtime state stay in sync.
+	 */
+	private async appendEntry(sessionId: string, session: SessionState, entry: SessionEntry): Promise<void> {
+		entry.parentId = session.leafId;
+		await this.config.sessionStore.append(sessionId, entry);
+		session.leafId = entry.id;
+		await this.config.sessionStore.setLeafId?.(sessionId, entry.id);
 	}
 
 	private async ensureExtensionRunner(): Promise<ExtensionRunner | undefined> {
@@ -189,6 +214,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				_meta: {
 					"bodhi-pi": {
 						sessionDelete: true,
+						sessionCompact: true,
 						extensions: { tools: true, commands: true, providers: true, events: true },
 					},
 				},
@@ -351,7 +377,70 @@ class BodhiPiAcpAgent implements AcpAgent {
 			await this.events.emitSessionShutdown({ type: "session_shutdown", sessionId });
 			return {};
 		}
+		if (method === EXT_SESSION_COMPACT) {
+			return await this.handleSessionCompact(params);
+		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
+	}
+
+	private async handleSessionCompact(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_COMPACT}: sessionId must be a string`);
+		}
+		const customInstructions = typeof params.customInstructions === "string" ? params.customInstructions : undefined;
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new RequestError(-32602, `session ${sessionId} is not loaded. Call session/load first.`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+
+		const path = walkPath(record.entries, session.leafId);
+		const preparation = prepareCompaction(path, this.compactionSettings);
+		if (!preparation) {
+			throw new RequestError(-32603, "nothing to compact (session is empty or already compacted at the leaf)");
+		}
+
+		const model = session.piAgent.state.model;
+		const apiKey = await this.resolveApiKeyForCompaction(model.provider);
+		if (!apiKey) {
+			throw new RequestError(-32603, `no API key available for provider "${model.provider}"`);
+		}
+		const result = await runCompaction(preparation, model, apiKey, customInstructions);
+
+		const compactionEntry: CompactionEntry = {
+			type: "compaction",
+			id: randomUUID(),
+			parentId: session.leafId,
+			timestamp: Date.now(),
+			summary: result.summary,
+			firstKeptEntryId: result.firstKeptEntryId,
+			tokensBefore: result.tokensBefore,
+			...(result.details ? { details: result.details } : {}),
+		};
+		await this.appendEntry(sessionId, session, compactionEntry);
+
+		// Rebuild the live agent's message list from the new branch (compaction summary + kept tail).
+		const refreshed = await this.config.sessionStore.load(sessionId);
+		if (refreshed) {
+			const ctx = buildSessionContext(refreshed, session.leafId);
+			session.piAgent.state.messages = ctx.messages;
+		}
+
+		return {
+			summary: result.summary,
+			firstKeptEntryId: result.firstKeptEntryId,
+			tokensBefore: result.tokensBefore,
+			...(result.details ? { details: result.details } : {}),
+		};
+	}
+
+	private async resolveApiKeyForCompaction(provider: string): Promise<string | undefined> {
+		const hostKey = this.config.getApiKey(provider);
+		if (hostKey !== undefined) return hostKey;
+		const ext = await this.extensionRunner?.resolveProviderKey(provider);
+		return ext ?? undefined;
 	}
 
 	async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
@@ -371,9 +460,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// routes the next prompt to the new model.
 		session.piAgent.state.model = newModel;
 		session.currentModelId = params.value;
-		await this.config.sessionStore.append(params.sessionId, {
+		await this.appendEntry(params.sessionId, session, {
 			type: "model_change",
 			id: randomUUID(),
+			parentId: session.leafId,
 			timestamp: Date.now(),
 			provider: newModel.provider,
 			modelId: newModel.id,
@@ -480,8 +570,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 		outcome: { stopReason?: PiStopReason; errorMessage?: string },
 	): () => void {
 		const conn = this.conn;
-		const store = this.config.sessionStore;
 		const events = this.events;
+		const appendEntry = this.appendEntry.bind(this);
 		return session.piAgent.subscribe(async (event) => {
 			switch (event.type) {
 				case "turn_start": {
@@ -578,9 +668,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 						outcome.stopReason = message.stopReason;
 						outcome.errorMessage = message.errorMessage;
 					}
-					await store.append(sessionId, {
+					await appendEntry(sessionId, session, {
 						type: "message",
 						id: randomUUID(),
+						parentId: session.leafId,
 						timestamp: Date.now(),
 						message,
 					});
@@ -630,14 +721,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.load(sessionId);
 		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
 
-		const lastModelChange = [...record.entries].reverse().find((e) => e.type === "model_change");
-		const modelId = lastModelChange?.modelId ?? this.config.defaultModelId;
+		const ctx = buildSessionContext(record);
+		const modelId = ctx.currentModelId ?? this.config.defaultModelId;
 		const restoredModel = this.findModel(modelId);
 
-		const messages: AgentMessage[] = record.entries
-			.filter((e): e is Extract<typeof e, { type: "message" }> => e.type === "message")
-			.map((e) => e.message);
-		await this._buildSessionState(sessionId, restoredModel, cwd, messages);
+		const leafId =
+			record.leafId !== undefined
+				? record.leafId
+				: record.entries.length > 0
+					? record.entries[record.entries.length - 1].id
+					: null;
+		await this._buildSessionState(sessionId, restoredModel, cwd, ctx.messages, leafId);
 		return { entries: record.entries, currentModelId: modelId };
 	}
 
@@ -648,6 +742,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		model: Model<Api>,
 		cwd: string,
 		messages: AgentMessage[] = [],
+		leafId: string | null = null,
 	): Promise<void> {
 		const builtinTools = createBuiltinTools({
 			filesystem: this.config.filesystem,
@@ -729,6 +824,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			commands,
 			skills,
 			cancelled: false,
+			leafId,
 		});
 	}
 

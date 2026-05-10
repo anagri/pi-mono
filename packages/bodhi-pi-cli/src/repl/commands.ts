@@ -1,9 +1,7 @@
 import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
-import type { SessionStore } from "@bodhiapp/bodhi-pi";
+import { EXT_DELETE_SESSION, EXT_SESSION_COMPACT, type SessionStore } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { Renderer } from "./render.js";
-
-const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
 
 export interface ReplState {
 	sessionId: string;
@@ -41,6 +39,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /close             close the current session (data persists)",
 				"  /delete <id>       permanently delete a session",
 				"  /model <id>        switch model for current session",
+				"  /compact [hint]    summarize earlier turns to free context",
 				"  /quit              exit",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -170,6 +169,21 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				const newId = result.configOptions[0]?.currentValue ?? modelId;
 				ctx.state.currentModelId = newId;
 				process.stdout.write(`model switched to: ${newId}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/compact": {
+			const customInstructions = parts.slice(1).join(" ").trim() || undefined;
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_COMPACT, {
+					sessionId: ctx.state.sessionId,
+					...(customInstructions ? { customInstructions } : {}),
+				})) as { summary?: string; tokensBefore?: number };
+				const tokens = typeof result.tokensBefore === "number" ? ` (was ~${result.tokensBefore} tokens)` : "";
+				process.stdout.write(`compacted${tokens}\n${result.summary ?? ""}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}

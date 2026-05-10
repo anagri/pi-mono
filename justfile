@@ -27,52 +27,56 @@ setup:
     npm install
 
 # Build → unit/integration → e2e for every bodhi-pi* workspace, in dep order.
+# Individual steps do NOT fail-fast; failures are collected and summarized at the end.
 test:
-    @echo "▶ @mariozechner/pi-ai  — build (dep)"
-    npm --workspace @mariozechner/pi-ai run build
-    @echo "▶ @mariozechner/pi-agent-core  — build (dep)"
-    npm --workspace @mariozechner/pi-agent-core run build
+    #!/usr/bin/env bash
+    set -uo pipefail
+    failures=()
+    run() {
+        local label="$1"; shift
+        echo "▶ $label"
+        if ! "$@"; then
+            failures+=("$label")
+        fi
+    }
 
-    @echo "▶ @bodhiapp/bodhi-pi  — build"
-    npm --workspace @bodhiapp/bodhi-pi run build
-    @echo "▶ @bodhiapp/bodhi-pi  — test (unit + integration)"
-    npm --workspace @bodhiapp/bodhi-pi run test
-    @echo "▶ @bodhiapp/bodhi-pi  — test:e2e"
-    npm --workspace @bodhiapp/bodhi-pi run test:e2e
+    run "@mariozechner/pi-ai  — build (dep)"               npm --workspace @mariozechner/pi-ai run build
+    run "@mariozechner/pi-agent-core  — build (dep)"       npm --workspace @mariozechner/pi-agent-core run build
 
-    @echo "▶ @bodhiapp/bodhi-pi-node  — build"
-    npm --workspace @bodhiapp/bodhi-pi-node run build
-    @echo "▶ @bodhiapp/bodhi-pi-node  — test"
-    npm --workspace @bodhiapp/bodhi-pi-node run test
+    run "@bodhiapp/bodhi-pi  — build"                      npm --workspace @bodhiapp/bodhi-pi run build
+    run "@bodhiapp/bodhi-pi  — test (unit + integration)"  npm --workspace @bodhiapp/bodhi-pi run test
+    run "@bodhiapp/bodhi-pi  — test:e2e"                   npm --workspace @bodhiapp/bodhi-pi run test:e2e
 
-    @echo "▶ @bodhiapp/bodhi-pi-browser  — build"
-    npm --workspace @bodhiapp/bodhi-pi-browser run build
-    @echo "▶ @bodhiapp/bodhi-pi-browser  — test"
-    npm --workspace @bodhiapp/bodhi-pi-browser run test
+    run "@bodhiapp/bodhi-pi-node  — build"                 npm --workspace @bodhiapp/bodhi-pi-node run build
+    run "@bodhiapp/bodhi-pi-node  — test"                  npm --workspace @bodhiapp/bodhi-pi-node run test
 
-    @echo "▶ @bodhiapp/bodhi-pi-cli  — build"
-    npm --workspace @bodhiapp/bodhi-pi-cli run build
-    @echo "▶ @bodhiapp/bodhi-pi-cli  — test (unit + integration)"
-    npm --workspace @bodhiapp/bodhi-pi-cli run test
-    @echo "▶ @bodhiapp/bodhi-pi-cli  — test:e2e"
-    npm --workspace @bodhiapp/bodhi-pi-cli run test:e2e
+    run "@bodhiapp/bodhi-pi-browser  — build"              npm --workspace @bodhiapp/bodhi-pi-browser run build
+    run "@bodhiapp/bodhi-pi-browser  — test"               npm --workspace @bodhiapp/bodhi-pi-browser run test
 
-    @echo "▶ @bodhiapp/bodhi-pi-web  — build"
-    npm --workspace @bodhiapp/bodhi-pi-web run build
-    @echo "▶ @bodhiapp/bodhi-pi-web  — test:e2e (playwright)"
-    npm --workspace @bodhiapp/bodhi-pi-web run test:e2e
+    run "@bodhiapp/bodhi-pi-cli  — build"                  npm --workspace @bodhiapp/bodhi-pi-cli run build
+    run "@bodhiapp/bodhi-pi-cli  — test (unit + integration)" npm --workspace @bodhiapp/bodhi-pi-cli run test
+    run "@bodhiapp/bodhi-pi-cli  — test:e2e"               npm --workspace @bodhiapp/bodhi-pi-cli run test:e2e
 
-    @echo "▶ @bodhiapp/bodhi-pi-chrome-ext  — build"
-    npm --workspace @bodhiapp/bodhi-pi-chrome-ext run build
-    @echo "▶ @bodhiapp/bodhi-pi-chrome-ext  — test:e2e (playwright, headed)"
-    npm --workspace @bodhiapp/bodhi-pi-chrome-ext run test:e2e
+    run "@bodhiapp/bodhi-pi-web  — build"                  npm --workspace @bodhiapp/bodhi-pi-web run build
+    run "@bodhiapp/bodhi-pi-web  — test:e2e (playwright)"  npm --workspace @bodhiapp/bodhi-pi-web run test:e2e
 
-    @echo "▶ @bodhiapp/bodhi-pi-ws-server  — build"
-    npm --workspace @bodhiapp/bodhi-pi-ws-server run build
-    @echo "▶ @bodhiapp/bodhi-pi-ws-server  — test"
-    npm --workspace @bodhiapp/bodhi-pi-ws-server run test
+    run "@bodhiapp/bodhi-pi-chrome-ext  — build"           npm --workspace @bodhiapp/bodhi-pi-chrome-ext run build
+    run "@bodhiapp/bodhi-pi-chrome-ext  — test:e2e (playwright, headed)" npm --workspace @bodhiapp/bodhi-pi-chrome-ext run test:e2e
 
-    @echo "▶ bodhi-pi-ws-frontend  — build"
-    npm --workspace bodhi-pi-ws-frontend run build
-    @echo "▶ bodhi-pi-ws-frontend  — test:e2e (playwright)"
-    npm --workspace bodhi-pi-ws-frontend run test:e2e
+    run "@bodhiapp/bodhi-pi-ws-server  — build"            npm --workspace @bodhiapp/bodhi-pi-ws-server run build
+    run "@bodhiapp/bodhi-pi-ws-server  — test"             npm --workspace @bodhiapp/bodhi-pi-ws-server run test
+
+    run "bodhi-pi-ws-frontend  — build"                    npm --workspace bodhi-pi-ws-frontend run build
+    run "bodhi-pi-ws-frontend  — test:e2e (playwright)"    npm --workspace bodhi-pi-ws-frontend run test:e2e
+
+    echo
+    if [ ${#failures[@]} -eq 0 ]; then
+        echo "✅ All steps passed."
+        exit 0
+    else
+        echo "❌ ${#failures[@]} step(s) failed:"
+        for f in "${failures[@]}"; do
+            echo "  - $f"
+        done
+        exit 1
+    fi

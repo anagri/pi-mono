@@ -1,0 +1,69 @@
+import { getModel } from "@mariozechner/pi-ai";
+import { stdInitParams } from "@test/helpers/acp-constants.js";
+import { requireEnv } from "@test/helpers/env.js";
+import { createTestHarness } from "@test/helpers/harness.js";
+import { expect, test } from "vitest";
+import { EXT_SESSION_COMPACT } from "@/acp/constants.js";
+import { createInMemorySessionStore } from "@/index.js";
+
+test("real LLM /compact summarizes prior turns and rewrites in-memory messages", async () => {
+	const apiKey = requireEnv("OPENAI_API_KEY");
+	const model = getModel("openai", "gpt-4o-mini");
+	const sessionStore = createInMemorySessionStore();
+	const { clientConn } = createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
+		sessionStore,
+	});
+
+	await clientConn.initialize(stdInitParams);
+	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
+
+	await clientConn.prompt({
+		sessionId,
+		prompt: [
+			{
+				type: "text",
+				text: "Remember: my pet's name is Mango. What is my pet's name? Reply in one short sentence.",
+			},
+		],
+	});
+	await clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "Reply in one short sentence: what colour is the sky on a clear day?" }],
+	});
+	await clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "Reply in one short sentence: what comes after Tuesday?" }],
+	});
+
+	const before = await sessionStore.load(sessionId);
+	const beforeMessageCount = before!.entries.filter((e) => e.type === "message").length;
+	expect(beforeMessageCount).toBeGreaterThanOrEqual(6);
+	const beforeLeaf = before!.leafId ?? before!.entries[before!.entries.length - 1]?.id;
+
+	const result = (await clientConn.extMethod(EXT_SESSION_COMPACT, { sessionId })) as {
+		summary: string;
+		firstKeptEntryId: string;
+		tokensBefore: number;
+	};
+
+	expect(typeof result.summary).toBe("string");
+	expect(result.summary.length).toBeGreaterThan(20);
+	expect(typeof result.firstKeptEntryId).toBe("string");
+
+	const after = await sessionStore.load(sessionId);
+	const compactionEntries = after!.entries.filter((e) => e.type === "compaction");
+	expect(compactionEntries).toHaveLength(1);
+	const compaction = compactionEntries[0];
+	if (compaction.type !== "compaction") throw new Error("not compaction");
+	expect(compaction.parentId).toBe(beforeLeaf);
+	expect(after!.leafId).toBe(compaction.id);
+
+	const followUp = await clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "What is my pet's name? Reply with the single word." }],
+	});
+	expect(followUp.stopReason).toBe("end_turn");
+}, 60_000);

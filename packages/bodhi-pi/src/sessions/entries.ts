@@ -1,0 +1,96 @@
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
+
+/**
+ * `parentId` forms the conversation DAG. Optional during the Phase A1 migration
+ * window: legacy entries omit it and fall back to array-order linearization in
+ * `buildSessionContext`.
+ */
+export interface BaseEntry {
+	id: string;
+	parentId?: string | null;
+	timestamp: number;
+}
+
+export interface MessageEntry extends BaseEntry {
+	type: "message";
+	message: AgentMessage;
+}
+
+export interface ModelChangeEntry extends BaseEntry {
+	type: "model_change";
+	provider: string;
+	modelId: string;
+}
+
+export interface CompactionDetails {
+	readFiles: string[];
+	modifiedFiles: string[];
+}
+
+export interface CompactionEntry extends BaseEntry {
+	type: "compaction";
+	summary: string;
+	/** First entry id NOT summarized (kept verbatim in context). */
+	firstKeptEntryId: string;
+	tokensBefore: number;
+	details?: CompactionDetails;
+	/** Set by `session_before_compact` extension hooks that produce custom summaries. */
+	fromHook?: boolean;
+}
+
+export interface BranchSummaryEntry extends BaseEntry {
+	type: "branch_summary";
+	/** Anchor entry id where the abandoned branch diverged. null = from root. */
+	fromId: string | null;
+	summary: string;
+	details?: CompactionDetails;
+	fromHook?: boolean;
+}
+
+export interface SessionInfoEntry extends BaseEntry {
+	type: "session_info";
+	name?: string;
+}
+
+export interface LabelEntry extends BaseEntry {
+	type: "label";
+	targetId: string;
+	label?: string;
+}
+
+/**
+ * Naming note: coding-agent calls this `custom`. bodhi-pi keeps the name
+ * `extension` because the runtime discriminator is exposed across five store
+ * impls + the ExtensionRunner contract. Rename is a separate change.
+ */
+export interface ExtensionEntry extends BaseEntry {
+	type: "extension";
+	extensionName: string;
+	customType: string;
+	data: unknown;
+}
+
+export interface CustomMessageEntry extends BaseEntry {
+	type: "custom_message";
+	extensionName: string;
+	customType: string;
+	content: string;
+	/** When false, the entry is informational and skipped during context build. */
+	display: boolean;
+	details?: unknown;
+}
+
+export type SessionEntry =
+	| MessageEntry
+	| ModelChangeEntry
+	| CompactionEntry
+	| BranchSummaryEntry
+	| SessionInfoEntry
+	| LabelEntry
+	| ExtensionEntry
+	| CustomMessageEntry;
+
+export interface ReadExtensionEntriesFilter {
+	extensionName?: string;
+	customType?: string;
+}

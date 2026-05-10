@@ -158,9 +158,9 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 		try {
 			// Methods that read in-memory SessionState need transparent rehydration
 			// from store, since each HTTP request gets a fresh agent. `prompt` does
-			// this in handleSseMethod; `setSessionConfigOption` (and any future
-			// session-mutating JSON method) does it here.
-			if (body.method === "session/setSessionConfigOption") {
+			// this in handleSseMethod; the methods listed here do it before dispatch.
+			const NEEDS_REHYDRATE = new Set(["session/setSessionConfigOption", "_bodhi-pi/session/compact"]);
+			if (NEEDS_REHYDRATE.has(body.method)) {
 				const sid = (params as { sessionId?: unknown }).sessionId;
 				if (typeof sid === "string" && agent.resumeSession) {
 					await agent.resumeSession({ sessionId: sid, cwd: wired.cwd, mcpServers: [] } as never);

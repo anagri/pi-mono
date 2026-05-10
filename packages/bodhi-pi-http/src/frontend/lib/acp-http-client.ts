@@ -130,6 +130,18 @@ export class AcpHttpClient {
 		return this.call("_bodhi-pi/session/delete", { sessionId });
 	}
 
+	compactSession(params: { sessionId: string; customInstructions?: string }): Promise<{
+		summary: string;
+		firstKeptEntryId: string;
+		tokensBefore: number;
+	}> {
+		return this.call("_bodhi-pi/session/compact", params as unknown as Record<string, unknown>) as Promise<{
+			summary: string;
+			firstKeptEntryId: string;
+			tokensBefore: number;
+		}>;
+	}
+
 	cancel(sessionId: string): Promise<unknown> {
 		return this.call("session/cancel", { sessionId });
 	}

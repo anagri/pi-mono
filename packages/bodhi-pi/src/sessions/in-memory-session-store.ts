@@ -10,7 +10,7 @@ import type {
 } from "./session-store.js";
 
 /**
- * Reference in-memory implementation of SessionStore.
+ * In-memory reference SessionStore.
  *
  * Tests use this directly. Production hosts wanting ephemeral mode can import
  * it; they still must pass it explicitly via BodhiPiConfig.sessionStore — there
@@ -20,13 +20,15 @@ export function createInMemorySessionStore(): SessionStore {
 	const sessions = new Map<string, SessionRecord>();
 
 	return {
-		async create({ cwd }) {
+		async create({ cwd, parentSessionId }) {
 			const now = Date.now();
 			const record: SessionRecord = {
 				id: randomUUID(),
 				cwd,
 				createdAt: now,
 				updatedAt: now,
+				leafId: null,
+				...(parentSessionId !== undefined ? { parentSessionId } : {}),
 				entries: [],
 			};
 			sessions.set(record.id, record);
@@ -45,19 +47,62 @@ export function createInMemorySessionStore(): SessionStore {
 			record.updatedAt = Date.now();
 		},
 
+		async setLeafId(sessionId: string, entryId: string | null) {
+			const record = sessions.get(sessionId);
+			if (!record) throw new Error(`session ${sessionId} not found (or deleted)`);
+			record.leafId = entryId;
+			record.updatedAt = Date.now();
+		},
+
+		async forkRecord(sourceSessionId: string, fromEntryId: string, position: "before" | "at") {
+			const source = sessions.get(sourceSessionId);
+			if (!source) throw new Error(`session ${sourceSessionId} not found (or deleted)`);
+			const byId = new Map<string, SessionEntry>();
+			for (const entry of source.entries) byId.set(entry.id, entry);
+			const target = byId.get(fromEntryId);
+			if (!target) throw new Error(`entry ${fromEntryId} not found in session ${sourceSessionId}`);
+			// Walk parentId chain from target back to root.
+			const chain: SessionEntry[] = [];
+			let cur: SessionEntry | undefined = target;
+			while (cur) {
+				chain.unshift(cur);
+				cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+			}
+			const copied = position === "before" ? chain.slice(0, -1) : chain;
+			const now = Date.now();
+			const newRecord: SessionRecord = {
+				id: randomUUID(),
+				cwd: source.cwd,
+				createdAt: now,
+				updatedAt: now,
+				parentSessionId: sourceSessionId,
+				leafId: copied.length > 0 ? copied[copied.length - 1].id : null,
+				entries: structuredClone(copied),
+			};
+			sessions.set(newRecord.id, newRecord);
+			return { newSessionId: newRecord.id };
+		},
+
 		async list({ cwd }: ListSessionsRequest): Promise<ListSessionsResult> {
 			// Single-page in-memory store; cursor is ignored. Disk-backed impls
 			// must honour `cursor` per the SessionStore.list JSDoc contract.
 			const all = [...sessions.values()]
 				.filter((r) => (cwd ? r.cwd === cwd : true))
 				.sort((a, b) => b.updatedAt - a.updatedAt)
-				.map((r) => ({
-					sessionId: r.id,
-					cwd: r.cwd,
-					createdAt: r.createdAt,
-					updatedAt: r.updatedAt,
-					messageCount: r.entries.filter((e) => e.type === "message").length,
-				}));
+				.map((r) => {
+					const latestName = [...r.entries]
+						.reverse()
+						.find((e): e is Extract<SessionEntry, { type: "session_info" }> => e.type === "session_info")?.name;
+					return {
+						sessionId: r.id,
+						cwd: r.cwd,
+						createdAt: r.createdAt,
+						updatedAt: r.updatedAt,
+						messageCount: r.entries.filter((e) => e.type === "message").length,
+						...(latestName !== undefined ? { name: latestName } : {}),
+						...(r.parentSessionId !== undefined ? { parentSessionId: r.parentSessionId } : {}),
+					};
+				});
 			return { sessions: all };
 		},
 
