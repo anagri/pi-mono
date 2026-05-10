@@ -26,25 +26,48 @@ setup:
     cd "$here"
     npm install
 
-# Build → unit/integration → e2e for every bodhi-* workspace, in dep order.
+# Build → unit/integration → e2e for every bodhi-pi* workspace, in dep order.
 test:
     @echo "▶ @mariozechner/pi-ai  — build (dep)"
     npm --workspace @mariozechner/pi-ai run build
     @echo "▶ @mariozechner/pi-agent-core  — build (dep)"
     npm --workspace @mariozechner/pi-agent-core run build
+
     @echo "▶ @bodhiapp/bodhi-pi  — build"
     npm --workspace @bodhiapp/bodhi-pi run build
     @echo "▶ @bodhiapp/bodhi-pi  — test (unit + integration)"
     npm --workspace @bodhiapp/bodhi-pi run test
     @echo "▶ @bodhiapp/bodhi-pi  — test:e2e"
     npm --workspace @bodhiapp/bodhi-pi run test:e2e
+
     @echo "▶ @bodhiapp/bodhi-pi-node  — build"
     npm --workspace @bodhiapp/bodhi-pi-node run build
     @echo "▶ @bodhiapp/bodhi-pi-node  — test"
     npm --workspace @bodhiapp/bodhi-pi-node run test
+
+    @echo "▶ @bodhiapp/bodhi-pi-browser  — build"
+    npm --workspace @bodhiapp/bodhi-pi-browser run build
+    @echo "▶ @bodhiapp/bodhi-pi-browser  — test"
+    npm --workspace @bodhiapp/bodhi-pi-browser run test
+
     @echo "▶ @bodhiapp/bodhi-pi-cli  — build"
     npm --workspace @bodhiapp/bodhi-pi-cli run build
     @echo "▶ @bodhiapp/bodhi-pi-cli  — test (unit + integration)"
     npm --workspace @bodhiapp/bodhi-pi-cli run test
     @echo "▶ @bodhiapp/bodhi-pi-cli  — test:e2e"
     npm --workspace @bodhiapp/bodhi-pi-cli run test:e2e
+
+    @echo "▶ @bodhiapp/bodhi-pi-web  — build"
+    npm --workspace @bodhiapp/bodhi-pi-web run build
+    @echo "▶ @bodhiapp/bodhi-pi-web  — test:e2e (playwright)"
+    npm --workspace @bodhiapp/bodhi-pi-web run test:e2e
+
+    @echo "▶ @bodhiapp/bodhi-pi-ws-server  — build"
+    npm --workspace @bodhiapp/bodhi-pi-ws-server run build
+    @echo "▶ @bodhiapp/bodhi-pi-ws-server  — test"
+    npm --workspace @bodhiapp/bodhi-pi-ws-server run test
+
+    @echo "▶ bodhi-pi-ws-frontend  — build"
+    npm --workspace bodhi-pi-ws-frontend run build
+    @echo "▶ bodhi-pi-ws-frontend  — test:e2e (playwright)"
+    npm --workspace bodhi-pi-ws-frontend run test:e2e

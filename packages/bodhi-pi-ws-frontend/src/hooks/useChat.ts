@@ -191,9 +191,11 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 			setStatus("streaming");
 			setItems((prev) => [...prev, { kind: "message", role: "user", text }]);
 			try {
-				if (!sessionIdRef.current) {
+				let sid = sessionIdRef.current;
+				if (!sid) {
 					const ns = await conn.newSession({ cwd, mcpServers: [] });
-					updateSessionId(ns.sessionId);
+					sid = ns.sessionId;
+					updateSessionId(sid);
 					const opt = ns.configOptions?.[0];
 					const value =
 						opt && typeof (opt as { currentValue?: unknown }).currentValue === "string"
@@ -205,7 +207,7 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 					}
 				}
 				const result = await conn.prompt({
-					sessionId: sessionIdRef.current,
+					sessionId: sid,
 					prompt: [{ type: "text", text }],
 				});
 				if (result.stopReason !== "end_turn" && result.stopReason !== "max_tokens") {
