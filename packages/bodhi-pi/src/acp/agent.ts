@@ -66,6 +66,8 @@ import {
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_FORK,
+	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
 } from "./constants.js";
 import {
@@ -396,7 +398,74 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (method === EXT_SESSION_ENTRIES) {
 			return await this.handleSessionEntries(params);
 		}
+		if (method === EXT_SESSION_TREE) {
+			return await this.handleSessionTree(params);
+		}
+		if (method === EXT_SESSION_NAVIGATE) {
+			return await this.handleSessionNavigate(params);
+		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
+	}
+
+	private async handleSessionTree(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_TREE}: sessionId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const childCount = new Map<string, number>();
+		for (const entry of record.entries) {
+			if (entry.parentId) childCount.set(entry.parentId, (childCount.get(entry.parentId) ?? 0) + 1);
+		}
+		const leafId = record.leafId ?? record.entries[record.entries.length - 1]?.id ?? null;
+		const nodes = record.entries.map((entry) => {
+			let preview = "";
+			let role: string | undefined;
+			if (entry.type === "message" && (entry.message.role === "user" || entry.message.role === "assistant")) {
+				role = entry.message.role;
+				const text = extractText(entry.message).trim();
+				preview = text.length > 60 ? `${text.slice(0, 60)}…` : text;
+			}
+			return {
+				id: entry.id,
+				parentId: entry.parentId ?? null,
+				type: entry.type,
+				...(role ? { role } : {}),
+				...(preview ? { preview } : {}),
+				isLeaf: entry.id === leafId,
+				childCount: childCount.get(entry.id) ?? 0,
+			};
+		});
+		return { leafId, nodes };
+	}
+
+	private async handleSessionNavigate(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		const targetEntryId = params.targetEntryId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_NAVIGATE}: sessionId must be a string`);
+		}
+		if (typeof targetEntryId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_NAVIGATE}: targetEntryId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const target = record.entries.find((e) => e.id === targetEntryId);
+		if (!target) throw new RequestError(-32602, `unknown entry: ${targetEntryId}`);
+
+		await this.config.sessionStore.setLeafId?.(sessionId, targetEntryId);
+
+		const session = this.sessions.get(sessionId);
+		if (session) {
+			session.leafId = targetEntryId;
+			const refreshed = await this.config.sessionStore.load(sessionId);
+			if (refreshed) {
+				const ctx = buildSessionContext(refreshed, targetEntryId);
+				session.piAgent.state.messages = ctx.messages;
+			}
+		}
+		return { leafId: targetEntryId };
 	}
 
 	private async handleSessionEntries(params: Record<string, unknown>): Promise<Record<string, unknown>> {

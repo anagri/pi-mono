@@ -44,6 +44,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /delete <id>       permanently delete a session",
 				"  /compact [hint]    summarize earlier turns to free context",
 				"  /entries           list message entry ids on the current branch",
+				"  /tree              show the full session DAG (all entries)",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
 			];
@@ -220,6 +221,31 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					ctx.addSystemMessage(
 						["entries:", ...result.entries.map((e) => `  ${e.id}  ${e.role.padEnd(9)} ${e.preview}`)].join("\n"),
 					);
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/tree": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			try {
+				const result = await ctx.client.getSessionTree({ sessionId: ctx.sessionId });
+				if (result.nodes.length === 0) {
+					ctx.addSystemMessage("(empty session)");
+				} else {
+					const lines = ["tree:"];
+					for (const n of result.nodes) {
+						const marker = n.isLeaf ? "*" : " ";
+						const role = n.role ?? n.type;
+						const preview = n.preview ?? "";
+						lines.push(`${marker} ${n.id}  ${role.padEnd(9)} ${preview}`);
+					}
+					ctx.addSystemMessage(lines.join("\n"));
 				}
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);

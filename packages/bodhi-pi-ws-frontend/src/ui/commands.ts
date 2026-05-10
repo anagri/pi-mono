@@ -5,6 +5,8 @@ const EXT_SESSION_COMPACT = "_bodhi-pi/session/compact";
 const EXT_SESSION_FORK = "_bodhi-pi/session/fork";
 const EXT_SESSION_CLONE = "_bodhi-pi/session/clone";
 const EXT_SESSION_ENTRIES = "_bodhi-pi/session/entries";
+const EXT_SESSION_TREE = "_bodhi-pi/session/tree";
+const EXT_SESSION_NAVIGATE = "_bodhi-pi/session/navigate";
 
 export interface UiCommandContext {
 	conn: ClientSideConnection;
@@ -62,6 +64,8 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /delete <id>       permanently delete a session",
 				"  /compact [hint]    summarize earlier turns to free context",
 				"  /entries           list message entry ids on the current branch",
+				"  /tree              show the full session DAG (all entries)",
+				"  /goto <entryId>    move the leaf to <entryId>; subsequent prompts branch from there",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
 			];
@@ -239,6 +243,48 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 						["entries:", ...result.entries.map((e) => `  ${e.id}  ${e.role.padEnd(9)} ${e.preview}`)].join("\n"),
 					);
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/tree": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_TREE, { sessionId: ctx.sessionId })) as {
+					leafId: string | null;
+					nodes: { id: string; type: string; role?: string; preview?: string; isLeaf: boolean }[];
+				};
+				if (result.nodes.length === 0) {
+					ctx.addSystemMessage("(empty session)");
+				} else {
+					const lines = ["tree:"];
+					for (const n of result.nodes) {
+						const marker = n.isLeaf ? "*" : " ";
+						const role = n.role ?? n.type;
+						const preview = n.preview ?? "";
+						lines.push(`${marker} ${n.id}  ${role.padEnd(9)} ${preview}`);
+					}
+					ctx.addSystemMessage(lines.join("\n"));
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/goto": {
+			const targetEntryId = parts[1];
+			if (!targetEntryId) {
+				ctx.addSystemMessage("usage: /goto <entry-id>");
+				return true;
+			}
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_NAVIGATE, {
+					sessionId: ctx.sessionId,
+					targetEntryId,
+				})) as { leafId: string };
+				ctx.addSystemMessage(`leaf moved to: ${result.leafId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

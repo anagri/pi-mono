@@ -6,6 +6,8 @@ export {
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_FORK,
+	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
 } from "./acp/constants.js";
 export type {

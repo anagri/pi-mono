@@ -15,3 +15,9 @@ export const EXT_SESSION_CLONE = "_bodhi-pi/session/clone";
 
 /** List the active branch's message entries (`{ id, role, preview }`). Used by hosts to render `/entries`. */
 export const EXT_SESSION_ENTRIES = "_bodhi-pi/session/entries";
+
+/** Return the full DAG of session entries (`{ leafId, nodes }`). Used by hosts to render `/tree`. */
+export const EXT_SESSION_TREE = "_bodhi-pi/session/tree";
+
+/** Move the session's leaf pointer to a target entry id; subsequent appends branch from there. */
+export const EXT_SESSION_NAVIGATE = "_bodhi-pi/session/navigate";

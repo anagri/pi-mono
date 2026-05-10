@@ -166,6 +166,23 @@ export class AcpHttpClient {
 		}>;
 	}
 
+	getSessionTree(params: { sessionId: string }): Promise<{
+		leafId: string | null;
+		nodes: { id: string; parentId: string | null; type: string; role?: string; preview?: string; isLeaf: boolean }[];
+	}> {
+		return this.call("_bodhi-pi/session/tree", params as unknown as Record<string, unknown>) as Promise<{
+			leafId: string | null;
+			nodes: {
+				id: string;
+				parentId: string | null;
+				type: string;
+				role?: string;
+				preview?: string;
+				isLeaf: boolean;
+			}[];
+		}>;
+	}
+
 	cancel(sessionId: string): Promise<unknown> {
 		return this.call("session/cancel", { sessionId });
 	}

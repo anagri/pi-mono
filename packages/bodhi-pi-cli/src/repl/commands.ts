@@ -5,6 +5,8 @@ import {
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_FORK,
+	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_TREE,
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
@@ -48,6 +50,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /model <id>        switch model for current session",
 				"  /compact [hint]    summarize earlier turns to free context",
 				"  /entries           list message entry ids on the current branch",
+				"  /tree              show the full session DAG (all entries)",
+				"  /goto <entryId>    move the leaf to <entryId>; subsequent prompts branch from there",
 				"  /fork <entryId>    fork before <entryId> (returns new session id)",
 				"  /clone             clone the current session at the leaf",
 				"  /quit              exit",
@@ -218,6 +222,55 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			return false;
 		}
 
+		case "/tree": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_TREE, {
+					sessionId: ctx.state.sessionId,
+				})) as {
+					leafId: string | null;
+					nodes: {
+						id: string;
+						parentId: string | null;
+						type: string;
+						role?: string;
+						preview?: string;
+						isLeaf: boolean;
+					}[];
+				};
+				if (result.nodes.length === 0) {
+					process.stdout.write("  (empty session)\n");
+				} else {
+					for (const n of result.nodes) {
+						const marker = n.isLeaf ? "*" : " ";
+						const role = n.role ?? n.type;
+						const preview = n.preview ?? "";
+						process.stdout.write(`${marker} ${n.id}  ${role.padEnd(9)} ${preview}\n`);
+					}
+				}
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/goto": {
+			const targetEntryId = parts[1];
+			if (!targetEntryId) {
+				process.stdout.write("usage: /goto <entry-id>\n");
+				return false;
+			}
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_NAVIGATE, {
+					sessionId: ctx.state.sessionId,
+					targetEntryId,
+				})) as { leafId: string };
+				process.stdout.write(`leaf moved to: ${result.leafId}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
 		case "/fork": {
 			const entryId = parts[1];
 			if (!entryId) {
@@ -239,7 +292,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			return false;
 		}
 
-		case "/clone": {
+		case "/clone":
 			try {
 				const result = (await ctx.clientConn.extMethod(EXT_SESSION_CLONE, {
 					sessionId: ctx.state.sessionId,
@@ -250,17 +303,14 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				process.stdout.write(`error: ${String(err)}\n`);
 			}
 			return false;
-		}
 
 		case "/quit":
-		case "/exit": {
+		case "/exit":
 			return true;
-		}
 
-		default: {
+		default:
 			process.stdout.write(`unknown command: ${cmd}  (type /help for a list)\n`);
 			return false;
-		}
 	}
 }
 
