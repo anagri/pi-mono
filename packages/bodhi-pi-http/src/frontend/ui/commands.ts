@@ -136,8 +136,10 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 			}
 			try {
 				await ctx.client.closeSession(ctx.sessionId);
+				// Keep sessionId set so the auto-resume effect doesn't immediately
+				// recreate. The persisted session remains; /new makes a fresh one;
+				// /resume loads any (including this one) back into memory.
 				ctx.addSystemMessage(`closed session: ${ctx.sessionId.slice(0, 8)}…  (use /new or /resume <id>)`);
-				ctx.setSessionId(undefined);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

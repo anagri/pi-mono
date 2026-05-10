@@ -116,7 +116,14 @@ export default function App() {
 		<main
 			data-testid="chat-page"
 			data-test-state={testState}
-			style={{ maxWidth: 720, margin: "5vh auto", padding: "0 1rem 0 1rem" }}
+			style={{
+				maxWidth: 720,
+				margin: "5vh auto",
+				padding: "0 1rem",
+				// Reserve right-side space for the fixed EventsPanel when connected so
+				// the panel never intercepts clicks on the chat composer / Send button.
+				marginRight: status === "connected" ? "calc(420px + 5vh)" : "auto",
+			}}
 		>
 			<header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
 				<h1 style={{ margin: 0 }}>bodhi-pi-http</h1>
