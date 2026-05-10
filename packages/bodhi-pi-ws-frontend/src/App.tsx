@@ -4,10 +4,12 @@ import * as lastSession from "./lib/last-session";
 import { useSettings } from "./hooks/useSettings";
 import { useChat } from "./hooks/useChat";
 import { useSessions } from "./hooks/useSessions";
-import { EventStreamPanel } from "./components/EventStreamPanel";
+import { EventsPanel } from "./components/EventsPanel";
 import "./App.css";
 
 type Status = "idle" | "connecting" | "connected" | "disconnected" | "unauthorized";
+
+type TestState = Status | "streaming" | "closed" | "error";
 
 const SESSION_CWD = "/";
 
@@ -99,8 +101,16 @@ function App() {
 		};
 	}, [status, settings.serverUrl, settings.id, loadSession, addSystemMessage]);
 
+	const testState: TestState = connectError
+		? "error"
+		: status !== "connected"
+			? status
+			: chat.status;
+
 	return (
 		<main
+			data-testid="chat-page"
+			data-test-state={testState}
 			style={{
 				maxWidth: 960,
 				margin: "2rem auto",
@@ -179,7 +189,7 @@ function App() {
 				data-agent-name={agentName}
 				data-chat-status={chat.status}
 				data-current-model={chat.currentModelId}
-				data-current-session-id={chat.sessionId ?? ""}
+				data-session-id={chat.sessionId ?? ""}
 				style={{ padding: "0.75rem", border: "1px solid #ccc", borderRadius: 4, marginBottom: "1rem" }}
 			>
 				<div>
@@ -367,7 +377,10 @@ function App() {
 				</div>
 			) : null}
 
-			<EventStreamPanel log={status === "connected" ? (connection?.eventLog ?? null) : null} />
+			<EventsPanel
+				eventLog={status === "connected" ? (connection?.eventLog ?? null) : null}
+				lifecycleLog={status === "connected" ? (connection?.lifecycleLog ?? null) : null}
+			/>
 		</main>
 	);
 }

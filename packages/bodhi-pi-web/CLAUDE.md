@@ -1,8 +1,25 @@
 # bodhi-pi-web
 
-Reference browser host for `@bodhiapp/bodhi-pi`. Vite + React + TypeScript app on the main thread; agent runs in a dedicated Web Worker. Main↔Worker speaks ACP framed over `MessagePort`. Feature-equivalent to `bodhi-pi-cli` — every bodhi-pi capability has a Playwright spec here proving it works through the worker against a real LLM.
+Reference browser host for `@bodhiapp/bodhi-pi`. Vite + React + TypeScript app on the main thread; agent runs in a dedicated Web Worker. Main↔Worker speaks ACP framed over `MessagePort`. Feature-equivalent to `bodhi-pi-cli` and to the `bodhi-pi-ws-server` + `bodhi-pi-ws-frontend` pair — every bodhi-pi capability has a Playwright spec here proving it works through the worker against a real LLM.
+
+**Parity counterparts:** `packages/bodhi-pi-cli` (Node CLI) and `packages/bodhi-pi-ws-frontend` + `packages/bodhi-pi-ws-server` (split WS host). New features land here AND in those packages — see `packages/bodhi-pi/CLAUDE.md` for the parity rule.
 
 `README.md` covers user-facing setup. `ai-docs/plans/` carries the milestone plans (M1–M16) with rationale for each design choice.
+
+## Feature surface (the parity contract)
+
+Each row below is a user-visible capability. The same row must be visible in `bodhi-pi-cli` and in the `bodhi-pi-ws-*` pair, observable through analogous DOM/CLI affordances.
+
+- **Streaming chat round-trip.** Text prompt → user message persists, assistant chunks stream into one message, status flips `idle → streaming → idle`.
+- **Tool-call cards.** Inline cards with `[data-testid=tool-call][data-tool-name][data-tool-status=running|completed|failed]`, optional preview (first ~400 chars).
+- **Cancellation.** Composer Send button morphs to Stop while streaming; click cancels in-flight prompt; status returns to `idle`.
+- **Slash commands.** `/help`, `/model [id]`, `/sessions`, `/new`, `/resume <id>`, `/close`, `/delete <id>` dispatch locally on the main thread; project commands and skills flow to `conn.prompt`.
+- **Project commands + skills + scripted skills.** Discovered from `.bodhi-pi/commands/`, `.bodhi-pi/skills/`; scripted skills run via the host's `ScriptExecutor` (`run_script` tool).
+- **Extensions.** Auto-loaded from `.bodhi-pi/extensions/*.{js,mjs,cjs}` per session; can hook `tool_result` etc.
+- **Cross-provider.** OpenAI + Anthropic in one session; `/model <id>` switches mid-thread; `data-current-model` updates.
+- **Session lifecycle.** Auto-resume the last session on reload (per `(host, userId)` scope); replay history on resume; tool-call cards re-render as completed; failed tools surface as `data-tool-status=failed`.
+- **Observability via EventsPanel.** Two tabs — `lifecycle` (every `BodhiPiEvent`) and `wire` (every ACP frame in either direction). Specs assert through `[data-testid=event-row]` only.
+- **Chat-state attribute.** `[data-testid=chat-page][data-test-state=...]` for blackbox state waits.
 
 ## Architecture pillars
 

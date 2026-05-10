@@ -19,6 +19,7 @@ class CapturingClient implements Client {
 	async sessionUpdate(params: SessionNotification): Promise<void> {
 		this.updates.push(params);
 	}
+	async extNotification(_method: string, _params: Record<string, unknown>): Promise<void> {}
 }
 
 async function connect(port: number, user: { id: number; email: string }) {

@@ -9,7 +9,7 @@ test.describe("M11 auto-resume last session", () => {
 
 		await app.send("Reply with the single word: alpha");
 		await app.expectChatStatus("idle");
-		const sessionId = await app.status.getAttribute("data-current-session-id");
+		const sessionId = await app.status.getAttribute("data-session-id");
 		expect(sessionId).toBeTruthy();
 		expect(sessionId?.length ?? 0).toBeGreaterThan(0);
 
@@ -22,7 +22,7 @@ test.describe("M11 auto-resume last session", () => {
 		await app.expectStatus("connected");
 
 		// The auto-resume effect should restore the same sessionId.
-		await expect(app.status).toHaveAttribute("data-current-session-id", sessionId ?? "");
+		await expect(app.status).toHaveAttribute("data-session-id", sessionId ?? "");
 
 		// And surface a "resumed session" system message.
 		await expect(app.page.getByTestId("system-message").filter({ hasText: "resumed session" }).last()).toBeVisible();

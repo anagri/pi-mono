@@ -15,8 +15,10 @@ const FRONTEND_PORT = 35273;
 export default defineConfig({
 	testDir: "./e2e",
 	globalSetup: "./e2e/global-setup.ts",
-	fullyParallel: false,
-	workers: 1,
+	// Per-test isolation lives in spawnTestServer (own port + tmp SQLite) and
+	// Playwright's per-test browser context, so workers share Vite safely.
+	fullyParallel: true,
+	workers: process.env.CI ? 2 : 4,
 	reporter: "list",
 	timeout: 60_000,
 	expect: { timeout: 30_000 },
@@ -24,12 +26,12 @@ export default defineConfig({
 		baseURL: `http://localhost:${FRONTEND_PORT}`,
 		trace: "retain-on-failure",
 	},
-	// Backend ws-server is spawned per test by `spawnTestServer` in e2e/helpers; only
-	// the frontend dev server is started by Playwright here.
+	// Backend ws-server is spawned per test by `spawnTestServer`; Playwright only
+	// owns the Vite dev server here.
 	webServer: {
 		command: `npx --no-install vite --port ${FRONTEND_PORT} --strictPort`,
 		url: `http://localhost:${FRONTEND_PORT}`,
-		reuseExistingServer: false,
+		reuseExistingServer: !process.env.CI,
 		timeout: 30_000,
 		stdout: "pipe",
 		stderr: "pipe",

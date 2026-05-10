@@ -7,18 +7,24 @@ import type {
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { encodeToken, type UserCtx } from "./auth";
 import { createEventLog, type EventLog } from "./event-log";
+import { createLifecycleLog, type LifecycleLog, lifecycleRowFromParams } from "./lifecycle-log";
 import { wsToStream } from "./ws-stream";
 
 export const SUBPROTOCOL = "bodhi-pi.v1";
+export const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 export interface ClientHandlers {
 	onSessionUpdate?: (n: SessionNotification) => void;
 	onPermissionRequest?: (r: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
 }
 
+interface InternalHandlers extends ClientHandlers {
+	onExtNotification: (method: string, params: Record<string, unknown>) => void;
+}
+
 class WireClient implements Client {
-	private readonly handlers: ClientHandlers;
-	constructor(handlers: ClientHandlers) {
+	private readonly handlers: InternalHandlers;
+	constructor(handlers: InternalHandlers) {
 		this.handlers = handlers;
 	}
 	async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
@@ -33,6 +39,9 @@ class WireClient implements Client {
 	async sessionUpdate(params: SessionNotification): Promise<void> {
 		this.handlers.onSessionUpdate?.(params);
 	}
+	async extNotification(method: string, params: Record<string, unknown>): Promise<void> {
+		this.handlers.onExtNotification(method, params);
+	}
 }
 
 export interface ConnectOptions {
@@ -46,6 +55,7 @@ export interface Connection {
 	ws: WebSocket;
 	conn: ClientSideConnection;
 	eventLog: EventLog;
+	lifecycleLog: LifecycleLog;
 }
 
 export function connect(opts: ConnectOptions): Promise<Connection> {
@@ -60,6 +70,13 @@ export function connect(opts: ConnectOptions): Promise<Connection> {
 		let opened = false;
 
 		const eventLog = createEventLog();
+		const lifecycleLog = createLifecycleLog();
+
+		const onExtNotification = (method: string, params: Record<string, unknown>) => {
+			if (method !== LIFECYCLE_EVENT_METHOD) return;
+			const row = lifecycleRowFromParams(params);
+			if (row) lifecycleLog.publish(row);
+		};
 
 		ws.addEventListener("open", () => {
 			opened = true;
@@ -67,8 +84,9 @@ export function connect(opts: ConnectOptions): Promise<Connection> {
 				eventLog.publish({ direction, raw, ts: Date.now() });
 			});
 			const acpStream = ndJsonStream(stream.writable, stream.readable);
-			const conn = new ClientSideConnection(() => new WireClient(opts.handlers ?? {}), acpStream);
-			resolve({ ws, conn, eventLog });
+			const handlers: InternalHandlers = { ...(opts.handlers ?? {}), onExtNotification };
+			const conn = new ClientSideConnection(() => new WireClient(handlers), acpStream);
+			resolve({ ws, conn, eventLog, lifecycleLog });
 		});
 
 		ws.addEventListener("close", (ev) => {

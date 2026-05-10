@@ -14,6 +14,7 @@ class TestClient implements Client {
 	async sessionUpdate() {
 		// no-op for handshake test
 	}
+	async extNotification(_method: string, _params: Record<string, unknown>): Promise<void> {}
 }
 
 function connectClient(port: number, subprotocols: string[]): Promise<{ ws: WebSocket; conn: ClientSideConnection }> {

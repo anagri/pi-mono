@@ -2,7 +2,22 @@
 
 WebSocket-hosted multi-user agent backend for `@bodhiapp/bodhi-pi`. Single Node app: bare `node:http` + `ws`, multi-tenant SQLite (Drizzle), per-user workspace dirs, ACP wire over WS frames.
 
+**Parity counterparts:** `packages/bodhi-pi-ws-frontend` (browser client that talks to this server) and `packages/bodhi-pi-web` (single-tenant browser-only host with the same feature surface). Every user-visible feature in any host must land in all three — see `packages/bodhi-pi/CLAUDE.md` for the rule.
+
 `README.md` covers user-facing setup. Plan lives in `ai-docs/plans/we-have-packages-bodhi-pi-which-imperative-popcorn.md`.
+
+## Feature surface (the parity contract)
+
+What this server enables clients (the ws-frontend, or any other ACP/WS client) to do. Mirrors `packages/bodhi-pi-web/CLAUDE.md`'s feature list:
+
+- **Streaming chat round-trip** via ACP `session/prompt` over WS.
+- **Tool execution** through the built-in toolset (`createBuiltinTools`) — read/write/edit/ls/find/grep/run_script.
+- **Cancellation** via ACP `session/cancel`.
+- **Slash commands, project commands, skills, scripted skills** — handled by `bodhi-pi`'s prompt expansion before the LLM sees the message; the server only wires transport + multi-tenant storage.
+- **Extensions.** Auto-loaded per WS connection from `<cwd>/.bodhi-pi/extensions/*.{js,mjs,cjs}`.
+- **Cross-provider.** OpenAI + Anthropic registered when their API keys are set in env; `/model <id>` switching travels through ACP `session/setSessionConfigOption`.
+- **Session lifecycle.** SQLite-backed multi-tenant session store (scoped by `userId`); reconnect rehydrates from disk; cross-tenant access throws.
+- **Lifecycle event stream.** Every `BodhiPiEvent` the agent emits is forwarded to the client via ACP `extNotification("_bodhi-pi/lifecycle/event", ...)`. The ws-frontend renders these in its `EventsPanel` lifecycle tab — parity with `bodhi-pi-web`'s lifecycle tab. Wire frames remain visible client-side via the existing event log.
 
 ## Architecture pillars
 
@@ -18,7 +33,7 @@ WebSocket-hosted multi-user agent backend for `@bodhiapp/bodhi-pi`. Single Node 
 
 **Heartbeat = WS protocol ping every 30s, drop on no-pong.** Built into the ws library; no client code.
 
-**`ScriptExecutor` not registered.** Multi-tenant child_process is unsafe without sandboxing.
+**`ScriptExecutor` registered, scoped by per-user cwd.** `wireAgentForConnection` builds `createNodeScriptExecutor()` per WS connection. The only isolation boundary is the user's workspace directory (the agent's cwd, `<dataDir>/users/<userId>/workspace/` or the `--workspace` override) — there is no syscall-level sandboxing. Acceptable for the test-host scope of this package; production deployments would need to add OS-level sandboxing before exposing this to untrusted users.
 
 **`--workspace <dir>` is single-tenant override.** When set (CLI or `BuildServerOptions.workspaceOverride`), every connecting user uses that dir as their agent cwd, bypassing `ensureUserWorkspace`. Multi-tenant DB isolation (M3) still active. Used by e2e fixture-driven tests; do NOT enable in production.
 

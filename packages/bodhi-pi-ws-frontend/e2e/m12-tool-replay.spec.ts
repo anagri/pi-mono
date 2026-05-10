@@ -10,7 +10,7 @@ test("M12 tool-call cards from a prior session re-render as completed on /resume
 	await app.expectChatStatus("idle");
 	await expect(app.toolCalls({ name: "write" }).first()).toHaveAttribute("data-tool-status", "completed");
 
-	const sessionId = await app.status.getAttribute("data-current-session-id");
+	const sessionId = await app.status.getAttribute("data-session-id");
 	expect(sessionId).toBeTruthy();
 
 	// Force a fresh client-side session, then explicitly /resume the prior id.

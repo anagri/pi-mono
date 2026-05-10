@@ -3,7 +3,8 @@ export interface WsStream {
 	writable: WritableStream<Uint8Array>;
 }
 
-export type FrameTap = (direction: "inbound" | "outbound", raw: string) => void;
+/** "in" = client → agent (browser → server, i.e. our writes). "out" = agent → client (incoming WS messages). */
+export type FrameTap = (direction: "in" | "out", raw: string) => void;
 
 async function toUint8Array(data: unknown): Promise<Uint8Array> {
 	if (data instanceof ArrayBuffer) return new Uint8Array(data);
@@ -24,7 +25,7 @@ export function wsToStream(ws: WebSocket, tap?: FrameTap): WsStream {
 					(chunk) => {
 						if (tap) {
 							try {
-								tap("inbound", decoder.decode(chunk, { stream: false }));
+								tap("out", decoder.decode(chunk, { stream: false }));
 							} catch {
 								// tap failures must never break the transport
 							}
@@ -63,7 +64,7 @@ export function wsToStream(ws: WebSocket, tap?: FrameTap): WsStream {
 			ws.send(copy);
 			if (tap) {
 				try {
-					tap("outbound", decoder.decode(copy, { stream: false }));
+					tap("in", decoder.decode(copy, { stream: false }));
 				} catch {
 					// tap failures must never break the transport
 				}

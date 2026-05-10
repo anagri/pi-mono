@@ -1,4 +1,5 @@
-export type FrameDirection = "inbound" | "outbound";
+/** "in" = client → agent (browser → server). "out" = agent → client (server → browser). Matches bodhi-pi-web. */
+export type FrameDirection = "in" | "out";
 
 export interface RawFrame {
 	direction: FrameDirection;

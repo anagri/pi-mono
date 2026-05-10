@@ -18,16 +18,27 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 
 ## Reference clients & publishable adapters
 
-`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, ScriptExecutor are host-injected. Two reference hosts and two adapter packages prove every feature works on both Node and browser:
+`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, ScriptExecutor are host-injected. Three reference hosts and two adapter packages prove every feature works across Node, browser-only, and split (server + browser) deployments:
 
 | Package | Role | Status |
 |---|---|---|
 | `packages/bodhi-pi-cli` | Reference Node host (REPL CLI) | private workspace package |
-| `packages/bodhi-pi-web` | Reference browser host (Vite/React + Web Worker) | private workspace package |
+| `packages/bodhi-pi-web` | Reference browser host (Vite/React + Web Worker, single-tenant) | private workspace package |
+| `packages/bodhi-pi-ws-server` + `packages/bodhi-pi-ws-frontend` | Reference split host — Node WS server (multi-tenant SQLite, ACP over WebSocket) + thin React frontend | private workspace package pair |
 | `packages/bodhi-pi-node` | Publishable Node adapters (`@bodhiapp/bodhi-pi-node`) — `createNodeFilesystem`, `createSqliteSessionStore`, `createNodeScriptExecutor` | publishable npm package |
 | `packages/bodhi-pi-browser` | Publishable browser adapters (`@bodhiapp/bodhi-pi-browser`) — `createZenfsFilesystem`, `createDexieSessionStore`, `createBrowserScriptExecutor`, `createMessagePortStream` | publishable npm package |
 
 The adapter packages exist so any third-party host (a different CLI, a desktop wrapper, an extension) can `npm i @bodhiapp/bodhi-pi @bodhiapp/bodhi-pi-{node,browser}` and skip the reference-client code entirely.
+
+## Runtime-host parity rule
+
+Every user-visible feature MUST land in **all three reference hosts**: `bodhi-pi-cli`, `bodhi-pi-web`, and the `bodhi-pi-ws-server` + `bodhi-pi-ws-frontend` pair. Functional parity is required, technical parity is not — different runtimes (Node CLI vs. browser worker vs. WebSocket split) get to use whichever transport / storage / extension-loader fits, but the user-observable behavior and the e2e assertions MUST line up.
+
+A PR that adds a feature to one host without the others is a regression by default. Either:
+- include parity changes in the same PR (preferred), or
+- explicitly justify and file follow-up work for the missing hosts in the PR description.
+
+Each host's CLAUDE.md carries its own per-runtime feature inventory; treat those inventories as one set of three lenses on the same surface.
 
 ## Feature workflow (TDD across the matrix)
 
