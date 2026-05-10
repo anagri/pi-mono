@@ -8,7 +8,15 @@
  *  - SSE methods (prompt, loadSession) → `POST /acp` with `Accept: text/event-stream`,
  *    parsed via `parseSse`. Each notification fires registered `sessionUpdate`
  *    handlers; the final JSON-RPC response resolves the call.
+ *
+ * Observability hooks (M14, M15):
+ *  - `onLifecycleEvent` — receives `_bodhi-pi/lifecycle/event` extNotifications
+ *    that arrive on the SSE stream during prompt/load.
+ *  - `frameTap` — every outbound JSON-RPC body and every inbound JSON-RPC frame
+ *    (one per SSE event, or the final JSON response for non-SSE methods) is
+ *    pushed to a configured EventLog when set.
  */
+import type { EventLog } from "./event-log.ts";
 import { parseSse } from "./sse-parser.ts";
 
 export type SessionNotificationHandler = (notification: {
@@ -16,11 +24,15 @@ export type SessionNotificationHandler = (notification: {
 	update: { sessionUpdate: string; [k: string]: unknown };
 }) => void;
 
+export type LifecycleEventHandler = (params: Record<string, unknown>) => void;
+
 export interface AcpClientConfig {
 	/** Token already encoded as base64url JSON. */
 	token: string;
 	/** Base URL of the server, e.g. `""` (same origin) or `http://localhost:3000`. */
 	baseUrl?: string;
+	/** When set, every outbound + inbound JSON-RPC frame is pushed here. */
+	eventLog?: EventLog;
 }
 
 export class RpcError extends Error {
@@ -48,17 +60,28 @@ interface JsonRpcError {
 
 let nextId = 1;
 
+const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
+
 export class AcpHttpClient {
 	private readonly baseUrl: string;
 	private readonly token: string;
+	private readonly eventLog: EventLog | undefined;
 
 	constructor(cfg: AcpClientConfig) {
 		this.baseUrl = cfg.baseUrl ?? "";
 		this.token = cfg.token;
+		this.eventLog = cfg.eventLog;
+	}
+
+	private tap(direction: "in" | "out", raw: string): void {
+		if (!this.eventLog) return;
+		this.eventLog.publish({ direction, raw, ts: Date.now() });
 	}
 
 	private async call<T>(method: string, params: Record<string, unknown>): Promise<T> {
 		const id = nextId++;
+		const reqBody = JSON.stringify({ jsonrpc: "2.0", id, method, params });
+		this.tap("out", reqBody);
 		const res = await fetch(`${this.baseUrl}/acp`, {
 			method: "POST",
 			headers: {
@@ -66,12 +89,14 @@ export class AcpHttpClient {
 				accept: "application/json",
 				authorization: `Bearer ${this.token}`,
 			},
-			body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+			body: reqBody,
 		});
 		if (!res.ok) {
 			throw new RpcError(res.status, `HTTP ${res.status} ${res.statusText}`);
 		}
-		const body = (await res.json()) as JsonRpcSuccess<T> | JsonRpcError;
+		const text = await res.text();
+		this.tap("in", text);
+		const body = JSON.parse(text) as JsonRpcSuccess<T> | JsonRpcError;
 		if ("error" in body) {
 			throw new RpcError(body.error.code, body.error.message, body.error.data);
 		}
@@ -116,17 +141,28 @@ export class AcpHttpClient {
 	}
 
 	private notificationHandlers = new Set<SessionNotificationHandler>();
+	private lifecycleHandlers = new Set<LifecycleEventHandler>();
 
 	onSessionUpdate(handler: SessionNotificationHandler): () => void {
 		this.notificationHandlers.add(handler);
 		return () => this.notificationHandlers.delete(handler);
 	}
 
-	private dispatchNotification(method: string, params: unknown): void {
-		if (method !== "session/update") return;
-		const p = params as { sessionId?: string; update?: { sessionUpdate?: string } };
-		if (typeof p.sessionId !== "string" || typeof p.update?.sessionUpdate !== "string") return;
-		for (const h of this.notificationHandlers) h(p as Parameters<SessionNotificationHandler>[0]);
+	onLifecycleEvent(handler: LifecycleEventHandler): () => void {
+		this.lifecycleHandlers.add(handler);
+		return () => this.lifecycleHandlers.delete(handler);
+	}
+
+	private dispatchFrame(method: string | undefined, params: unknown): void {
+		if (method === "session/update") {
+			const p = params as { sessionId?: string; update?: { sessionUpdate?: string } };
+			if (typeof p.sessionId !== "string" || typeof p.update?.sessionUpdate !== "string") return;
+			for (const h of this.notificationHandlers) h(p as Parameters<SessionNotificationHandler>[0]);
+		} else if (method === LIFECYCLE_EVENT_METHOD) {
+			if (params && typeof params === "object") {
+				for (const h of this.lifecycleHandlers) h(params as Record<string, unknown>);
+			}
+		}
 	}
 
 	private async sseCall<T>(
@@ -135,6 +171,8 @@ export class AcpHttpClient {
 		opts: { signal?: AbortSignal } = {},
 	): Promise<T> {
 		const id = nextId++;
+		const reqBody = JSON.stringify({ jsonrpc: "2.0", id, method, params });
+		this.tap("out", reqBody);
 		const fetchOpts: RequestInit = {
 			method: "POST",
 			headers: {
@@ -142,7 +180,7 @@ export class AcpHttpClient {
 				accept: "text/event-stream",
 				authorization: `Bearer ${this.token}`,
 			},
-			body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+			body: reqBody,
 		};
 		if (opts.signal) fetchOpts.signal = opts.signal;
 		const res = await fetch(`${this.baseUrl}/acp`, fetchOpts);
@@ -150,6 +188,7 @@ export class AcpHttpClient {
 		if (!res.body) throw new RpcError(0, "no response body");
 		let final: T | undefined;
 		for await (const frame of parseSse(res.body)) {
+			this.tap("in", JSON.stringify(frame));
 			const f = frame as {
 				method?: string;
 				params?: unknown;
@@ -158,7 +197,7 @@ export class AcpHttpClient {
 				error?: { code: number; message: string; data?: unknown };
 			};
 			if (typeof f.method === "string") {
-				this.dispatchNotification(f.method, f.params);
+				this.dispatchFrame(f.method, f.params);
 			} else if ("error" in f && f.error) {
 				throw new RpcError(f.error.code, f.error.message, f.error.data);
 			} else if ("result" in f && f.result !== undefined) {

@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chat } from "./components/Chat.tsx";
+import { EventsPanel } from "./components/EventsPanel.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { StatusBar, type ConnectionStatus } from "./components/StatusBar.tsx";
 import { useSettings } from "./hooks/useSettings.ts";
 import { AcpHttpClient } from "./lib/acp-http-client.ts";
 import { encodeToken } from "./lib/auth.ts";
+import { createEventLog, type EventLog } from "./lib/event-log.ts";
+import * as lastSession from "./lib/last-session.ts";
+import { createLifecycleLog, type LifecycleLog, lifecycleRowFromParams } from "./lib/lifecycle-log.ts";
 
 type ChatStatus = "idle" | "streaming" | "error";
 
-/**
- * Composite test-state on the chat-root container. Mirrors ws-frontend's rule
- * (`App.tsx:104-108`): connection state takes precedence; once connected, chat
- * status takes over.
- */
 function compositeTestState(connection: ConnectionStatus, chat: ChatStatus): string {
 	if (connection !== "connected") return connection;
 	return chat;
@@ -28,13 +27,28 @@ export default function App() {
 	const [defaultModelId, setDefaultModelId] = useState<string>("");
 	const [client, setClient] = useState<AcpHttpClient | undefined>();
 
+	// Logs are constructed lazily per connect so disconnecting clears them.
+	const [eventLog, setEventLog] = useState<EventLog | null>(null);
+	const [lifecycleLog, setLifecycleLog] = useState<LifecycleLog | null>(null);
+	const lifecycleUnsubRef = useRef<(() => void) | null>(null);
+
 	const connect = useCallback(async () => {
 		setError(undefined);
 		setStatus("connecting");
 		const token = settings.sendToken ? encodeToken({ id: settings.id, email: settings.email }) : "";
-		const c = new AcpHttpClient({ token });
+		const newEventLog = createEventLog();
+		const newLifecycleLog = createLifecycleLog();
+		const c = new AcpHttpClient({ token, eventLog: newEventLog });
+		// Subscribe lifecycle dispatch from client → log.
+		lifecycleUnsubRef.current?.();
+		lifecycleUnsubRef.current = c.onLifecycleEvent((params) => {
+			const row = lifecycleRowFromParams(params);
+			if (row) newLifecycleLog.publish(row);
+		});
 		try {
 			await c.initialize();
+			setEventLog(newEventLog);
+			setLifecycleLog(newLifecycleLog);
 			setClient(c);
 			setStatus("connected");
 		} catch (err) {
@@ -44,32 +58,57 @@ export default function App() {
 				setStatus("error");
 				setError(msg);
 			}
+			lifecycleUnsubRef.current?.();
+			lifecycleUnsubRef.current = null;
 		}
 	}, [settings.id, settings.email, settings.sendToken]);
 
 	const disconnect = useCallback(() => {
+		lifecycleUnsubRef.current?.();
+		lifecycleUnsubRef.current = null;
 		setClient(undefined);
 		setSessionId(undefined);
 		setCurrentModelId("");
+		setEventLog(null);
+		setLifecycleLog(null);
 		setStatus("disconnected");
 		setChatStatus("idle");
 		setError(undefined);
 	}, []);
 
-	// On first connect, auto-create a session so the user lands in a usable state
-	// without having to type /new. Auto-resume of last session lands in M17.
+	// On first connect: try to resume last session (M17). If none / fails / cross-tenant,
+	// create a fresh session.
 	useEffect(() => {
 		if (status !== "connected" || !client || sessionId !== undefined) return;
 		(async () => {
+			const last = lastSession.read(settings.id);
+			if (last) {
+				try {
+					await client.loadSession({ sessionId: last });
+					setSessionId(last);
+					return;
+				} catch {
+					lastSession.clear(settings.id);
+					// fall through to new session
+				}
+			}
 			try {
 				const created = await client.newSession({});
 				setSessionId(created.sessionId);
+				lastSession.write(settings.id, created.sessionId);
 				if (!defaultModelId) setDefaultModelId("");
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			}
 		})();
-	}, [status, client, sessionId, defaultModelId]);
+	}, [status, client, sessionId, defaultModelId, settings.id]);
+
+	// Persist active sessionId for auto-resume.
+	useEffect(() => {
+		if (status === "connected" && sessionId) {
+			lastSession.write(settings.id, sessionId);
+		}
+	}, [status, sessionId, settings.id]);
 
 	const testState = useMemo(() => compositeTestState(status, chatStatus), [status, chatStatus]);
 
@@ -77,7 +116,7 @@ export default function App() {
 		<main
 			data-testid="chat-page"
 			data-test-state={testState}
-			style={{ maxWidth: 720, margin: "5vh auto", padding: "0 1rem" }}
+			style={{ maxWidth: 720, margin: "5vh auto", padding: "0 1rem 0 1rem" }}
 		>
 			<header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
 				<h1 style={{ margin: 0 }}>bodhi-pi-http</h1>
@@ -117,6 +156,8 @@ export default function App() {
 					/>
 				</div>
 			) : null}
+
+			<EventsPanel eventLog={eventLog} lifecycleLog={lifecycleLog} />
 		</main>
 	);
 }
