@@ -26,7 +26,7 @@ export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
 		createGrepTool(deps),
 	];
 	if (deps.scriptExecutor) {
-		tools.push(createRunScriptTool({ executor: deps.scriptExecutor, cwd: deps.cwd }));
+		tools.push(createRunScriptTool(deps));
 	}
 	return tools;
 }
@@ -36,7 +36,7 @@ export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
  * No `..` traversal guard — hosts that need sandboxing wrap their `Filesystem`.
  */
 export function resolvePath(cwd: string, userPath: string): string {
-	if (path.isAbsolute(userPath)) return path.posix.normalize(userPath);
+	if (path.posix.isAbsolute(userPath)) return path.posix.normalize(userPath);
 	return path.posix.normalize(path.posix.join(cwd, userPath));
 }
 

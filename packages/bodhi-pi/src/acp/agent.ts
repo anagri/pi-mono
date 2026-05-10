@@ -40,7 +40,8 @@ import { loadProjectCommands } from "@/commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
 import type { BodhiPiEventHandlers } from "@/events/types.js";
-import { ExtensionRunner, mergeCommands, mergeTools } from "@/extensions/runner.js";
+import { mergeCommands, mergeTools } from "@/extensions/merge.js";
+import { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
@@ -571,18 +572,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 				}
 				case "message_end": {
 					await events.emitMessageEnd({ type: "message_end", sessionId, message: event.message });
-					const role = event.message.role;
-					if (role !== "user" && role !== "assistant" && role !== "toolResult") return;
-					if (role === "assistant") {
-						const msg = event.message as { stopReason?: PiStopReason; errorMessage?: string };
-						outcome.stopReason = msg.stopReason;
-						outcome.errorMessage = msg.errorMessage;
+					const message = event.message;
+					if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return;
+					if (message.role === "assistant") {
+						outcome.stopReason = message.stopReason;
+						outcome.errorMessage = message.errorMessage;
 					}
 					await store.append(sessionId, {
 						type: "message",
 						id: randomUUID(),
 						timestamp: Date.now(),
-						message: event.message,
+						message,
 					});
 					return;
 				}

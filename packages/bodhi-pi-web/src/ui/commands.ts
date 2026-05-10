@@ -1,4 +1,5 @@
-import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
+import { EXT_DELETE_SESSION } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ChatState } from "../store/chatStore";
 
@@ -9,7 +10,10 @@ import type { ChatState } from "../store/chatStore";
  * /model; M5 adds /sessions, /new, /resume, /close, /delete.
  */
 
-const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
+function modelIdFromOption(opt: SessionConfigOption | undefined): string | undefined {
+	if (!opt || opt.type !== "select") return undefined;
+	return opt.currentValue;
+}
 
 export interface UiCommandState {
 	sessionId: string;
@@ -82,7 +86,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					configId: "model",
 					value: modelId,
 				});
-				const newId = (result.configOptions[0]?.currentValue as string | undefined) ?? modelId;
+				const newId = modelIdFromOption(result.configOptions[0]) ?? modelId;
 				ctx.setCurrentModelId(newId);
 				ctx.addSystemMessage(`model switched to: ${newId}`);
 			} catch (err) {
@@ -94,7 +98,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		case "/sessions": {
 			try {
 				const result = await ctx.conn.listSessions({ cwd: ctx.cwd });
-				const sessions = (result.sessions ?? []) as Array<{ sessionId: string; cwd: string; updatedAt?: string }>;
+				const sessions = result.sessions;
 				if (sessions.length === 0) {
 					ctx.addSystemMessage("(no sessions for this cwd)");
 				} else {
@@ -143,8 +147,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				ctx.clear();
 				ctx.setSessionId(targetId);
 				const result = await ctx.conn.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
-				const restoredModel =
-					(result.configOptions?.[0]?.currentValue as string | undefined) ?? ctx.state.defaultModelId;
+				const restoredModel = modelIdFromOption(result.configOptions?.[0]) ?? ctx.state.defaultModelId;
 				ctx.setCurrentModelId(restoredModel);
 				ctx.setStatus("idle");
 				ctx.addSystemMessage(`resumed session: ${targetId.slice(0, 8)}…`);

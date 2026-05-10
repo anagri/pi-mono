@@ -8,11 +8,12 @@ export function createExtensionEventBus(): ExtensionEventBus {
 			const handlers = channels.get(channel);
 			if (!handlers) return;
 			for (const h of handlers) {
-				try {
-					void h(data);
-				} catch (err) {
-					console.error(`[bodhi-pi pi.events:${channel}] handler threw`, err);
-				}
+				// Promise.resolve().then(...) catches both sync and async throws.
+				Promise.resolve()
+					.then(() => h(data))
+					.catch((err) => {
+						console.error(`[bodhi-pi pi.events:${channel}] handler threw`, err);
+					});
 			}
 		},
 		on(channel, handler) {

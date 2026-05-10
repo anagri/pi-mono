@@ -1,10 +1,16 @@
 import { expectTextContent } from "@test/helpers/expect-text-content.js";
 import { describe, expect, test } from "vitest";
+import { createInMemoryFilesystem } from "@/filesystem/in-memory-filesystem.js";
 import type { ScriptExecuteParams, ScriptExecutor } from "@/script-executor/script-executor.js";
+import type { ToolDeps } from "./index.js";
 import { createRunScriptTool } from "./run-script.js";
 
 function makeExecutor(impl: ScriptExecutor["execute"]): ScriptExecutor {
 	return { execute: impl };
+}
+
+function makeDeps(executor: ScriptExecutor): ToolDeps {
+	return { filesystem: createInMemoryFilesystem(), cwd: "/proj", scriptExecutor: executor };
 }
 
 describe("createRunScriptTool", () => {
@@ -14,7 +20,7 @@ describe("createRunScriptTool", () => {
 			received = params;
 			return { stdout: "out", stderr: "", exitCode: 0 };
 		});
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		await tool.execute("call-1", { path: "scripts/run.js", args: ["a", "b"] });
 
@@ -29,7 +35,7 @@ describe("createRunScriptTool", () => {
 			received = params;
 			return { stdout: "", stderr: "", exitCode: 0 };
 		});
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		await tool.execute("call-1", { path: "/elsewhere/script.js" });
 
@@ -39,7 +45,7 @@ describe("createRunScriptTool", () => {
 
 	test("formats stdout, stderr, and exitCode in the tool result", async () => {
 		const executor = makeExecutor(async () => ({ stdout: "hello", stderr: "warn", exitCode: 0 }));
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		const result = await tool.execute("call-1", { path: "x.js" });
 
@@ -51,7 +57,7 @@ describe("createRunScriptTool", () => {
 
 	test("non-zero exit code surfaces in the tool result", async () => {
 		const executor = makeExecutor(async () => ({ stdout: "", stderr: "boom", exitCode: 1 }));
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		const result = await tool.execute("call-1", { path: "x.js" });
 		const text = expectTextContent(result);
@@ -60,7 +66,7 @@ describe("createRunScriptTool", () => {
 
 	test("empty stdout and stderr produces only the exitCode line", async () => {
 		const executor = makeExecutor(async () => ({ stdout: "", stderr: "", exitCode: 1 }));
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		const result = await tool.execute("call-1", { path: "x.js" });
 		const text = expectTextContent(result);
@@ -70,7 +76,7 @@ describe("createRunScriptTool", () => {
 	test("stdout larger than RUN_SCRIPT_MAX_BYTES is truncated", async () => {
 		const big = "x".repeat(60_000);
 		const executor = makeExecutor(async () => ({ stdout: big, stderr: "", exitCode: 0 }));
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		const result = await tool.execute("call-1", { path: "x.js" });
 		const text = expectTextContent(result);
@@ -84,7 +90,7 @@ describe("createRunScriptTool", () => {
 			received = params;
 			return { stdout: "", stderr: "", exitCode: 0 };
 		});
-		const tool = createRunScriptTool({ executor, cwd: "/proj" });
+		const tool = createRunScriptTool(makeDeps(executor));
 
 		await tool.execute("call-1", { path: "x.js", timeout: 5000 });
 		expect(received?.timeout).toBe(5000);

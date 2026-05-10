@@ -30,13 +30,11 @@ export function useRuntime(): RuntimeContextValue {
 
 export interface RuntimeProviderProps {
 	workspace: WorkspaceProvider;
-	/** Independent observability toggle. Pass through from `BootstrapResult.recordEvents`. */
-	recordEvents?: boolean;
 	onUnmount?: () => void | Promise<void>;
 	children: React.ReactNode;
 }
 
-export function RuntimeProvider({ workspace, recordEvents, onUnmount, children }: RuntimeProviderProps) {
+export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
@@ -73,7 +71,6 @@ export function RuntimeProvider({ workspace, recordEvents, onUnmount, children }
 				defaultModelId: env.defaultModelId,
 				apiKeys: env.apiKeys,
 				workspace,
-				...(recordEvents ? { recordEvents: true } : {}),
 				onNotification: (notif) => {
 					dispatchNotification(notif, {
 						appendChunk,
@@ -137,9 +134,9 @@ export function RuntimeProvider({ workspace, recordEvents, onUnmount, children }
 			runtimeRef.current = null;
 		};
 		// All captured setters are referentially stable (Zustand bound actions + useState setters);
-		// `workspace` and `recordEvents` are the only re-init triggers.
+		// `workspace` is the only re-init trigger.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspace, recordEvents]);
+	}, [workspace]);
 
 	useEffect(() => {
 		if (status === "closed") {

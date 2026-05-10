@@ -355,7 +355,7 @@ test("grep byte-truncation kicks in when many matches accumulate", async () => {
 	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "grep" }] });
 
 	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
-	expect(text).toMatch(/Truncated:.*KB output limit/);
+	expect(text).toMatch(/Truncated:.*K chars output limit/);
 });
 
 test("grep truncates a long matched line at GREP_MAX_LINE_LENGTH with ellipsis", async () => {
@@ -389,7 +389,7 @@ test("ls byte-truncation kicks in for a directory with many entries", async () =
 	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ls" }] });
 
 	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
-	expect(text).toMatch(/Truncated:.*(KB output limit|entries limit)/);
+	expect(text).toMatch(/Truncated:.*(K chars output limit|entries limit)/);
 });
 
 test("multiple tool calls in one prompt all surface as notifications in order", async () => {

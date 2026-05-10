@@ -4,6 +4,7 @@ import "./App.css";
 import { clearLastSessionId } from "./agent/session-storage";
 import { ChatPage } from "./ui/ChatPage";
 import { DirectoryGate } from "./ui/DirectoryGate";
+import { EventsPanel } from "./ui/EventsPanel";
 import { RuntimeProvider } from "./ui/RuntimeProvider";
 import { type BootstrapResult, bootstrapWorkspace } from "./workspace/bootstrap";
 import type { WorkspaceProvider } from "./workspace/provider";
@@ -27,17 +28,10 @@ function App() {
 	}, []);
 
 	function handleGranted(workspace: WorkspaceProvider) {
-		// Manual grants happen post-bootstrap; recordEvents is only on for the
-		// e2e seed branch, never for an FSA picker, so default to false here.
-		setBoot({ ready: true, workspace, recordEvents: false });
+		setBoot({ ready: true, workspace });
 	}
 
 	async function handleUnmount() {
-		// Forget the granted FSA handle and the per-tab session pointer; the
-		// state flip below unmounts <RuntimeProvider> which terminates the
-		// worker (ZenFS state goes with the realm). Dexie sessions persist
-		// across unmounts but are filtered by cwd, so a remount of a
-		// different folder starts with a clean /sessions list.
 		await clearHandle();
 		clearLastSessionId();
 		setBoot({ ready: false, kind: "needs-pick" });
@@ -67,8 +61,11 @@ function App() {
 	}
 
 	return (
-		<RuntimeProvider workspace={boot.workspace} recordEvents={boot.recordEvents} onUnmount={handleUnmount}>
-			<ChatPage />
+		<RuntimeProvider workspace={boot.workspace} onUnmount={handleUnmount}>
+			<div className="app-shell" data-testid="app-shell">
+				<ChatPage />
+				<EventsPanel />
+			</div>
 		</RuntimeProvider>
 	);
 }

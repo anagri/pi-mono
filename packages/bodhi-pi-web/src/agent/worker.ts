@@ -9,15 +9,14 @@ import {
 	createZenfsFilesystem,
 } from "@bodhiapp/bodhi-pi-browser";
 import { workspaceProviderFromData } from "../workspace/provider";
-import type { InitMessage, WorkerEventMessage } from "./types";
+import type { InitMessage, WorkerEventMessage, WorkerWireMessage } from "./types";
+import { tapReadable, tapWritable } from "./wire-tap";
 
 declare const self: DedicatedWorkerGlobalScope;
 
-/** Build a handlers map that posts a small record of every event back to the main thread. */
-function recordingHandlers(): BodhiPiEventHandlers {
-	// Returns `undefined` so the same handler is type-compatible with both pure
-	// observers (e.g. `agent_start`) and mutable hooks (e.g. `tool_call`,
-	// `tool_result`, `before_agent_start`) — `undefined` means "no override".
+function eventForwardingHandlers(): BodhiPiEventHandlers {
+	// Returning `undefined` keeps `post` compatible with both observer hooks
+	// and mutable hooks (`tool_call`, `tool_result`, `before_agent_start`).
 	const post = (event: BodhiPiEvent): undefined => {
 		const record: WorkerEventMessage["record"] = { type: event.type };
 		if ("sessionId" in event) record.sessionId = event.sessionId;
@@ -62,15 +61,23 @@ function recordingHandlers(): BodhiPiEventHandlers {
 	};
 }
 
+function postWireFrame(direction: "in" | "out", line: string): void {
+	const message: WorkerWireMessage = {
+		type: "bodhi-pi-wire",
+		direction,
+		line,
+		ts: Date.now(),
+	};
+	self.postMessage(message);
+}
+
 self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) {
 	if (ev.data?.type !== "init") return;
 	self.removeEventListener("message", onInit);
 
-	const { agentPort, models, defaultModelId, apiKeys, systemPrompt, workspace: workspaceData, recordEvents } = ev.data;
+	const { agentPort, models, defaultModelId, apiKeys, systemPrompt, workspace: workspaceData } = ev.data;
 
 	void (async () => {
-		// Reconstruct the provider on this side of the postMessage boundary, then
-		// mount once. Downstream code never branches on FSA-vs-seed.
 		const workspace = workspaceProviderFromData(workspaceData);
 		await workspace.mount();
 
@@ -78,8 +85,6 @@ self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) 
 		const sessionStore = createDexieSessionStore({ dbName: "bodhi-pi-web" });
 		const scriptExecutor = createBrowserScriptExecutor({ filesystem });
 
-		// Discover extensions from the mounted workspace's `.bodhi-pi/extensions/` dir.
-		// JS-only here; TS-via-esbuild-wasm is deferred per the M5.2 plan.
 		const extensionFactories = await createBrowserExtensionLoader({ filesystem, cwd: workspace.rootPath });
 
 		const factory = createBodhiPiAgent({
@@ -90,16 +95,16 @@ self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) 
 			sessionStore,
 			scriptExecutor,
 			...(systemPrompt !== undefined ? { systemPrompt } : {}),
-			...(recordEvents ? { eventHandlers: recordingHandlers() } : {}),
+			eventHandlers: eventForwardingHandlers(),
 			...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 		});
 
 		const { readable, writable } = createMessagePortStream(agentPort);
-		const conn = new AgentSideConnection(factory, ndJsonStream(writable, readable));
-		void conn; // hold reference; the connection drives the agent's message loop.
+		const teedReadable = tapReadable(readable, (line) => postWireFrame("in", line));
+		const teedWritable = tapWritable(writable, (line) => postWireFrame("out", line));
+		const conn = new AgentSideConnection(factory, ndJsonStream(teedWritable, teedReadable));
+		void conn;
 	})().catch((err) => {
-		// Surfacing as console.error makes the failure visible in dev tools and
-		// the Playwright fixture's console capture.
 		console.error("[worker] boot failed:", err);
 	});
 });

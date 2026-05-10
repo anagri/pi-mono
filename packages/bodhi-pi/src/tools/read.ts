@@ -11,6 +11,22 @@ const readSchema = Type.Object({
 
 type ReadInput = Static<typeof readSchema>;
 
+// Cuts at line boundaries only — never mid-multibyte, even when `maxBytes` lands
+// in the middle of a UTF-8 sequence.
+function takeBoundedLines(lines: string[], maxLines: number, maxBytes: number): { joined: string; count: number } {
+	let bytes = 0;
+	let count = 0;
+	for (let i = 0; i < lines.length && i < maxLines; i++) {
+		const line = lines[i];
+		const lineBytes = Buffer.byteLength(line, "utf-8");
+		const sepBytes = i === 0 ? 0 : 1;
+		if (bytes + sepBytes + lineBytes > maxBytes) break;
+		bytes += sepBytes + lineBytes;
+		count++;
+	}
+	return { joined: lines.slice(0, count).join("\n"), count };
+}
+
 export function createReadTool(deps: ToolDeps): AgentTool<typeof readSchema> {
 	return {
 		name: "read",
@@ -26,38 +42,28 @@ export function createReadTool(deps: ToolDeps): AgentTool<typeof readSchema> {
 			if (startLine >= total) {
 				throw new Error(`Offset ${offset} is beyond end of file (${total} lines)`);
 			}
-			const endLine = limit !== undefined ? Math.min(startLine + limit, total) : total;
-			let selected = allLines.slice(startLine, endLine).join("\n");
+			const requestedEnd = limit !== undefined ? Math.min(startLine + limit, total) : total;
+			const requestedLines = allLines.slice(startLine, requestedEnd);
 
-			let truncated = false;
-			let truncatedBy: "lines" | "bytes" | undefined;
-			let outputLines = endLine - startLine;
-			if (outputLines > READ_MAX_LINES) {
-				selected = allLines.slice(startLine, startLine + READ_MAX_LINES).join("\n");
-				outputLines = READ_MAX_LINES;
-				truncated = true;
-				truncatedBy = "lines";
-			}
-			const bytes = Buffer.byteLength(selected, "utf-8");
-			if (bytes > READ_MAX_BYTES) {
-				const trimmed = Buffer.from(selected, "utf-8").subarray(0, READ_MAX_BYTES).toString("utf-8");
-				selected = trimmed;
-				outputLines = trimmed.split("\n").length;
-				truncated = true;
-				truncatedBy = "bytes";
-			}
+			const { joined, count } = takeBoundedLines(requestedLines, READ_MAX_LINES, READ_MAX_BYTES);
+			const truncated = count < requestedLines.length;
+			const truncatedBy: "lines" | "bytes" | undefined = !truncated
+				? undefined
+				: count >= READ_MAX_LINES
+					? "lines"
+					: "bytes";
 
-			let output = selected;
+			let output = joined;
 			if (truncated) {
-				const lastShown = startLine + outputLines;
+				const lastShown = startLine + count;
 				const reason =
 					truncatedBy === "lines"
 						? `${READ_MAX_LINES}-line limit`
 						: `${Math.floor(READ_MAX_BYTES / 1024)}KB limit`;
 				output += `\n\n[Truncated by ${reason}. Showing lines ${startLine + 1}-${lastShown} of ${total}. Use offset=${lastShown + 1} to continue.]`;
-			} else if (limit !== undefined && endLine < total) {
-				const remaining = total - endLine;
-				output += `\n\n[${remaining} more lines in file. Use offset=${endLine + 1} to continue.]`;
+			} else if (limit !== undefined && requestedEnd < total) {
+				const remaining = total - requestedEnd;
+				output += `\n\n[${remaining} more lines in file. Use offset=${requestedEnd + 1} to continue.]`;
 			}
 
 			return {

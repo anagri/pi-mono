@@ -7,14 +7,9 @@ import {
 } from "@agentclientprotocol/sdk";
 import { createMessagePortStream } from "@bodhiapp/bodhi-pi-browser";
 import type { Api, Model } from "@mariozechner/pi-ai";
+import { parseWireFrame, useEventStore } from "../store/eventStore";
 import type { WorkspaceProvider } from "../workspace/provider";
-import type { InitMessage, WorkerEventMessage } from "./types";
-
-declare global {
-	interface Window {
-		__bodhiPiEventLog?: WorkerEventMessage["record"][];
-	}
-}
+import type { InitMessage, WorkerMessage } from "./types";
 
 const STD_INIT_PARAMS = {
 	protocolVersion: 1,
@@ -31,12 +26,6 @@ export interface RuntimeOptions {
 	systemPrompt?: string;
 	workspace: WorkspaceProvider;
 	onNotification: (notif: SessionNotification) => void;
-	/**
-	 * Independent observability toggle. The host (RuntimeProvider) reads
-	 * `BootstrapResult.recordEvents` and forwards it here; the worker registers
-	 * lifecycle-event handlers iff true.
-	 */
-	recordEvents?: boolean;
 }
 
 export interface AgentRuntime {
@@ -59,21 +48,32 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		// data record. Worker reconstructs a provider via `workspaceProviderFromData`.
 		workspace: opts.workspace.toData(),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
-		...(opts.recordEvents ? { recordEvents: true } : {}),
 	};
 	worker.postMessage(init, [channel.port2]);
 
-	if (opts.recordEvents && typeof window !== "undefined") {
-		// Initialize the log array once; specs read from this. Worker posts
-		// events as `{ type: "bodhi-pi-event", record }` over the standard
-		// worker message channel, NOT the agent MessagePort.
-		window.__bodhiPiEventLog = window.__bodhiPiEventLog ?? [];
-		const log = window.__bodhiPiEventLog;
-		worker.addEventListener("message", (ev: MessageEvent<unknown>) => {
-			const msg = ev.data as WorkerEventMessage | undefined;
-			if (msg?.type === "bodhi-pi-event") log.push(msg.record);
-		});
-	}
+	// Push captured events outside React's render cycle so the panel only
+	// re-renders when the event arrays change reference.
+	const onWorkerMessage = (ev: MessageEvent<unknown>) => {
+		const msg = ev.data as WorkerMessage | undefined;
+		if (!msg) return;
+		if (msg.type === "bodhi-pi-event") {
+			useEventStore.getState().pushLifecycle(msg.record);
+			return;
+		}
+		if (msg.type === "bodhi-pi-wire") {
+			const parsed = parseWireFrame(msg.line);
+			useEventStore.getState().pushWire({
+				direction: msg.direction,
+				kind: parsed.kind,
+				method: parsed.method,
+				rpcId: parsed.rpcId,
+				payload: msg.line,
+				ts: msg.ts,
+			});
+			return;
+		}
+	};
+	worker.addEventListener("message", onWorkerMessage);
 
 	const { readable, writable } = createMessagePortStream(channel.port1);
 	const stream = ndJsonStream(writable, readable);
@@ -93,6 +93,7 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		conn,
 		worker,
 		dispose: () => {
+			worker.removeEventListener("message", onWorkerMessage);
 			worker.terminate();
 		},
 	};

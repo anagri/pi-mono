@@ -59,7 +59,7 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 | `src/filesystem/in-memory-filesystem.ts` | `createInMemoryFilesystem()` helper |
 | `src/tools/index.ts` | `createBuiltinTools({ filesystem, cwd, scriptExecutor? })` |
 | `src/tools/_accumulate.ts` | `accumulateBounded` + `truncationFooter` — canonical truncation for ls/find/grep |
-| `src/slash-commands/` | Prompt-template discovery + expansion |
+| `src/commands/` | Prompt-template discovery + expansion |
 | `src/skills/` | Skill discovery + activation |
 | `src/script-executor/` | `ScriptExecutor` interface |
 | `test/helpers/harness.ts` | `createTestHarness(...)` — single source of truth for ACP test wiring |

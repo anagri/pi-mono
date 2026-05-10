@@ -18,7 +18,7 @@ export interface WalkOptions {
 const DEFAULT_SKIP = new Set([".git", "node_modules"]);
 
 function defaultSkipDir(absolutePath: string): boolean {
-	return DEFAULT_SKIP.has(path.basename(absolutePath));
+	return DEFAULT_SKIP.has(path.posix.basename(absolutePath));
 }
 
 /**

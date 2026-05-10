@@ -4,7 +4,7 @@ import picomatch from "picomatch";
 import { type Static, Type } from "typebox";
 import { accumulateBounded, truncationFooter } from "./_accumulate.js";
 import { resolvePath, type ToolDeps } from "./index.js";
-import { GREP_MAX_BYTES, GREP_MAX_LINE_LENGTH, GREP_MAX_MATCHES } from "./limits.js";
+import { GREP_MAX_CHARS, GREP_MAX_LINE_LENGTH, GREP_MAX_MATCHES, WALK_MAX_ENTRIES } from "./limits.js";
 import { walk } from "./walk.js";
 
 const grepSchema = Type.Object({
@@ -39,7 +39,7 @@ export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
 	return {
 		name: "grep",
 		label: "grep",
-		description: `Search file contents for a regex (or literal string). Default limit ${GREP_MAX_MATCHES} matches; line text truncated at ${GREP_MAX_LINE_LENGTH} chars; output cap ${Math.floor(GREP_MAX_BYTES / 1024)}KB. Skips files containing NUL bytes.`,
+		description: `Search file contents for a regex (or literal string). Default limit ${GREP_MAX_MATCHES} matches; line text truncated at ${GREP_MAX_LINE_LENGTH} chars; output cap ${Math.floor(GREP_MAX_CHARS / 1000)}K chars. Skips files containing NUL bytes.`,
 		parameters: grepSchema,
 		async execute(_toolCallId: string, { pattern, path: dirPath, glob, ignoreCase, literal, limit }: GrepInput) {
 			const root = resolvePath(deps.cwd, dirPath);
@@ -49,7 +49,7 @@ export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
 			const globMatcher = glob ? picomatch(glob, { dot: true }) : undefined;
 
 			async function* matches(): AsyncGenerator<string> {
-				for await (const entry of walk(deps.filesystem, root, { maxEntries: 50_000 })) {
+				for await (const entry of walk(deps.filesystem, root, { maxEntries: WALK_MAX_ENTRIES })) {
 					if (!entry.isFile) continue;
 					const rel = path.posix.relative(root, entry.absolutePath);
 					if (globMatcher && !globMatcher(rel) && !globMatcher(entry.absolutePath)) continue;
@@ -67,7 +67,7 @@ export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
 					}
 				}
 			}
-			const { lines, stopped } = await accumulateBounded(matches(), { maxItems: cap, maxBytes: GREP_MAX_BYTES });
+			const { lines, stopped } = await accumulateBounded(matches(), { maxItems: cap, maxChars: GREP_MAX_CHARS });
 
 			let output = lines.join("\n");
 			if (lines.length === 0) {
@@ -77,7 +77,7 @@ export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
 					shown: lines.length,
 					stopped,
 					item: "matches",
-					maxBytes: GREP_MAX_BYTES,
+					maxChars: GREP_MAX_CHARS,
 					maxItems: cap,
 				})}`;
 			}

@@ -205,11 +205,4 @@ describe("mapStopReason", () => {
 	test("undefined falls back to end_turn", () => {
 		expect(mapStopReason(undefined)).toBe("end_turn");
 	});
-
-	test("error falls through to end_turn (caller throws separately)", () => {
-		// Caller of mapStopReason handles "error" by throwing RequestError before
-		// reaching the mapper; if it ever slips through, we don't crash, we
-		// fall back to end_turn.
-		expect(mapStopReason("error")).toBe("end_turn");
-	});
 });

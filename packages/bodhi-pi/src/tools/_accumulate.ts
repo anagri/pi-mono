@@ -1,21 +1,11 @@
-/**
- * Shared bounded-accumulation helper for `read` / `ls` / `find` / `grep`.
- *
- * Each of those tools collects strings (paths, matches, dir entries, lines)
- * with two stop conditions:
- *
- *   - count cap: stop after `maxItems` items.
- *   - byte cap:  stop when `joined.length >= maxBytes` (with newline separators).
- *
- * This module centralises the accumulator + the truncation footer so the
- * tools themselves only have to yield strings and pass a unit noun.
- */
+// `maxChars` is JavaScript string length (UTF-16 code units), not UTF-8 bytes.
+// `read.ts` is the byte-aware exception (uses `Buffer.byteLength`).
 
 export type StoppedReason = "items" | "bytes" | null;
 
 export interface AccumulateOptions {
 	maxItems: number;
-	maxBytes: number;
+	maxChars: number;
 }
 
 export interface AccumulateResult {
@@ -23,27 +13,23 @@ export interface AccumulateResult {
 	stopped: StoppedReason;
 }
 
-/**
- * Pull strings from `source` into an array, stopping at either limit.
- * Each item contributes `item.length + 1` toward the byte budget (the +1 is
- * the joining newline). The item that would put us over the byte cap is
- * dropped, not partially included.
- */
+// Each item contributes `item.length + 1` (the +1 is the joining newline).
+// Items that would exceed the cap are dropped, not partially included.
 export async function accumulateBounded(
 	source: AsyncIterable<string>,
-	{ maxItems, maxBytes }: AccumulateOptions,
+	{ maxItems, maxChars }: AccumulateOptions,
 ): Promise<AccumulateResult> {
 	const lines: string[] = [];
-	let bytes = 0;
+	let chars = 0;
 	for await (const item of source) {
 		if (lines.length >= maxItems) {
 			return { lines, stopped: "items" };
 		}
-		if (bytes + item.length + 1 > maxBytes) {
+		if (chars + item.length + 1 > maxChars) {
 			return { lines, stopped: "bytes" };
 		}
 		lines.push(item);
-		bytes += item.length + 1;
+		chars += item.length + 1;
 	}
 	return { lines, stopped: null };
 }
@@ -57,18 +43,12 @@ export interface FooterOptions {
 	stopped: "items" | "bytes";
 	/** Noun for the items: "lines" / "matches" / "entries" / "results". */
 	item: string;
-	/** Output byte cap (in bytes). */
-	maxBytes: number;
+	/** Output char cap. */
+	maxChars: number;
 	/** Item cap (count). Used in the items-limit message. */
 	maxItems: number;
 }
 
-/**
- * Standard truncation footer used by every tool. Emit format:
- *
- *   [Truncated: showing 10 of 50 results; 10-results limit]
- *   [Truncated: showing 17 entries; 50KB output limit]
- */
 export function truncationFooter(opts: FooterOptions): string {
 	const head =
 		opts.total !== undefined
@@ -77,6 +57,6 @@ export function truncationFooter(opts: FooterOptions): string {
 	const reason =
 		opts.stopped === "items"
 			? `${opts.maxItems}-${opts.item} limit`
-			: `${Math.floor(opts.maxBytes / 1024)}KB output limit`;
+			: `${Math.floor(opts.maxChars / 1000)}K chars output limit`;
 	return `[Truncated: ${head}; ${reason}]`;
 }

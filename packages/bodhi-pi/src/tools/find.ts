@@ -4,7 +4,7 @@ import picomatch from "picomatch";
 import { type Static, Type } from "typebox";
 import { accumulateBounded, truncationFooter } from "./_accumulate.js";
 import { resolvePath, type ToolDeps } from "./index.js";
-import { FIND_MAX_BYTES, FIND_MAX_MATCHES } from "./limits.js";
+import { FIND_MAX_CHARS, FIND_MAX_MATCHES, WALK_MAX_ENTRIES } from "./limits.js";
 import { walk } from "./walk.js";
 
 const findSchema = Type.Object({
@@ -21,7 +21,7 @@ export function createFindTool(deps: ToolDeps): AgentTool<typeof findSchema> {
 	return {
 		name: "find",
 		label: "find",
-		description: `Find files matching a glob (default limit ${FIND_MAX_MATCHES}, output cap ${Math.floor(FIND_MAX_BYTES / 1024)}KB). Pure JS — works against any host-injected Filesystem.`,
+		description: `Find files matching a glob (default limit ${FIND_MAX_MATCHES}, output cap ${Math.floor(FIND_MAX_CHARS / 1000)}K chars). Pure JS — works against any host-injected Filesystem.`,
 		parameters: findSchema,
 		async execute(_toolCallId: string, { pattern, path: dirPath, limit }: FindInput) {
 			const root = resolvePath(deps.cwd, dirPath);
@@ -30,7 +30,7 @@ export function createFindTool(deps: ToolDeps): AgentTool<typeof findSchema> {
 
 			let totalScanned = 0;
 			async function* matches(): AsyncGenerator<string> {
-				for await (const entry of walk(deps.filesystem, root, { maxEntries: 50_000 })) {
+				for await (const entry of walk(deps.filesystem, root, { maxEntries: WALK_MAX_ENTRIES })) {
 					if (!entry.isFile) continue;
 					totalScanned++;
 					const rel = path.posix.relative(root, entry.absolutePath);
@@ -38,7 +38,7 @@ export function createFindTool(deps: ToolDeps): AgentTool<typeof findSchema> {
 					yield entry.absolutePath;
 				}
 			}
-			const { lines, stopped } = await accumulateBounded(matches(), { maxItems: cap, maxBytes: FIND_MAX_BYTES });
+			const { lines, stopped } = await accumulateBounded(matches(), { maxItems: cap, maxChars: FIND_MAX_CHARS });
 
 			let output = lines.join("\n");
 			if (lines.length === 0) {
@@ -48,7 +48,7 @@ export function createFindTool(deps: ToolDeps): AgentTool<typeof findSchema> {
 					shown: lines.length,
 					stopped,
 					item: "matches",
-					maxBytes: FIND_MAX_BYTES,
+					maxChars: FIND_MAX_CHARS,
 					maxItems: cap,
 				})}`;
 			}

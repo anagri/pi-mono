@@ -1,7 +1,6 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "typebox";
-import type { ScriptExecutor } from "@/script-executor/script-executor.js";
-import { resolvePath } from "./index.js";
+import { resolvePath, type ToolDeps } from "./index.js";
 import { RUN_SCRIPT_MAX_BYTES } from "./limits.js";
 
 const runScriptSchema = Type.Object({
@@ -12,28 +11,26 @@ const runScriptSchema = Type.Object({
 
 type RunScriptInput = Static<typeof runScriptSchema>;
 
-interface CreateRunScriptToolOptions {
-	executor: ScriptExecutor;
-	cwd: string;
-}
-
 function truncate(label: string, text: string): string {
 	if (Buffer.byteLength(text, "utf-8") <= RUN_SCRIPT_MAX_BYTES) return `${label}:\n${text}`;
 	const trimmed = Buffer.from(text, "utf-8").subarray(0, RUN_SCRIPT_MAX_BYTES).toString("utf-8");
 	return `${label} (truncated to ${Math.floor(RUN_SCRIPT_MAX_BYTES / 1024)}KB):\n${trimmed}`;
 }
 
-export function createRunScriptTool({ executor, cwd }: CreateRunScriptToolOptions): AgentTool<typeof runScriptSchema> {
+export function createRunScriptTool(deps: ToolDeps): AgentTool<typeof runScriptSchema> {
 	return {
 		name: "run_script",
 		label: "run_script",
 		description: `Execute a JavaScript file at PATH with positional ARGS. Returns stdout/stderr and exit code. Output truncated to ${Math.floor(RUN_SCRIPT_MAX_BYTES / 1024)}KB per stream.`,
 		parameters: runScriptSchema,
 		async execute(_toolCallId: string, { path: scriptPath, args, timeout }: RunScriptInput) {
-			const absolutePath = resolvePath(cwd, scriptPath);
-			const result = await executor.execute({
+			if (!deps.scriptExecutor) {
+				throw new Error("run_script: no scriptExecutor configured on the host");
+			}
+			const absolutePath = resolvePath(deps.cwd, scriptPath);
+			const result = await deps.scriptExecutor.execute({
 				scriptPath: absolutePath,
-				cwd,
+				cwd: deps.cwd,
 				args: args ?? [],
 				...(timeout !== undefined ? { timeout } : {}),
 			});
