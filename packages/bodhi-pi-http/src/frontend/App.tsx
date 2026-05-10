@@ -77,15 +77,27 @@ export default function App() {
 	}, []);
 
 	// On first connect: try to resume last session (M17). If none / fails / cross-tenant,
-	// create a fresh session.
+	// create a fresh session. The session's configOptions return the active model id —
+	// we mirror it into currentModelId + defaultModelId so the StatusBar reflects the
+	// truth without a separate /model query.
 	useEffect(() => {
 		if (status !== "connected" || !client || sessionId !== undefined) return;
 		(async () => {
+			const adoptModelFromConfig = (
+				configOptions?: { id: string; currentValue: string }[],
+			) => {
+				const m = configOptions?.find((c) => c.id === "model");
+				if (m) {
+					setCurrentModelId(m.currentValue);
+					setDefaultModelId((prev) => prev || m.currentValue);
+				}
+			};
 			const last = lastSession.read(settings.id);
 			if (last) {
 				try {
-					await client.loadSession({ sessionId: last });
+					const loaded = await client.loadSession({ sessionId: last });
 					setSessionId(last);
+					adoptModelFromConfig(loaded.configOptions);
 					return;
 				} catch {
 					lastSession.clear(settings.id);
@@ -96,7 +108,16 @@ export default function App() {
 				const created = await client.newSession({});
 				setSessionId(created.sessionId);
 				lastSession.write(settings.id, created.sessionId);
-				if (!defaultModelId) setDefaultModelId("");
+				adoptModelFromConfig(created.configOptions);
+				// availableCommands captured server-side during the JSON newSession
+				// call (no SSE channel); replay through the notification dispatcher
+				// so useChat picks them up.
+				if (created.availableCommands && created.availableCommands.length > 0) {
+					client.dispatchNotificationForReplay("session/update", {
+						sessionId: created.sessionId,
+						update: { sessionUpdate: "available_commands_update", availableCommands: created.availableCommands },
+					});
+				}
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			}

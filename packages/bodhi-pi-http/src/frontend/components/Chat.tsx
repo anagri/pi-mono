@@ -25,12 +25,11 @@ export function Chat(props: ChatProps) {
 		}
 	}, [chat.status, props.onChatStatusChange]);
 
-	// Replay history when the session changes.
-	useEffect(() => {
-		if (!props.sessionId) return;
-		void chat.loadSession(props.sessionId);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [props.sessionId]);
+	// Note: loadSession is invoked by callers — App.tsx auto-resume on first
+	// connect (via client.loadSession, which streams updates without wiping
+	// items) and /resume <id> via the slash dispatcher (chat.loadSession,
+	// which clears + repopulates). Adding an auto-loadSession here would
+	// double-load and wipe freshly-added system messages.
 
 	async function submit(e: React.FormEvent) {
 		e.preventDefault();
@@ -44,6 +43,7 @@ export function Chat(props: ChatProps) {
 				sessionId: props.sessionId,
 				currentModelId: props.currentModelId,
 				defaultModelId: props.defaultModelId,
+				availableCommands: chat.availableCommands,
 				addSystemMessage: chat.addSystemMessage,
 				setCurrentModelId: props.setCurrentModelId,
 				setSessionId: props.setSessionId,
@@ -116,6 +116,23 @@ export function Chat(props: ChatProps) {
 							>
 								<span>tool · </span>
 								<strong>{it.tool.name}</strong> · {it.tool.status}
+								{it.tool.preview ? (
+									<pre
+										data-testid="tool-call-preview"
+										style={{
+											margin: "0.25rem 0 0 1.5rem",
+											padding: "0.25rem 0.5rem",
+											background: "rgba(0,0,0,0.04)",
+											borderRadius: 3,
+											fontStyle: "normal",
+											fontSize: "0.85em",
+											whiteSpace: "pre-wrap",
+											wordBreak: "break-word",
+										}}
+									>
+										{it.tool.preview}
+									</pre>
+								) : null}
 							</div>
 						);
 					})

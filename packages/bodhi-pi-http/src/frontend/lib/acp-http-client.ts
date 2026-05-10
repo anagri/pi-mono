@@ -111,7 +111,11 @@ export class AcpHttpClient {
 		return this.call("initialize", { protocolVersion: 1, clientCapabilities: {}, ...params });
 	}
 
-	newSession(params: { cwd?: string; mcpServers?: unknown[] } = {}): Promise<{ sessionId: string }> {
+	newSession(params: { cwd?: string; mcpServers?: unknown[] } = {}): Promise<{
+		sessionId: string;
+		configOptions?: { id: string; currentValue: string; options?: { value: string; name?: string }[] }[];
+		availableCommands?: { name: string; description: string; input?: { hint?: string } }[];
+	}> {
 		return this.call("session/new", { cwd: params.cwd ?? "/", mcpServers: params.mcpServers ?? [] });
 	}
 
@@ -163,6 +167,16 @@ export class AcpHttpClient {
 				for (const h of this.lifecycleHandlers) h(params as Record<string, unknown>);
 			}
 		}
+	}
+
+	/**
+	 * Manually fan-out a notification to handlers. Used when a JSON method
+	 * (e.g. session/new) returns availableCommands captured server-side: there
+	 * was no SSE channel for it, so we replay it through the notification
+	 * dispatch path so useChat picks it up.
+	 */
+	dispatchNotificationForReplay(method: string, params: unknown): void {
+		this.dispatchFrame(method, params);
 	}
 
 	private async sseCall<T>(
@@ -218,7 +232,9 @@ export class AcpHttpClient {
 	loadSession(
 		params: { sessionId: string; cwd?: string; mcpServers?: unknown[] },
 		opts: { signal?: AbortSignal } = {},
-	): Promise<unknown> {
+	): Promise<{
+		configOptions?: { id: string; currentValue: string; options?: { value: string; name?: string }[] }[];
+	}> {
 		return this.sseCall(
 			"session/load",
 			{ cwd: params.cwd ?? "/", mcpServers: params.mcpServers ?? [], ...params },

@@ -16,6 +16,12 @@ export interface ToolCard {
 	preview?: string;
 }
 
+export interface AvailableCommand {
+	name: string;
+	description: string;
+	input?: { hint?: string };
+}
+
 export type ChatItem =
 	| { type: "message"; message: ChatMessage }
 	| { type: "tool"; tool: ToolCard }
@@ -25,9 +31,10 @@ export interface UseChatResult {
 	items: ChatItem[];
 	status: ChatStatus;
 	error?: string;
+	availableCommands: AvailableCommand[];
 	send: (text: string) => Promise<void>;
 	cancel: () => void;
-	loadSession: (sessionId: string) => Promise<void>;
+	loadSession: (sessionId: string) => Promise<{ configOptions?: { id: string; currentValue: string }[] } | undefined>;
 	clear: () => void;
 	addSystemMessage: (text: string) => void;
 }
@@ -41,6 +48,7 @@ export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResul
 	const [items, setItems] = useState<ChatItem[]>([]);
 	const [status, setStatus] = useState<ChatStatus>("idle");
 	const [error, setError] = useState<string | undefined>();
+	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
 	const abortRef = useRef<AbortController | undefined>(undefined);
 
 	useEffect(() => {
@@ -51,7 +59,12 @@ export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResul
 				toolCallId?: string;
 				title?: string;
 				status?: string;
+				availableCommands?: AvailableCommand[];
 			};
+			if (update.sessionUpdate === "available_commands_update" && Array.isArray(update.availableCommands)) {
+				setAvailableCommands(update.availableCommands);
+				return;
+			}
 			setItems((prev) => applyUpdate(prev, update));
 		});
 		return unsub;
@@ -96,9 +109,10 @@ export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResul
 			setError(undefined);
 			setItems([]);
 			try {
-				await client.loadSession({ sessionId: sid });
+				return await client.loadSession({ sessionId: sid });
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
+				return undefined;
 			}
 		},
 		[client],
@@ -114,7 +128,36 @@ export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResul
 		setItems((prev) => [...prev, { type: "system", system: { id: `sys-${Date.now()}-${Math.random()}`, text } }]);
 	}, []);
 
-	return { items, status, error, send, cancel, loadSession, clear, addSystemMessage };
+	return { items, status, error, availableCommands, send, cancel, loadSession, clear, addSystemMessage };
+}
+
+/**
+ * Tool name in ACP arrives as the first word of `title` (per
+ * bodhi-pi/src/acp/agent.ts which formats title as "<name> <loc-hint>").
+ * `kind` is a higher-level category and a less precise fallback.
+ */
+function deriveToolName(title: string | undefined, kind?: string): string {
+	if (title && title.length > 0) {
+		const first = title.trim().split(/\s+/)[0];
+		if (first) return first.replace(/[^a-zA-Z0-9_-]/g, "");
+	}
+	return kind ?? "tool";
+}
+
+/**
+ * Extract a preview string from a tool_call_update's `content` array. The ACP
+ * shape is `[{type:"content", content:{type:"text", text:"..."}}, ...]` for
+ * text outputs. We concatenate the text blocks and trim to a safe inline size.
+ */
+function extractToolPreview(content: unknown): string | undefined {
+	if (!Array.isArray(content)) return undefined;
+	const blocks = content as Array<{ type?: string; content?: { type?: string; text?: string } }>;
+	const text = blocks
+		.filter((b) => b.type === "content" && b.content?.type === "text")
+		.map((b) => b.content?.text ?? "")
+		.join("");
+	if (text.length === 0) return undefined;
+	return text.length > 400 ? `${text.slice(0, 400)}…` : text;
 }
 
 function applyUpdate(
@@ -152,26 +195,38 @@ function applyUpdate(
 		case "tool_call": {
 			const id = update.toolCallId;
 			if (!id) return prev;
-			return [
-				...prev,
-				{
-					type: "tool",
-					tool: {
-						id,
-						name: update.title ?? "tool",
-						status: (update.status as ToolCard["status"]) ?? "running",
-					},
+			const name = deriveToolName(update.title, (update as { kind?: string }).kind);
+			const previewText = extractToolPreview((update as { content?: unknown }).content);
+			const existingIdx = prev.findIndex((it) => it.type === "tool" && it.tool.id === id);
+			const card: ChatItem = {
+				type: "tool",
+				tool: {
+					id,
+					name,
+					status: (update.status as ToolCard["status"]) ?? "running",
+					...(previewText !== undefined ? { preview: previewText } : {}),
 				},
-			];
+			};
+			if (existingIdx >= 0) {
+				const next = prev.slice();
+				next[existingIdx] = card;
+				return next;
+			}
+			return [...prev, card];
 		}
 		case "tool_call_update": {
 			const id = update.toolCallId;
 			if (!id) return prev;
+			const previewText = extractToolPreview((update as { content?: unknown }).content);
 			return prev.map<ChatItem>((it) => {
 				if (it.type === "tool" && it.tool.id === id) {
 					return {
 						type: "tool",
-						tool: { ...it.tool, status: (update.status as ToolCard["status"]) ?? it.tool.status },
+						tool: {
+							...it.tool,
+							status: (update.status as ToolCard["status"]) ?? it.tool.status,
+							...(previewText !== undefined ? { preview: previewText } : {}),
+						},
 					};
 				}
 				return it;

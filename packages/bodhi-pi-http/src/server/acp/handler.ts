@@ -140,7 +140,19 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 			return;
 		}
 
-		const conn = createHttpAcpConn();
+		// Capture sessionUpdate notifications fired during JSON dispatch (e.g.
+		// `available_commands_update` during newSession) so we can inject them
+		// into the JSON response. Without this, project commands + skills would
+		// never reach the client because JSON methods don't have an SSE channel.
+		let capturedAvailableCommands: unknown[] | undefined;
+		const conn = createHttpAcpConn({
+			onNotification: (notification) => {
+				const n = notification as { update?: { sessionUpdate?: string; availableCommands?: unknown[] } };
+				if (n.update?.sessionUpdate === "available_commands_update" && Array.isArray(n.update.availableCommands)) {
+					capturedAvailableCommands = n.update.availableCommands;
+				}
+			},
+		});
 		const agent = wired.factory(conn);
 
 		try {
@@ -155,7 +167,13 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 				}
 			}
 			const result = await dispatchJsonMethod(agent, body.method, params);
-			writeJson(res, 200, rpcSuccess(id, result));
+			// Inject captured availableCommands into newSession's response so the
+			// client can populate /help with project commands without an SSE round-trip.
+			const augmented =
+				body.method === "session/new" && capturedAvailableCommands && typeof result === "object" && result !== null
+					? { ...(result as Record<string, unknown>), availableCommands: capturedAvailableCommands }
+					: result;
+			writeJson(res, 200, rpcSuccess(id, augmented));
 		} catch (err) {
 			if (err instanceof MethodNotFoundError) {
 				writeJson(res, 200, rpcError(id, METHOD_NOT_FOUND, err.message));

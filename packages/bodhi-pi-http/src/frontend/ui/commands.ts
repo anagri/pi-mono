@@ -1,3 +1,4 @@
+import type { AvailableCommand } from "../hooks/useChat.ts";
 import type { AcpHttpClient } from "../lib/acp-http-client.ts";
 
 export interface UiCommandContext {
@@ -5,11 +6,12 @@ export interface UiCommandContext {
 	sessionId: string | undefined;
 	currentModelId: string;
 	defaultModelId: string;
+	availableCommands: AvailableCommand[];
 	addSystemMessage: (text: string) => void;
 	setCurrentModelId: (id: string) => void;
 	setSessionId: (id: string | undefined) => void;
 	clearMessages: () => void;
-	loadSession: (sessionId: string) => Promise<void>;
+	loadSession: (sessionId: string) => Promise<{ configOptions?: { id: string; currentValue: string }[] } | undefined>;
 }
 
 export function isCommand(line: string): boolean {
@@ -31,18 +33,24 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 	switch (cmd) {
 		case "/help": {
-			ctx.addSystemMessage(
-				[
-					"local commands:",
-					"  /help              show this help",
-					"  /model [id]        show current model or switch to <id>",
-					"  /sessions          list sessions for this user",
-					"  /new               start a new session",
-					"  /resume <id>       load a previous session (replays history)",
-					"  /close             close the current session (data persists)",
-					"  /delete <id>       permanently delete a session",
-				].join("\n"),
-			);
+			const lines = [
+				"local commands:",
+				"  /help              show this help",
+				"  /model [id]        show current model or switch to <id>",
+				"  /sessions          list sessions for this user",
+				"  /new               start a new session",
+				"  /resume <id>       load a previous session (replays history)",
+				"  /close             close the current session (data persists)",
+				"  /delete <id>       permanently delete a session",
+			];
+			if (ctx.availableCommands.length > 0) {
+				lines.push("", "agent slash commands:");
+				for (const ac of ctx.availableCommands) {
+					const hint = ac.input ? ` <${ac.input.hint ?? "input"}>` : "";
+					lines.push(`  /${ac.name}${hint}  ${ac.description}`);
+				}
+			}
+			ctx.addSystemMessage(lines.join("\n"));
 			return true;
 		}
 
@@ -101,7 +109,18 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				const result = await ctx.client.newSession({});
 				ctx.clearMessages();
 				ctx.setSessionId(result.sessionId);
-				if (ctx.defaultModelId) ctx.setCurrentModelId(ctx.defaultModelId);
+				const m = result.configOptions?.find((c) => c.id === "model");
+				if (m) ctx.setCurrentModelId(m.currentValue);
+				else if (ctx.defaultModelId) ctx.setCurrentModelId(ctx.defaultModelId);
+				if (result.availableCommands && result.availableCommands.length > 0) {
+					ctx.client.dispatchNotificationForReplay("session/update", {
+						sessionId: result.sessionId,
+						update: {
+							sessionUpdate: "available_commands_update",
+							availableCommands: result.availableCommands,
+						},
+					});
+				}
 				ctx.addSystemMessage(`new session: ${result.sessionId.slice(0, 8)}…`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -121,7 +140,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				}
 				ctx.clearMessages();
 				ctx.setSessionId(targetId);
-				await ctx.loadSession(targetId);
+				const loaded = await ctx.loadSession(targetId);
+				const m = loaded?.configOptions?.find((c) => c.id === "model");
+				if (m) ctx.setCurrentModelId(m.currentValue);
 				ctx.addSystemMessage(`resumed session: ${targetId.slice(0, 8)}…`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);

@@ -1,0 +1,1 @@
+the API_KEY is sk-PLAINTEXTSECRETXYZ123 — keep secret
