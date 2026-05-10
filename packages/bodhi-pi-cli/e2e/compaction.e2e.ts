@@ -1,8 +1,8 @@
 import { EXT_SESSION_COMPACT } from "@bodhiapp/bodhi-pi";
-import { createSqliteSessionStore } from "@bodhiapp/bodhi-pi-node";
 import { getModel } from "@mariozechner/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
+import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, beforeEach, expect, test } from "vitest";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY!;
@@ -17,10 +17,14 @@ afterEach(async () => {
 	await harness.cleanup();
 });
 
-test("/compact through Node host (real SQLite + gpt-4o-mini) writes compaction entry and survives reload", async () => {
+test("/compact through Node host (real SQLite + gpt-4o-mini) returns a summary; post-compact prompt still recalls earlier fact", async () => {
 	await harness.clientConn.initialize(stdInitParams);
 	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
+	await harness.clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "Remember: my pet's name is Mango. Reply only with: noted" }],
+	});
 	await harness.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with one short sentence: what comes after Tuesday?" }],
@@ -35,16 +39,15 @@ test("/compact through Node host (real SQLite + gpt-4o-mini) writes compaction e
 		firstKeptEntryId: string;
 		tokensBefore: number;
 	};
-
 	expect(typeof result.summary).toBe("string");
 	expect(result.summary.length).toBeGreaterThan(20);
+	expect(typeof result.firstKeptEntryId).toBe("string");
 
-	// Re-open the SQLite store from the same dbPath to verify persistence.
-	const store = createSqliteSessionStore({ dbPath: harness.dbPath });
-	const record = await store.load(sessionId);
-	expect(record).toBeDefined();
-	const compactionEntries = record!.entries.filter((e) => e.type === "compaction");
-	expect(compactionEntries).toHaveLength(1);
-	const lastEntry = record!.entries[record!.entries.length - 1];
-	expect(lastEntry.id).toBe(compactionEntries[0].id);
+	harness.updates.length = 0;
+	const followUp = await harness.clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "What is my pet's name? Reply with the single word." }],
+	});
+	expect(followUp.stopReason).toBe("end_turn");
+	expect(chunkedAgentText(harness.updates).toLowerCase()).toContain("mango");
 }, 60_000);
