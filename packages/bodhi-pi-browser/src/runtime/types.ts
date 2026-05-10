@@ -11,6 +11,13 @@ export interface InitMessage {
 	// `WorkspaceData` is the structured-cloneable shape; closures (toData/mount)
 	// don't cross the postMessage boundary.
 	workspace: WorkspaceData;
+	/**
+	 * Optional `MessagePort` to a sandboxed iframe. When set, the worker
+	 * delegates `run_script` execution and extension loading through the
+	 * sandbox bridge — required for hosts under strict CSPs that ban
+	 * `unsafe-eval` (MV3 chrome extensions).
+	 */
+	sandboxPort?: MessagePort;
 }
 
 export interface WorkerEventMessage {

@@ -24,14 +24,14 @@ export function getDistPath(): string {
 
 export async function launchExtensionContext(): Promise<BrowserContext> {
 	const dist = getDistPath();
-	// MV3 extensions need new headless explicitly. Playwright's `headless: true`
-	// in recent versions defaults to new headless, but Chromium <119 ignores
-	// extensions there — pass `--headless=new` explicitly so failures surface
-	// as launch errors rather than silent ERR_BLOCKED_BY_CLIENT.
+	// `--headless=new` is the only headless mode that loads MV3 extensions
+	// (Chrome 119+). Pair with `headless: false` so Playwright doesn't add
+	// its own `--headless=old` flag.
+	const headed = process.env.HEADED === "1";
+	const args = [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`, "--no-sandbox"];
+	if (!headed) args.push("--headless=new");
 	return chromium.launchPersistentContext("", {
-		// Extensions don't reliably load in headless mode (ERR_BLOCKED_BY_CLIENT
-		// at chrome-extension://<id>/index.html). Headed is the supported path.
 		headless: false,
-		args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`, "--no-sandbox"],
+		args,
 	});
 }

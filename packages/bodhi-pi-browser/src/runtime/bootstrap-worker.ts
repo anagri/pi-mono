@@ -2,8 +2,11 @@
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { createBrowserExtensionLoader } from "../extensions/browser-extension-loader";
+import { createSandboxedBrowserExtensionLoader } from "../extensions/sandboxed-browser-extension-loader";
 import { createZenfsFilesystem } from "../filesystem/zenfs-filesystem";
+import { createSandboxBridge } from "../sandbox/sandbox-bridge";
 import { createBrowserScriptExecutor } from "../script-executor/browser-script-executor";
+import { createSandboxedBrowserScriptExecutor } from "../script-executor/sandboxed-browser-script-executor";
 import { createDexieSessionStore } from "../sessions/dexie-session-store";
 import { createMessagePortStream } from "../transport/message-port-stream";
 import { workspaceProviderFromData } from "../workspace/provider";
@@ -90,7 +93,15 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 		if (ev.data?.type !== "init") return;
 		self.removeEventListener("message", onInit);
 
-		const { agentPort, models, defaultModelId, apiKeys, systemPrompt, workspace: workspaceData } = ev.data;
+		const {
+			agentPort,
+			models,
+			defaultModelId,
+			apiKeys,
+			systemPrompt,
+			workspace: workspaceData,
+			sandboxPort,
+		} = ev.data;
 
 		void (async () => {
 			const workspace = workspaceProviderFromData(workspaceData);
@@ -98,9 +109,15 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 
 			const filesystem = createZenfsFilesystem();
 			const sessionStore = createDexieSessionStore({ dbName });
-			const scriptExecutor = createBrowserScriptExecutor({ filesystem });
 
-			const extensionFactories = await createBrowserExtensionLoader({ filesystem, cwd: workspace.rootPath });
+			const bridge = sandboxPort ? createSandboxBridge(sandboxPort) : undefined;
+			const scriptExecutor = bridge
+				? createSandboxedBrowserScriptExecutor({ filesystem, bridge })
+				: createBrowserScriptExecutor({ filesystem });
+
+			const extensionFactories = bridge
+				? await createSandboxedBrowserExtensionLoader({ filesystem, cwd: workspace.rootPath, bridge })
+				: await createBrowserExtensionLoader({ filesystem, cwd: workspace.rootPath });
 
 			const factory = createBodhiPiAgent({
 				models,

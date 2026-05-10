@@ -42,6 +42,7 @@ export default defineConfig({
 		rollupOptions: {
 			input: {
 				index: resolve(__dirname, "index.html"),
+				sandbox: resolve(__dirname, "sandbox.html"),
 				background: resolve(__dirname, "src/background.ts"),
 			},
 			output: {

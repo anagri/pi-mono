@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import "./App.css";
 import { workerFactory } from "./agent/runtime";
+import { createSandboxPort } from "./agent/sandbox";
 import { env } from "./env";
 
 function App() {
@@ -66,7 +67,13 @@ function App() {
 	}
 
 	return (
-		<RuntimeProvider workspace={boot.workspace} env={env} workerFactory={workerFactory} onUnmount={handleUnmount}>
+		<RuntimeProvider
+			workspace={boot.workspace}
+			env={env}
+			workerFactory={workerFactory}
+			sandboxPortFactory={createSandboxPort}
+			onUnmount={handleUnmount}
+		>
 			<div className="app-shell" data-testid="app-shell">
 				<ChatPage />
 				<EventsPanel />

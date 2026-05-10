@@ -12,6 +12,10 @@
 		"default_title": "Open bodhi-pi"
 	},
 	"content_security_policy": {
-		"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+		"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+		"sandbox": "sandbox allow-scripts allow-forms; script-src 'self' 'unsafe-eval' 'unsafe-inline' 'wasm-unsafe-eval' data:; script-src-elem 'self' 'unsafe-inline' data:; object-src 'self'"
+	},
+	"sandbox": {
+		"pages": ["sandbox.html"]
 	}
 }

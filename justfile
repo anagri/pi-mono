@@ -62,6 +62,11 @@ test:
     @echo "▶ @bodhiapp/bodhi-pi-web  — test:e2e (playwright)"
     npm --workspace @bodhiapp/bodhi-pi-web run test:e2e
 
+    @echo "▶ @bodhiapp/bodhi-pi-chrome-ext  — build"
+    npm --workspace @bodhiapp/bodhi-pi-chrome-ext run build
+    @echo "▶ @bodhiapp/bodhi-pi-chrome-ext  — test:e2e (playwright, headed)"
+    npm --workspace @bodhiapp/bodhi-pi-chrome-ext run test:e2e
+
     @echo "▶ @bodhiapp/bodhi-pi-ws-server  — build"
     npm --workspace @bodhiapp/bodhi-pi-ws-server run build
     @echo "▶ @bodhiapp/bodhi-pi-ws-server  — test"

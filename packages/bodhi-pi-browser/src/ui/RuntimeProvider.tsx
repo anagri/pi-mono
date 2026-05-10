@@ -41,9 +41,23 @@ export interface RuntimeProviderProps {
 	 * against host source: `() => new Worker(new URL("./agent/worker.ts", import.meta.url), { type: "module" })`.
 	 */
 	workerFactory: () => Worker;
+	/**
+	 * Optional zero-arg async factory that returns a `MessagePort` connected
+	 * to a sandboxed iframe. Hosts running under a strict CSP (MV3 chrome
+	 * extensions) supply one; the runtime hands the port to the worker via
+	 * the `init` message. Called once on first runtime start.
+	 */
+	sandboxPortFactory?: () => Promise<MessagePort>;
 }
 
-export function RuntimeProvider({ workspace, onUnmount, children, env, workerFactory }: RuntimeProviderProps) {
+export function RuntimeProvider({
+	workspace,
+	onUnmount,
+	children,
+	env,
+	workerFactory,
+	sandboxPortFactory,
+}: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
@@ -74,12 +88,14 @@ export function RuntimeProvider({ workspace, onUnmount, children, env, workerFac
 			setModels(env.models);
 			setDefaultModelId(env.defaultModelId);
 
+			const sandboxPort = sandboxPortFactory ? await sandboxPortFactory() : undefined;
 			const runtime = await startAgentRuntime({
 				models: env.models,
 				defaultModelId: env.defaultModelId,
 				apiKeys: env.apiKeys,
 				workspace,
 				workerFactory,
+				...(sandboxPort !== undefined ? { sandboxPort } : {}),
 				onNotification: (notif) => {
 					dispatchNotification(notif, {
 						appendChunk,
@@ -145,7 +161,7 @@ export function RuntimeProvider({ workspace, onUnmount, children, env, workerFac
 		// All captured setters are referentially stable (Zustand bound actions + useState setters);
 		// `workspace` is the only re-init trigger.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspace, env, workerFactory]);
+	}, [workspace, env, workerFactory, sandboxPortFactory]);
 
 	useEffect(() => {
 		if (status === "closed") {

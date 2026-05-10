@@ -31,6 +31,13 @@ export interface RuntimeOptions {
 	 * `new URL("./worker.ts", import.meta.url)` against host-local source.
 	 */
 	workerFactory: () => Worker;
+	/**
+	 * Optional `MessagePort` already wired to a sandboxed iframe. Hosts under
+	 * a strict CSP (MV3 chrome extensions) provide one so the worker can
+	 * delegate `unsafe-eval`-bound work (extension factories, `run_script`).
+	 * Transferred to the worker via the `init` message.
+	 */
+	sandboxPort?: MessagePort;
 }
 
 export interface AgentRuntime {
@@ -53,8 +60,11 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		// data record. Worker reconstructs a provider via `workspaceProviderFromData`.
 		workspace: opts.workspace.toData(),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.sandboxPort !== undefined ? { sandboxPort: opts.sandboxPort } : {}),
 	};
-	worker.postMessage(init, [channel.port2]);
+	const transfer: Transferable[] = [channel.port2];
+	if (opts.sandboxPort !== undefined) transfer.push(opts.sandboxPort);
+	worker.postMessage(init, transfer);
 
 	// Push captured events outside React's render cycle so the panel only
 	// re-renders when the event arrays change reference.

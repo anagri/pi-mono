@@ -7,6 +7,10 @@ export {
 	createBrowserExtensionLoader,
 } from "./extensions/browser-extension-loader.js";
 export {
+	createSandboxedBrowserExtensionLoader,
+	type SandboxedExtensionLoaderOptions,
+} from "./extensions/sandboxed-browser-extension-loader.js";
+export {
 	clearHandle,
 	loadHandle,
 	queryPermission,
@@ -23,7 +27,15 @@ export { type AgentRuntime, type RuntimeOptions, startAgentRuntime } from "./run
 export { clearLastSessionId, readLastSessionId, writeLastSessionId } from "./runtime/session-storage.js";
 export type { InitMessage, WorkerEventMessage, WorkerMessage, WorkerWireMessage } from "./runtime/types.js";
 export { tapReadable, tapWritable } from "./runtime/wire-tap.js";
+export {
+	createSandboxBridge,
+	type ExtensionLoadResult,
+	type ExtensionRegistration,
+	type SandboxBridge,
+	type ScriptResult,
+} from "./sandbox/sandbox-bridge.js";
 export { createBrowserScriptExecutor } from "./script-executor/browser-script-executor.js";
+export { createSandboxedBrowserScriptExecutor } from "./script-executor/sandboxed-browser-script-executor.js";
 export { createDexieSessionStore, type DexieSessionStoreOptions } from "./sessions/dexie-session-store.js";
 
 // Stores (zustand)

@@ -29,7 +29,7 @@ if (existsSync(iconsSrc)) {
 	console.log("copied public/icons/* -> dist/icons/");
 }
 
-for (const required of ["index.html", "background.js"]) {
+for (const required of ["index.html", "sandbox.html", "background.js"]) {
 	if (!existsSync(resolve(dist, required))) {
 		console.error(`expected ${required} in dist/ but it's missing`);
 		process.exit(1);
