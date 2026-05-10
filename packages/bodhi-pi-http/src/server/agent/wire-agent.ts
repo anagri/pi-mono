@@ -1,5 +1,5 @@
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
-import { createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
+import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { createNodeExtensionLoader, createNodeFilesystem, createNodeScriptExecutor } from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { UserCtx } from "../auth/token.js";
@@ -26,6 +26,79 @@ export interface WireAgentResult {
 	factory: AgentFactory;
 }
 
+/** ACP extension method that forwards bodhi-pi lifecycle events to the client. */
+export const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
+
+export interface LifecycleEventRecord {
+	type: BodhiPiEvent["type"];
+	sessionId?: string;
+	toolName?: string;
+	userPrompt?: string;
+	stopReason?: string;
+	fromModelId?: string;
+	toModelId?: string;
+}
+
+function recordFor(event: BodhiPiEvent): LifecycleEventRecord {
+	const record: LifecycleEventRecord = { type: event.type };
+	if ("sessionId" in event && event.sessionId) record.sessionId = event.sessionId;
+	if (
+		event.type === "tool_call" ||
+		event.type === "tool_result" ||
+		event.type === "tool_execution_start" ||
+		event.type === "tool_execution_update" ||
+		event.type === "tool_execution_end"
+	) {
+		record.toolName = event.toolName;
+	}
+	if (event.type === "agent_start") record.userPrompt = event.userPrompt;
+	if (event.type === "agent_end" && event.stopReason !== undefined) record.stopReason = event.stopReason;
+	if (event.type === "model_select") {
+		record.fromModelId = event.fromModelId;
+		record.toModelId = event.toModelId;
+	}
+	return record;
+}
+
+/**
+ * Forwards every BodhiPiEvent to the client via `extNotification`. Fire-and-forget;
+ * lifecycle delivery must never block agent execution.
+ *
+ * In the HTTP host, `extNotification` reaches the client only during SSE methods
+ * (`session/prompt`, `session/load`) where the response stream is open. JSON-method
+ * calls don't emit lifecycle events anyway, so this matches what ws-server does.
+ */
+function eventForwardingHandlers(conn: AgentSideConnection): BodhiPiEventHandlers {
+	const post = (event: BodhiPiEvent): undefined => {
+		const record = recordFor(event);
+		void conn.extNotification(LIFECYCLE_EVENT_METHOD, record as unknown as Record<string, unknown>).catch((err) => {
+			console.error("[bodhi-pi-http] lifecycle forward failed:", err);
+		});
+		return undefined;
+	};
+	return {
+		session_start: [post],
+		session_shutdown: [post],
+		agent_start: [post],
+		agent_end: [post],
+		turn_start: [post],
+		turn_end: [post],
+		message_start: [post],
+		message_update: [post],
+		message_end: [post],
+		tool_execution_start: [post],
+		tool_execution_update: [post],
+		tool_execution_end: [post],
+		input: [post],
+		before_agent_start: [post],
+		before_provider_request: [post],
+		after_provider_response: [post],
+		tool_call: [post],
+		tool_result: [post],
+		model_select: [post],
+	};
+}
+
 /**
  * Build a per-request bodhi-pi agent factory.
  *
@@ -36,6 +109,11 @@ export interface WireAgentResult {
  *
  * The agent's cwd is fixed server-side. We override newSession/loadSession via
  * a Proxy so clients don't need to know server-side absolute paths.
+ *
+ * Lifecycle events are forwarded via `extNotification(_bodhi-pi/lifecycle/event)`
+ * — see `eventForwardingHandlers`. This requires the inner factory to be
+ * constructed *per-conn* (not at wire-agent setup time) so handlers close
+ * over the per-request `conn`.
  */
 export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireAgentResult> {
 	const cwd = resolveUserWorkspace({
@@ -48,18 +126,19 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 	const extensionFactories = await createNodeExtensionLoader({ cwd });
 	const scriptExecutor = createNodeScriptExecutor();
 
-	const innerFactory = createBodhiPiAgent({
-		models: opts.models,
-		defaultModelId: opts.defaultModelId,
-		getApiKey: opts.getApiKey,
-		sessionStore,
-		filesystem,
-		scriptExecutor,
-		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
-		...(extensionFactories.length > 0 ? { extensionFactories } : {}),
-	});
-
 	const factory: AgentFactory = (conn) => {
+		// Inner factory built here so eventHandlers close over the per-request conn.
+		const innerFactory = createBodhiPiAgent({
+			models: opts.models,
+			defaultModelId: opts.defaultModelId,
+			getApiKey: opts.getApiKey,
+			sessionStore,
+			filesystem,
+			scriptExecutor,
+			eventHandlers: eventForwardingHandlers(conn),
+			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(extensionFactories.length > 0 ? { extensionFactories } : {}),
+		});
 		const inner = innerFactory(conn);
 		return new Proxy(inner, {
 			get(target, prop, receiver) {

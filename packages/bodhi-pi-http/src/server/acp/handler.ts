@@ -144,6 +144,16 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 		const agent = wired.factory(conn);
 
 		try {
+			// Methods that read in-memory SessionState need transparent rehydration
+			// from store, since each HTTP request gets a fresh agent. `prompt` does
+			// this in handleSseMethod; `setSessionConfigOption` (and any future
+			// session-mutating JSON method) does it here.
+			if (body.method === "session/setSessionConfigOption") {
+				const sid = (params as { sessionId?: unknown }).sessionId;
+				if (typeof sid === "string" && agent.resumeSession) {
+					await agent.resumeSession({ sessionId: sid, cwd: wired.cwd, mcpServers: [] } as never);
+				}
+			}
 			const result = await dispatchJsonMethod(agent, body.method, params);
 			writeJson(res, 200, rpcSuccess(id, result));
 		} catch (err) {
@@ -261,6 +271,15 @@ async function dispatchJsonMethod(
 		case "session/list": {
 			if (!agent.listSessions) throw new MethodNotFoundError("session/list not supported");
 			return await agent.listSessions(params as never);
+		}
+		case "session/close": {
+			if (!agent.closeSession) throw new MethodNotFoundError("session/close not supported");
+			return (await agent.closeSession(params as never)) ?? {};
+		}
+		case "session/setSessionConfigOption": {
+			if (!agent.setSessionConfigOption)
+				throw new MethodNotFoundError("session/setSessionConfigOption not supported");
+			return await agent.setSessionConfigOption(params as never);
 		}
 		default: {
 			// Extension methods (e.g. `_bodhi-pi/session/delete`) route through the

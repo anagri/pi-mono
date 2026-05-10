@@ -1,309 +1,213 @@
-# bodhi-pi-http — stateless-deployment PoC
+# bodhi-pi-http — feature parity with ws reference host
 
 ## Context
 
-The current `bodhi-pi-ws-server` is a stateful, long-lived WebSocket host. Each connection holds an `AcpAgent` in memory; reconnect re-hydrates from SQLite. ACP itself is inherently stateful (sessionId, in-flight turns, streaming notifications), so any non-WS deployment has to answer: *where does turn state live?*
+The PoC (committed in `11cf2d68`) brought up the HTTP+SSE host's transport, multi-tenant SQLite, per-turn agent rebuild, and basic chat UI. **51 unit/integration tests + 2 real-LLM e2e tests pass.** The deployment thesis (state lives in storage between turns) is mechanically verified.
 
-This PoC proves a sharper deployment model:
+What's missing is **functional parity** with `bodhi-pi-ws-server` + `bodhi-pi-ws-frontend`. The WS host has accumulated a rich feature surface (slash commands, model switch, EventsPanel observability, auto-resume, scripted skills, extensions, project commands, tool-call cards) and a Playwright e2e suite that proves them. The bodhi-pi parity rule (now updated to 4 reference hosts) means every user-visible feature in bodhi-pi must work in `bodhi-pi-http` too — and every UI affordance + e2e spec that ws-frontend uses to prove it should have an HTTP equivalent.
 
-> **Each turn = one long-lived HTTP request.** The agent is built fresh from persisted state at the start of the request, runs the turn (streaming notifications back as SSE), and is torn down on completion or client disconnect. The next turn (next HTTP request) re-hydrates from store.
+This plan ports those features iteratively, with each milestone landing one feature + one (or a few) tests, all green at every step. UI is rewritten (not patched) to match ws-frontend's testability conventions: every interaction goes through the composer (slash commands, model switch, session management); a side EventsPanel exposes lifecycle and wire frames as `data-*`-attributed rows; a composite `data-test-state` on the chat-root drives blackbox e2e.
 
-No mid-turn resume, no clustering, no sticky sessions. The proof is that two prompts in the same session, sent as two independent HTTP requests, work correctly — meaning all session state truly lives in storage, not in process memory between requests.
+The user explicitly called out one **HTTP-specific** scenario to add: a session can be `/close`d and `/resume`d, and the next prompt continues the same conversation across those independent HTTP requests.
 
-Wire shape: **MCP-Streamable-HTTP-style** (single endpoint `POST /acp`, returns either `application/json` or `text/event-stream` depending on method). Body remains pure ACP JSON-RPC — we are framing ACP over HTTP, not redesigning ACP.
+## Architecture decisions (locked-in by grilling)
 
-This becomes the **4th reference host** (alongside `bodhi-pi-cli`, `bodhi-pi-web`, `bodhi-pi-ws-server`+`bodhi-pi-ws-frontend`), and the parity rule in `packages/bodhi-pi/CLAUDE.md` is updated to reflect this.
+1. **Same-origin frontend serving.** Each test spawns one `bodhi-pi-http` process on port 0 with `--workspace <tmpdir>`. The process serves both `/acp` and the pre-built frontend at `dist/public/`. Playwright loads `http://localhost:<port>/`. **No CORS, no `serverUrl` field in Settings.** Frontend is built once globally before the test run (Playwright `globalSetup` calls `vite build`).
 
-## Design
+2. **Settings panel** = `id` + `email` + `sendToken` (no `serverUrl` because same-origin). `sendToken: false` is the test path for the unauthorized state.
 
-### Wire — `POST /acp` (MCP-Streamable-HTTP shape)
+3. **Wire tab = per JSON-RPC frame.** Each row is one frame (request, response, or notification), not one HTTP call. The `acp-http-client` taps every outbound and inbound frame and pushes it to an `EventLog`. Same `data-*` attribute taxonomy as ws-frontend so tests query identically: `data-event-source`, `data-event-direction`, `data-event-method`, `data-event-kind`, `data-rpc-id`, `data-ts`.
 
-| ACP method | Response Content-Type |
-|---|---|
-| `initialize`, `authenticate`, `session/new`, `session/list`, `session/cancel`, `session/close`, `_bodhi-pi/session/delete` | `application/json` (single JSON-RPC response) |
-| `session/load`, `session/prompt` | `text/event-stream` (notifications as `event: message`, terminating with the final JSON-RPC response) |
+4. **Lifecycle event forwarding** uses the same ACP extension method `_bodhi-pi/lifecycle/event` that ws-server uses. The HTTP server's `wireAgentForRequest` registers `eventForwardingHandlers` (mirrored from `bodhi-pi-ws-server/src/agent/wire-agent.ts:23-86`). Events fire during `session/prompt` (and `session/load`); they reach the client as SSE frames carrying `extNotification`. Outside an SSE method (e.g., during a JSON method like `session/new`), there's no return channel — and bodhi-pi doesn't currently emit lifecycle events from those methods anyway, so the gap is a non-issue.
 
-Auth: `Authorization: Bearer <base64url(JSON({id,email}))>`. Same token shape as `bodhi-pi-ws-server`. Validated per request. **Not** ACP `authenticate` (which stays a no-op).
+5. **Auto-resume** uses `(origin, userId)` as the localStorage key — same shape as ws's `(serverUrl, userId)`, but with `window.location.origin` substituting `serverUrl`.
 
-### Per-turn lifecycle
+6. **Scope: full parity in iterative milestones.** Each milestone is small enough to keep tests green at every checkpoint. We don't write more code than the next test demands.
 
-```
-POST /acp { jsonrpc, id, method: "session/prompt", params: { sessionId, prompt } }
-  ├─ middleware: decodeToken(Authorization) → user, or 401
-  ├─ wireAgentForConnection({user, dataDir, db, ...}) → factory
-  ├─ build HttpAcpConn (sessionUpdate → SSE writer)
-  ├─ agent = factory(httpAcpConn)
-  ├─ register inflight.set(sessionId, AbortController)
-  ├─ res.writeHead(200, { "content-type": "text/event-stream", ... })
-  ├─ if not loaded: agent.resumeSession({ sessionId, cwd })   ← transparent hydration
-  ├─ agent.prompt(params)   ← runs turn; sessionUpdate calls flow to SSE
-  │     res.on('close') → ctrl.abort('client-closed') → agent.cancel({sessionId})
-  ├─ emit final response as last SSE event (with matching jsonrpc.id)
-  └─ res.end(); inflight.delete(sessionId); GC agent
-```
+## Gap-by-gap milestones (iterative)
 
-`session/cancel` looks up `inflight.get(sessionId)?.abort()` — runs in any concurrent HTTP request on the same process.
+### Backend parity
 
-### Bypassing `AgentSideConnection`
+#### M9 — Lifecycle event forwarding via SSE
+- Mirror `bodhi-pi-ws-server/src/agent/wire-agent.ts:23-86` (`recordFor`, `eventForwardingHandlers`, `LifecycleEventRecord`, `LIFECYCLE_EVENT_METHOD`).
+- In `wire-agent.ts`, accept the `conn` for closing over and pass `eventHandlers: eventForwardingHandlers(conn)` to `createBodhiPiAgent`.
+- Test: `test/integration/lifecycle-events.test.ts` — issue a faux prompt, assert SSE notifications include `_bodhi-pi/lifecycle/event` frames with at least `agent_start`, `turn_start`, `agent_end` (matching `bodhi-pi/e2e/events.e2e.ts` shape).
 
-Per the SDK contract (Web Streams, long-lived bidirectional), feeding it a one-shot HTTP request is awkward. Instead:
+#### M10 — Add `session/close` + `session/setSessionConfigOption` to handler
+- Extend `dispatchJsonMethod` in `src/server/acp/handler.ts` to dispatch:
+  - `session/close` → `agent.closeSession(params)` (returns `{}`).
+  - `session/setSessionConfigOption` → `agent.setSessionConfigOption(params)` (returns `{configOptions: [...]}`).
+- Tests:
+  - `test/integration/session-close.test.ts` — create → close → list still shows the session (close is in-memory only, ACP semantics).
+  - `test/integration/model-switch.test.ts` — register two faux models; switch via `setSessionConfigOption({configId:"model", value})`; assert the response and that subsequent prompts see the new model in faux `Context`.
 
-- Build a tiny `HttpAcpConn` object exposing only the methods the agent calls inward: `sessionUpdate(notification)` (load + prompt), and stubs that throw for `requestPermission` / `readTextFile` / `writeTextFile` (bodhi-pi never calls these — see DEVELOPMENT.md note).
-- Pass `HttpAcpConn` into the factory returned by `wireAgentForConnection`. The agent treats it as its `AgentSideConnection`.
-- The HTTP handler dispatches the inbound JSON-RPC method directly: `await agent.prompt(params)`, `await agent.newSession(params)`, etc.
-- For SSE methods, `sessionUpdate` writes one `event: message\ndata: {...}\n\n` line per notification.
+### Frontend rewrite (composer-driven, parity testids)
 
-### Project layout — single package, three folders
+> The current `App.tsx` is rewritten — not patched — to match ws-frontend's structure. Each milestone replaces a slice while keeping all existing tests green by preserving wire behaviors.
 
-```
-packages/bodhi-pi-http/
-  package.json              ← single, deps: bodhi-pi + bodhi-pi-node + drizzle + better-sqlite3
-                              + react/vite + vitest/playwright
-  tsconfig.json             ← root, references server + frontend
-  tsconfig.server.json      ← module=node, includes src/server, test, e2e
-  tsconfig.frontend.json    ← jsx=react-jsx, includes src/frontend
-  vite.config.ts            ← root=src/frontend, build.outDir=dist/public, dev proxy /acp→:3000
-  vitest.config.ts          ← server unit + integration (test/**)
-  vitest.e2e.config.ts      ← real-LLM e2e (e2e/**.e2e.ts)
-  playwright.config.ts      ← skeleton for FE e2e (deferred)
-  CLAUDE.md
-  README.md
-  DEVELOPMENT.md            ← noted-skips: ACP fs/* and session/request_permission
-  .env / .env.example       ← provider keys (mirror ws-server)
-  src/
-    server/
-      index.ts              ← entry: dotenv, parseArgs, buildServer, listen
-      server.ts             ← buildServer({port, dataDir, ...}) → http server
-      cli-args.ts           ← --port --data-dir --workspace --help (mirror ws-server)
-      models.ts             ← mirror ws-server (gpt-4o-mini default)
-      auth/
-        token.ts            ← duplicated from ws-server: encodeToken/decodeToken
-        middleware.ts       ← parse Authorization, attach user, return 401
-      acp/
-        handler.ts          ← POST /acp router; dispatches to JSON or SSE per method
-        http-acp-conn.ts    ← AgentSideConnection-shaped object for SSE
-        sse.ts              ← SSE writer helpers
-        inflight.ts         ← Map<sessionId, AbortController> + register/abort
-      filesystem/user-workspace.ts   ← duplicated
-      sessions/             ← duplicated SQLite schema, migrate, store
-      agent/wire-agent.ts   ← duplicated; same per-request build pattern
-      static.ts             ← serve dist/public/* + index.html SPA fallback
-    frontend/
-      index.html
-      main.tsx, App.tsx
-      lib/
-        acp-http-client.ts  ← fetch + SSE parser exposing ClientSideConnection-like surface
-        auth.ts             ← encodeToken (browser btoa); localStorage helpers
-        sse-parser.ts       ← async iterator over text/event-stream
-      hooks/                ← port useChat / useSessions / useSettings / useEventLog
-      components/           ← port EventsPanel, message renderer, prompt input
-      ui/                   ← port shadcn primitives
-  test/
-    helpers/
-      test-server.ts        ← startTestServer({...}) — mirror ws-server pattern
-      http-acp-client.ts    ← test-side reuse of acp-http-client (fetch+SSE)
-      faux-provider.ts      ← reuse pi-ai's registerFauxProvider
-    integration/
-      auth.test.ts          ← 401 paths, valid bearer
-      session-crud.test.ts  ← new/list/load/delete via JSON
-      multi-prompt.test.ts  ← KEY PROOF: two prompts, second sees first's history
-      cancel.test.ts        ← faux-provider with delay; POST cancel; assert stopReason
-      sse-bridge.test.ts    ← unit-ish: stream of notifications wired to SSE format
-  e2e/
-    chat.e2e.ts             ← real LLM (gpt-4o-mini) happy path through HTTP
-```
+#### M11 — Settings panel + composite `data-test-state`
+- `src/frontend/components/Settings.tsx` — `id`, `email`, `sendToken` form persisted via `useSettings` hook.
+- `src/frontend/hooks/useSettings.ts` — localStorage-backed (`bodhi-pi-http.settings`).
+- Top-level state machine: `idle | connecting | connected | unauthorized | disconnected | error` plus chat status `streaming | closed`. Composite `data-test-state` follows ws-frontend's rule (`App.tsx:104-108`).
+- Connect path: with `sendToken=true` use the encoded token; with `sendToken=false` send `Authorization` header with empty token → server returns 401 → state becomes `unauthorized`.
+- `data-testid` set: `chat-page`, `settings-id`, `settings-email`, `settings-sendToken`, `connect`, `disconnect`, `status`, with status reflecting `data-status`, `data-chat-status`, `data-current-model`, `data-session-id`.
+- No new automated tests this milestone; covered by M19 e2e port. Keep all existing 51 tests green.
 
-**No workspace-package split.** One `package.json`, one `node_modules`. Vite handles frontend; vitest handles server tests. Browser deps (`react`, `vite`) and Node deps (`better-sqlite3`, `drizzle-orm`) coexist; tsconfig project refs keep type checking honest.
+#### M12 — System messages + base slash commands (`/help`, `/sessions`, `/new`, `/close`, `/delete`)
+- `src/frontend/ui/commands.ts` — port `handleCommand(line, ctx)` from ws-frontend `src/ui/commands.ts:19-210`. Dispatcher returns `boolean` (handled-locally vs forward-to-agent).
+- System messages render as `[data-testid="system-message"]`.
+- Wire `/help`, `/sessions` (calls `client.listSessions`), `/new` (close-then-new flow), `/close`, `/delete <id>`.
+- Compose action emits `system-message` with command output (e.g., session list).
 
-### Frontend — parity with ws-frontend, transport replaced
+#### M13 — `/model` + `/resume` slash commands
+- `/model [id]` → calls `client.setSessionConfigOption({sessionId, configId:"model", value:id})`. With no arg, prints current and available. Updates `currentModelId` in chat state → `data-current-model` attribute reflects.
+- `/resume <id>` → calls `client.loadSession({sessionId, cwd, mcpServers:[]})`; uses existing SSE history-replay path. System message confirms.
+- Status bar component (`src/frontend/components/StatusBar.tsx`) renders `data-status`, `data-chat-status`, `data-current-model`, `data-session-id`.
 
-`src/frontend/lib/acp-http-client.ts` exposes the **same method surface** as `ClientSideConnection` (so existing hooks port verbatim):
+#### M14 — EventsPanel: lifecycle tab
+- `src/frontend/components/EventsPanel.tsx` with two-tab UI; lifecycle tab only this milestone.
+- `src/frontend/hooks/useLifecycleLog.ts` — subscribes to `acp-http-client.onLifecycleEvent`. Add a hook on the client.
+- `src/frontend/lib/acp-http-client.ts` — extend SSE consumption: when a frame's `method === "_bodhi-pi/lifecycle/event"`, dispatch to lifecycle handlers (in addition to existing `session/update`).
+- Each row: `[data-testid=event-row][data-event-source=lifecycle][data-event-type][data-session-id][data-tool-name][data-user-prompt][data-stop-reason][data-from-model-id][data-to-model-id]`. Mirror ws-frontend's row markup (`EventsPanel.tsx:46-127`).
+- FIFO 500 max.
 
-```typescript
-interface AcpHttpConnection {
-  initialize(p): Promise<InitializeResponse>
-  newSession(p): Promise<NewSessionResponse>
-  loadSession(p): Promise<LoadSessionResponse>     // internally: SSE; dispatches notifications via onSessionUpdate
-  listSessions(p): Promise<ListSessionsResponse>
-  prompt(p, signal?): Promise<PromptResponse>     // internally: SSE
-  cancel(p): Promise<void>
-  extMethod(name, params): Promise<unknown>       // for _bodhi-pi/session/delete
-  onSessionUpdate(h): () => void
-}
-```
+#### M15 — EventsPanel: wire tab + frame tap
+- Add `src/frontend/lib/event-log.ts` (FIFO 500). Each entry: `{direction, kind, method?, rpcId?, ts, raw}`.
+- In `acp-http-client.ts`, tap **every** outbound frame (the JSON-RPC body of every `fetch`) and **every** inbound frame (each SSE event JSON, plus the JSON response for non-SSE methods). Push to event log.
+- `src/frontend/hooks/useEventLog.ts` subscribes.
+- Wire tab in `EventsPanel`. Each row: `[data-testid=event-row][data-event-source=wire][data-event-direction=in|out][data-event-method][data-event-kind=request|response|notification|error|unknown][data-rpc-id][data-ts]`.
 
-`prompt` and `loadSession` open `fetch` with `Accept: text/event-stream`, parse the SSE byte stream into events, dispatch each `session/update` to registered handlers, and resolve with the final response.
+#### M16 — Tool-call cards at parity
+- Update `useChat.applyUpdate` to emit tool-call items with attributes `data-testid=tool-call`, `data-tool-name`, `data-tool-status`, `data-tool-call-id`. Optional preview `data-testid=tool-call-preview` first ~400 chars.
+- Match ws-frontend's marker rendering (`App.tsx:268-342`). Includes failed status mapping.
 
-Auth: client-side login form takes `id`+`email`, encodes via `btoa(JSON.stringify(...))` (URL-safe base64), stores in `localStorage` keyed by server origin. Each request adds `Authorization: Bearer <token>`. No `/auth/login` endpoint.
+#### M17 — Auto-resume on page load + last-session storage
+- `src/frontend/lib/last-session.ts` — port from ws-frontend `src/lib/last-session.ts` with key `bodhi-pi-http:lastSession:<origin>:<userId>`.
+- On mount of SignedIn (post-Connect), if storage has `lastSessionId` for `(origin, userId)`, attempt `loadSession`. On 404/cross-tenant error, clear key and start fresh; emit a system message either way.
+- After `/new` or successful create, persist new sessionId. After `/delete` of current, clear.
 
-WS-only behaviors that **don't** port: reconnect-with-resume (each request is its own; no transport-level reconnect), ping/pong heartbeat (HTTP doesn't need it), `FrameTap`-based byte logging (replaced by per-event log inside `acp-http-client`).
+### Test infrastructure (Playwright)
 
-## Implementation milestones (iterative, TDD)
+#### M18 — Playwright harness for bodhi-pi-http
+- `e2e/playwright/fixtures.ts` — fixtures `tenant` (FNV-hash from `testInfo.titlePath`, mirroring ws `e2e/fixtures.ts:20-29`), `testServer` (spawns child via `npx tsx src/server/index.ts --port 0 --workspace <tmpdir> --data-dir <tmpdir>`), `app` (Page Object).
+- `e2e/playwright/helpers/spawn-server.ts` — model after `bodhi-pi-ws-frontend/e2e/helpers/spawn-server.ts:37-104`. Adapt port-from-stdout regex to bodhi-pi-http's `listening on http://localhost:(\d+)` log.
+- `e2e/playwright/helpers/seed.ts` — port `loadScenario` + `writeFiles` from ws's `e2e/helpers/seed.ts:5-47`.
+- `e2e/playwright/pages/AppPage.ts` — Page Object mirroring ws's `AppPage.ts:26-138`. Methods: `goto`, `setSettings`, `clickConnect`, `expectStatus`, `send`, `expectChatStatus`, `expectChatState`, `lastMessageText`, `toolCalls`, `sessionRows`, `selectEventTab`, `lifecycleRows`, `wireRows`. Locators only inside the POM.
+- `playwright.config.ts` global setup builds the frontend once (`vite build`) so each spawned server can serve `dist/public/`. Reporter+retries match ws-frontend.
+- `e2e/playwright/data/` — directory for scenario fixtures (initially empty; populated as specs need them).
 
-Principle: each step adds the **smallest** code+test pair that drives the next behavior. No code created without a test that exercises it. **All tests green at the end of every step.** Files appear when a test forces them, not on speculation.
+#### M19 — Port specs in waves (each wave is one milestone)
 
-### M0 — Package skeleton ✅
-Package.json, tsconfigs, vite/vitest/playwright configs, CLAUDE.md, README.md, DEVELOPMENT.md, .env.example, .gitignore. `npm install` resolves; `npm test` runs (zero tests).
+##### M19a — `auth.spec.ts` (replaces ws's m1-handshake)
+- `sendToken=false` → 401 → state `unauthorized`.
+- `sendToken=true` with empty id → blocked at form validation.
+- Valid token → state `connected`.
 
-### M1 — Auth token + middleware + healthz ✅
-- `src/server/auth/token.ts` + `token.test.ts` (encode/decode roundtrip + edge cases).
-- `src/server/auth/middleware.ts` + `middleware.test.ts` (Bearer extraction, 401 responses).
-- `src/server/server.ts` with `buildServer({port:0})` → `/healthz` + 404 catch-all.
-- `test/helpers/test-server.ts` for integration boot.
-- `test/integration/healthz.test.ts` (200 ok, 404 fallback).
+##### M19b — `chat.spec.ts` (port from m2-prompt)
+- Real-LLM gpt-4o-mini single-turn prompt; assert `lastMessageText("assistant")` non-empty; status returns to `idle`.
 
-### M2 — CLI args ✅
-- `src/server/cli-args.ts` + `cli-args.test.ts` (port, workspace, data-dir parsing).
-- `src/server/models.ts` (resolveModelsFromEnv).
-- `src/server/index.ts` entry (dotenv → parseArgs → buildServer → listen).
+##### M19c — `sessions.spec.ts` (port from m5-sessions)
+- `/new` → session row appears in `sessionRows()`; status bar shows `data-session-id`.
+- `/sessions` system-message lists current.
+- `/resume <id>` → history replays.
 
-> Note: M2 also pre-created `sessions/{schema,migrate,sqlite-session-store}.ts` and `filesystem/user-workspace.ts` — these will be exercised by M3b/M3c integration tests when wired through. Acceptable but not ideal; future milestones stick tighter to "code only when next test demands."
+##### M19d — `cancel.spec.ts` (port from m12-cancel)
+- Send a long prompt; click composer-stop; status returns to idle; `data-test-state=idle`.
 
-### M3a — First ACP method through `/acp`: `initialize`
-- `test/integration/acp-initialize.test.ts`: `POST /acp` with `initialize` JSON-RPC, with and without bearer.
-- Add: `src/server/acp/handler.ts` (POST /acp router; auth middleware; dispatches `initialize` only).
-- Add: `src/server/acp/http-acp-conn.ts` (sessionUpdate stub — throws for now; not exercised yet).
-- Add: `src/server/agent/wire-agent.ts` (per-request bodhi-pi factory). Note: this brings in SessionStore + workspace dependencies → first real exercise of M2's plumbing.
-- Wire `/acp` route in `server.ts`.
+##### M19e — `tool-call.spec.ts` (m4) + `tool-failure.spec.ts` (m12) + `tool-replay.spec.ts` (m12)
+- Use scenarios that trigger tool calls (e.g., write/read files). Assert tool-call card attributes; failed-tool path; replay-on-resume re-renders cards as completed.
 
-### M3b — `session/new` JSON method
-- `test/integration/session-new.test.ts`: initialize → newSession → assert sessionId returned, row in DB.
-- Extend handler to dispatch `session/new`.
-- Validates SQLite store + per-user workspace creation.
+##### M19f — `model-switch.spec.ts` + `model-persists.spec.ts` + `cross-provider.spec.ts`
+- `/model` lists; `/model <id>` switches; status bar reflects; persisted across `/resume`. Cross-provider exercises Anthropic + OpenAI in same session (gated on `ANTHROPIC_API_KEY` like ws's spec).
 
-### M3c — `session/list` JSON method
-- `test/integration/session-list.test.ts`: alice creates 2 sessions; bob creates 1; alice list returns 2; bob list returns 1.
-- Extend handler to dispatch `session/list`.
-- Validates multi-tenant isolation in the store.
+##### M19g — `commands.spec.ts` (port from m7-commands)
+- Scenario `commands-say-tuesday`, `commands-echo`. Send `/say-tuesday`, `/echo banana`. Assert agent output.
 
-### M3d — `_bodhi-pi/session/delete` extension method
-- `test/integration/session-delete.test.ts`: create → delete → list returns empty.
-- Extend handler to dispatch the extension method via `agent.extMethod`-like path.
+##### M19h — `skills.spec.ts` + `scripted-skill.spec.ts` (port from m8)
+- Scenario `skills-say-hello`. Send `/skill:say-hello alice`. Assert "hello, alice" reply. Scripted skill scenario `days-since-birthday` uses `run_script`; `ScriptExecutor` is registered server-side (already true in `wire-agent.ts`).
 
-### M4 — Inflight registry (unit-tested only)
-- `src/server/acp/inflight.test.ts` first: register → returns AbortController; abort by sessionId; idempotent if absent.
-- `src/server/acp/inflight.ts` minimal Map<sessionId, AbortController>.
-- Not yet wired into handler — M5b uses it.
+##### M19i — `fs-tools.spec.ts` + `workspace.spec.ts` (port from m10)
+- Real-LLM exercises `read`, `edit`, `ls`, `find`, `grep` tools against fixtures mounted via `--workspace`. Workspace spec asserts that two tests in parallel see independent dirs.
 
-### M5a — SSE writer + `session/prompt` (single turn)
-- `src/server/acp/sse.test.ts`: SSE writer formats event/data/id correctly.
-- `src/server/acp/sse.ts` writer.
-- `test/integration/prompt-roundtrip.test.ts`: faux provider single response; POST prompt; SSE stream has agent_message_chunk + final response with stopReason=end_turn.
-- Handler dispatches `session/prompt` to SSE response. `HttpAcpConn.sessionUpdate` writes events.
+##### M19j — `extensions.spec.ts` (port from ws's extension scenario)
+- Scenario `extensions-redact-secrets` (already in monorepo as a fixture). Send a prompt that reads the secret file; assert tool output shows `[REDACTED]`, plaintext absent.
 
-### M5b — Multi-prompt key proof
-- `test/integration/multi-prompt.test.ts`: prompt #1 → faux returns "I am A"; new HTTP request prompt #2 → faux receives history including "I am A".
-- Forces `agent.resumeSession({sessionId, cwd})` transparent call before `agent.prompt`.
-- **The load-bearing PoC proof.**
+##### M19k — `events.spec.ts` (port from m11-event-stream)
+- Send a prompt; switch to lifecycle tab; assert at least `agent_start`, `turn_start`, `agent_end` rows. Switch to wire tab; assert `session/prompt` request, ≥1 `session/update` notification, and the matching `session/prompt` response with same `data-rpc-id`.
 
-### M5c — Cancel
-- `test/integration/cancel.test.ts`: faux provider with delayed chunks; POST prompt; mid-stream POST `session/cancel`; SSE closes with `stopReason: "cancelled"`.
-- Wire inflight registry into handler. `res.on("close")` also aborts.
+##### M19l — `auto-resume.spec.ts` (port from m11-auto-resume)
+- Connect, create session, send a prompt, `page.reload()`. After reconnect, assert chat replays last session (system message + recovered messages). Cross-tenant variant: change `id` in settings, reload — should NOT see the previous session.
 
-### M5d — `session/load` (history replay over SSE)
-- `test/integration/session-load.test.ts`: prompt → close; new request session/load → SSE replays user_message_chunk + agent_message_chunk for the prior turn.
+#### M20 — HTTP-specific: `close-resume.spec.ts`
+- The user-requested proof: `/close` then `/resume <id>`, then a prompt that depends on prior context. Real-LLM gpt-4o-mini, "remember the magic word" → `/close` → `/resume` → "what was it" → assert recall. Mirrors `e2e/chat.e2e.ts`'s second test but exercised through the UI path.
 
-### M6a — Frontend skeleton: `index.html` + `main.tsx` + Login form
-- Add: `src/frontend/index.html`, `src/frontend/main.tsx`, `src/frontend/App.tsx` (login form only).
-- Add: `src/frontend/lib/auth.ts` (browser `encodeToken` via `btoa`; localStorage helpers).
-- Manual smoke: `npm run dev:frontend` opens login form at :5173.
+## Critical files
 
-### M6b — Frontend ACP client (JSON methods)
-- Add: `src/frontend/lib/acp-http-client.ts` with `initialize`, `newSession`, `listSessions`, `extMethod` (JSON paths only).
-- Wire login → initialize call. Show user info on success.
+### To create
+- `packages/bodhi-pi-http/src/frontend/components/Settings.tsx`
+- `packages/bodhi-pi-http/src/frontend/components/EventsPanel.tsx`
+- `packages/bodhi-pi-http/src/frontend/components/StatusBar.tsx`
+- `packages/bodhi-pi-http/src/frontend/components/SystemMessage.tsx`
+- `packages/bodhi-pi-http/src/frontend/hooks/useSettings.ts`
+- `packages/bodhi-pi-http/src/frontend/hooks/useLifecycleLog.ts`
+- `packages/bodhi-pi-http/src/frontend/hooks/useEventLog.ts`
+- `packages/bodhi-pi-http/src/frontend/hooks/useSessions.ts`
+- `packages/bodhi-pi-http/src/frontend/lib/event-log.ts`
+- `packages/bodhi-pi-http/src/frontend/lib/lifecycle-log.ts`
+- `packages/bodhi-pi-http/src/frontend/lib/last-session.ts`
+- `packages/bodhi-pi-http/src/frontend/ui/commands.ts`
+- `packages/bodhi-pi-http/test/integration/lifecycle-events.test.ts`
+- `packages/bodhi-pi-http/test/integration/session-close.test.ts`
+- `packages/bodhi-pi-http/test/integration/model-switch.test.ts`
+- `packages/bodhi-pi-http/e2e/playwright/fixtures.ts`
+- `packages/bodhi-pi-http/e2e/playwright/helpers/spawn-server.ts`
+- `packages/bodhi-pi-http/e2e/playwright/helpers/seed.ts`
+- `packages/bodhi-pi-http/e2e/playwright/pages/AppPage.ts`
+- `packages/bodhi-pi-http/e2e/playwright/auth.spec.ts` (and 11 more spec files per M19)
+- `packages/bodhi-pi-http/e2e/playwright/data/<scenario>/` directories
 
-### M6c — Frontend sessions list
-- Sessions panel: list + new + delete buttons. Calls `acp-http-client`.
+### To modify
+- `packages/bodhi-pi-http/src/server/agent/wire-agent.ts` — wire `eventForwardingHandlers(conn)` (M9).
+- `packages/bodhi-pi-http/src/server/acp/handler.ts` — add `session/close` and `session/setSessionConfigOption` cases (M10).
+- `packages/bodhi-pi-http/src/server/acp/http-acp-conn.ts` — confirm `extNotification` reaches the SSE writer; lifecycle events arrive via this path (M9 verification).
+- `packages/bodhi-pi-http/src/frontend/App.tsx` — rewritten across M11–M17.
+- `packages/bodhi-pi-http/src/frontend/lib/acp-http-client.ts` — add lifecycle dispatch (M14), wire frame tap (M15), tool-call notification surface (M16).
+- `packages/bodhi-pi-http/src/frontend/components/Chat.tsx` — replace inline tool rendering with parity-shaped tool cards (M16).
+- `packages/bodhi-pi-http/src/frontend/hooks/useChat.ts` — add tool-call mapping with full attribute set (M16); accept system messages (M12).
+- `packages/bodhi-pi-http/playwright.config.ts` — add `globalSetup` that builds the frontend (M18).
+- `packages/bodhi-pi-http/CLAUDE.md` — update feature inventory (per-milestone, ending state in M20).
+- `packages/bodhi-pi/CLAUDE.md` — already updated to 4-host parity rule. M20 may add a feature row to the http-specific inventory.
 
-### M7a — Frontend SSE parser
-- Add: `src/frontend/lib/sse-parser.ts` (async iterator over `text/event-stream`).
-- Unit test in vitest with browser-shaped fixtures.
-
-### M7b — Frontend chat: prompt + streaming render
-- Extend `acp-http-client` with SSE `prompt` + `loadSession`.
-- Port (or write fresh) chat hook from ws-frontend `useChat`. Replace transport with acp-http-client.
-- Composer + message list. Send → stream chunks render → final response.
-
-### M7c — Cancel button + session reload
-- Composer Send/Stop morph during streaming. Stop calls `cancel`.
-- Click a session in the list → loadSession → history replays in chat.
-
-### M8a — Real-LLM e2e (backend)
-- `e2e/chat.e2e.ts`: real gpt-4o-mini; spawn server with real models; assert text streams.
-- Gated on `OPENAI_API_KEY`.
-
-### M8b — Parity polish + static serving
-- Update `packages/bodhi-pi/CLAUDE.md` parity rule: 4 reference hosts.
-- `src/server/static.ts`: serve `dist/public/` + SPA fallback when present (so `npm start` works post-build).
-- Add npm scripts referenced by `README.md`.
-
-### M9 (optional, deferred) — Playwright FE e2e
-Skeleton in M0; specs only if/when visual proof becomes valuable.
-
-## Critical files & reuse
-
-**Reused as-is (imported, not duplicated):**
-- `@bodhiapp/bodhi-pi` — `createBodhiPiAgent`, `Agent` interface, `SessionStore`/`Filesystem`/`SessionEntry` types.
-- `@bodhiapp/bodhi-pi-node` — `createNodeFilesystem`, `createNodeExtensionLoader`, `createNodeScriptExecutor`.
-- `@mariozechner/pi-ai` — model definitions; `registerFauxProvider` in tests.
-- `@agentclientprotocol/sdk` — JSON-RPC types only (`InitializeRequest`, `PromptRequest`, etc.). **NOT** `AgentSideConnection`/`ClientSideConnection`/`ndJsonStream`.
-
-**Duplicated from `bodhi-pi-ws-server` (extract later if both hosts persist):**
-- `src/server/auth/token.ts` (← `bodhi-pi-ws-server/src/auth/token.ts`)
-- `src/server/filesystem/user-workspace.ts` (← `bodhi-pi-ws-server/src/filesystem/user-workspace.ts`)
-- `src/server/sessions/{schema,migrate,sqlite-session-store}.ts` (← same paths)
-- `src/server/agent/wire-agent.ts` (← `bodhi-pi-ws-server/src/agent/wire-agent.ts`) — drop ws-specific bits
-- `src/server/cli-args.ts` (← same path; same flags)
-- `src/server/models.ts` (← same path)
-
-**Test pattern reused** from `bodhi-pi-ws-server/test/`: `startTestServer` shape, faux provider lifecycle, port-0 binding.
-
-**Frontend pattern reused** from `bodhi-pi-ws-frontend/src/`: hooks, components, ui all port verbatim once `acp-http-client` exposes the `ClientSideConnection`-shaped API.
-
-## Out of scope (explicit non-goals)
-
-- Multi-node / clustering / sticky sessions / load-balancer routing
-- In-flight turn resumption across reconnects
-- Server-restart-mid-session continuity (the per-request rebuild implies it would work; not e2e-proven)
-- ACP `fs/read_text_file` / `fs/write_text_file` — bodhi-pi uses host-injected `Filesystem` directly (see `packages/bodhi-pi/src/filesystem/filesystem.ts:8`)
-- ACP `session/request_permission` — bodhi-pi core/agent does not call this today
-- JSON-RPC request batching (single request per POST)
-- Cookie-based auth, real JWT signing, login endpoint
-
-DEVELOPMENT.md records these explicitly so future contributors don't re-derive.
+### Reusable references (do not duplicate naively; port the patterns)
+- `bodhi-pi-ws-server/src/agent/wire-agent.ts:23-86` — `recordFor` + `eventForwardingHandlers` (M9 source of truth).
+- `bodhi-pi-ws-frontend/src/ui/commands.ts:19-210` — slash command dispatcher (M12, M13 source of truth).
+- `bodhi-pi-ws-frontend/src/components/EventsPanel.tsx:46-127` — row markup + tab control (M14, M15).
+- `bodhi-pi-ws-frontend/src/lib/last-session.ts` — auto-resume key shape (M17).
+- `bodhi-pi-ws-frontend/src/hooks/{useChat,useSessions,useSettings,useEventLog,useLifecycleLog}.ts` — hook contracts (M11–M17).
+- `bodhi-pi-ws-frontend/e2e/{fixtures.ts, helpers/spawn-server.ts, helpers/seed.ts, pages/AppPage.ts}` — Playwright harness pattern (M18).
+- `bodhi-pi-ws-frontend/e2e/data/` — scenario fixtures; many can be reused verbatim by symlinking or copying into our `e2e/playwright/data/`.
+- `bodhi-pi/e2e/{commands,events,extensions,fs,scripted-skill}.e2e.ts` — feature contract truth (the spec-port targets).
 
 ## Verification
 
-End-to-end manual smoke (post-M8):
+At every milestone:
+- `npm run test` (under `packages/bodhi-pi-http`) → all unit + integration tests green (currently 51; will grow with M9, M10, etc.).
+- `npm run test:e2e` → existing 2 real-LLM backend tests + new HTTP-specific tests still pass.
+- `npx tsgo --noEmit -p tsconfig.server.json && npx tsgo --noEmit -p tsconfig.frontend.json` clean.
+- `npm run check` (monorepo root) clean — biome + all tsgo.
 
-```bash
-# from monorepo root
-pnpm -F @bodhiapp/bodhi-pi-http build:frontend
-pnpm -F @bodhiapp/bodhi-pi-http dev:server   # node :3000
+After M18:
+- `npx playwright install` (one-time browser install).
+- `npm run test:playwright` runs the new Playwright suite (initially empty; populated wave-by-wave in M19).
 
-# in browser at http://localhost:3000
-#   1. Login with id=1 email=alice@example.com
-#   2. Create session → /workspace path appears
-#   3. Send prompt "list files in this dir"; observe streaming + tool call
-#   4. Send second prompt "what did I just ask"; assert reply references prior turn
-#   5. Send a long prompt; click cancel mid-stream; assert SSE closes with stopReason=cancelled
-```
+After full M19+M20:
+- The HTTP host's Playwright suite covers the same feature surface as ws-frontend's Playwright suite, plus the close/resume HTTP-specific scenario. Any future feature added to bodhi-pi must land here too — that's the parity rule.
 
-Automated:
+## Out of scope (still)
 
-```bash
-# server unit + integration (faux provider)
-pnpm -F @bodhiapp/bodhi-pi-http test
-
-# real-LLM e2e (requires OPENAI_API_KEY)
-pnpm -F @bodhiapp/bodhi-pi-http test:e2e
-```
-
-The **multi-prompt integration test** is the load-bearing automated proof: two independent HTTP requests, agent built fresh per request, second turn's faux-provider input must include the first turn's user+assistant messages — meaning state was reconstructed entirely from SQLite between requests. This is the deployment thesis.
-
-## Parity rule update
-
-Edit `packages/bodhi-pi/CLAUDE.md`:
-- Reference hosts table grows from 3 rows to 4 (add `bodhi-pi-http`).
-- Feature workflow gains step 7: `bodhi-pi-http` integration test (faux) and/or e2e (real LLM) proving the feature works under per-request agent rebuild.
-- Note that `bodhi-pi-http` is the deployment-portability lens: same agent, same features, but state lives in storage between every turn.
+- Multi-node / clustering / sticky sessions
+- In-flight turn resumption across reconnects (`Last-Event-ID` style)
+- ACP `fs/read_text_file` / `fs/write_text_file` and `session/request_permission` (bodhi-pi doesn't use these)
+- WebSocket-style heartbeat (HTTP doesn't need it; SSE keep-alive can be added if a real proxy gripes)
+- Real auth (signed JWT, login endpoint, cookies)
+- Server-restart-mid-session continuity as e2e proof (per-request rebuild already implies it works)
