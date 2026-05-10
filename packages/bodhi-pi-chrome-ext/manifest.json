@@ -1,0 +1,17 @@
+{
+	"manifest_version": 3,
+	"name": "bodhi-pi (PoC)",
+	"version": "0.0.0",
+	"description": "bodhi-pi agent inside a Chrome extension (PoC)",
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqDMILeHwPJvy36sV5oKWVW8baK1fdiRXTKi2ej4p3OpULYi9yqjzBKgu0xPtv5iv0RJbsIdi87RSfQgZI2H490K/PwOCHOAZsCKgbdWUU5iwOUo3gmvU2wyBjlAOPSNZpt3C37BsjCbBYPGNytfRjojtZhmEEizde0sydLzoaKwyepN5YV3LUqscgwrjLkESskoqAJqoClrqF82IevzqCZpfOPHcv7iu5p/01TCtZd7wbMbzcOhE7aOkajnIxckUdg6d4XlqKi+4RrOZhGl5fgk3nTIWvkGeC95o7/qVZ7d1oc5KlWL6ez5vXjCQsmnXdpp8JwvULaN2Wph+eRvJRQIDAQAB",
+	"background": {
+		"service_worker": "background.js",
+		"type": "module"
+	},
+	"action": {
+		"default_title": "Open bodhi-pi"
+	},
+	"content_security_policy": {
+		"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+	}
+}

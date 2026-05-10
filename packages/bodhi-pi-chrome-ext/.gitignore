@@ -1,0 +1,19 @@
+node_modules
+dist
+*.local
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Extension keypair (private). The derived public key + .ext-id are committed.
+key.pem
+
+# Playwright
+e2e/test-results
+playwright-report
+playwright/.cache
+test-results
+
+.DS_Store

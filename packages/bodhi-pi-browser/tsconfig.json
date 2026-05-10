@@ -4,12 +4,13 @@
 		"noEmit": true,
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
-		"lib": ["ES2022", "DOM", "WebWorker"],
+		"lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+		"jsx": "react-jsx",
 		"types": ["node"],
 		"paths": {
 			"@/*": ["./src/*"],
 			"@test/*": ["./test/*"]
 		}
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts"]
+	"include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts"]
 }

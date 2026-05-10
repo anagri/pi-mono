@@ -1,5 +1,5 @@
-import { mountFsaHandle } from "@bodhiapp/bodhi-pi-browser";
 import { configure, InMemory, fs as zenFs, mount as zenMount } from "@zenfs/core";
+import { mountFsaHandle } from "../filesystem/zenfs-mount";
 
 /**
  * Single seam over how a workspace's filesystem bytes get mounted into ZenFS.

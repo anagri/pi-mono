@@ -1,10 +1,9 @@
 import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { dispatchNotification } from "../agent/render";
-import { type AgentRuntime, startAgentRuntime } from "../agent/runtime";
-import { clearLastSessionId, readLastSessionId, writeLastSessionId } from "../agent/session-storage";
-import { readEnv } from "../env";
+import { dispatchNotification } from "../runtime/render";
+import { type AgentRuntime, startAgentRuntime } from "../runtime/runtime";
+import { clearLastSessionId, readLastSessionId, writeLastSessionId } from "../runtime/session-storage";
 import { useChatStore } from "../store/chatStore";
 import type { WorkspaceProvider } from "../workspace/provider";
 import { handleCommand, isCommand } from "./commands";
@@ -32,9 +31,19 @@ export interface RuntimeProviderProps {
 	workspace: WorkspaceProvider;
 	onUnmount?: () => void | Promise<void>;
 	children: React.ReactNode;
+	/**
+	 * Resolved env (api keys + model registry + default model id). Hosts read
+	 * their own env (e.g. `import.meta.env.VITE_*`) and pass the result.
+	 */
+	env: { apiKeys: Record<string, string>; models: Model<Api>[]; defaultModelId: string };
+	/**
+	 * Spawns the agent worker. Host-owned so Vite can resolve the worker URL
+	 * against host source: `() => new Worker(new URL("./agent/worker.ts", import.meta.url), { type: "module" })`.
+	 */
+	workerFactory: () => Worker;
 }
 
-export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProviderProps) {
+export function RuntimeProvider({ workspace, onUnmount, children, env, workerFactory }: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
 	const [models, setModels] = useState<Model<Api>[]>([]);
@@ -62,7 +71,6 @@ export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProvi
 		setMountPath(workspace.rootPath);
 
 		(async () => {
-			const env = readEnv();
 			setModels(env.models);
 			setDefaultModelId(env.defaultModelId);
 
@@ -71,6 +79,7 @@ export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProvi
 				defaultModelId: env.defaultModelId,
 				apiKeys: env.apiKeys,
 				workspace,
+				workerFactory,
 				onNotification: (notif) => {
 					dispatchNotification(notif, {
 						appendChunk,
@@ -136,7 +145,7 @@ export function RuntimeProvider({ workspace, onUnmount, children }: RuntimeProvi
 		// All captured setters are referentially stable (Zustand bound actions + useState setters);
 		// `workspace` is the only re-init trigger.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspace]);
+	}, [workspace, env, workerFactory]);
 
 	useEffect(() => {
 		if (status === "closed") {

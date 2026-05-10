@@ -5,12 +5,13 @@
 		"rootDir": "./src",
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
-		"lib": ["ES2022", "DOM", "WebWorker"],
+		"lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+		"jsx": "react-jsx",
 		"types": [],
 		"paths": {
 			"@/*": ["./src/*"]
 		}
 	},
-	"include": ["src/**/*.ts"],
-	"exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.d.ts"]
+	"include": ["src/**/*.ts", "src/**/*.tsx"],
+	"exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/*.d.ts"]
 }

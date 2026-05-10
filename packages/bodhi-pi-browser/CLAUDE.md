@@ -1,61 +1,64 @@
 # bodhi-pi-browser
 
-Publishable browser adapters for `@bodhiapp/bodhi-pi`. ESM-only library — no React, no UI, no app code. Browser hosts (`bodhi-pi-web`, future Chrome extension, future Electron renderer) consume `npm i @bodhiapp/bodhi-pi @bodhiapp/bodhi-pi-browser` and inject the factories below into `createBodhiPiAgent`.
+**Workspace-internal PoC infrastructure** for browser hosts of `@bodhiapp/bodhi-pi`. Used by `bodhi-pi-web` and `bodhi-pi-chrome-ext`. Not published; `package.json` is `private: true`.
 
-Mirrors `@bodhiapp/bodhi-pi-node` shape so any host can swap runtimes by changing one import line.
+This package was previously scoped as a publishable adapter library (adapters only — no React, no UI). That policy is reversed: the shared content for browser-host PoCs (UI components, agent runtime glue, stores, workspace bootstrap, env helper) lives here so each browser host can stay thin.
 
-## Architecture pillars
+## Contents
 
-**Pure factories, no singletons across factories.** Each `createX(opts)` returns a fresh adapter scoped to its own state. Dexie/ZenFS internally hit a process-global handle, but that's an implementation detail — callers see N independent factories.
+| Area | Module | Role |
+|---|---|---|
+| Adapters | `filesystem/`, `sessions/`, `script-executor/`, `transport/`, `extensions/` | Same as before — bodhi-pi browser-runtime adapters |
+| Runtime | `runtime/bootstrap-worker.ts` | `bootstrapAgentWorker({ dbName? })` — registers the worker-side init listener; called once from each host's `worker.ts` |
+| Runtime | `runtime/runtime.ts` | `startAgentRuntime(opts)` — main-thread side: takes `workerFactory: () => Worker` (host-owned spawn so Vite resolves the worker URL against host source) |
+| Runtime | `runtime/{render,wire-tap,session-storage,types}.ts` | dispatchNotification, byte-level wire taps, sessionStorage helpers, InitMessage type |
+| Stores | `store/{chatStore,eventStore}.ts` | Zustand stores backing `<MessageList>` and `<EventsPanel>` |
+| Workspace | `workspace/{provider,bootstrap}.ts` | `WorkspaceProvider` interface, FSA + seed implementations, `bootstrapWorkspace()` flow |
+| UI | `ui/*.tsx` and `ui/commands.ts` | `<RuntimeProvider>`, `<ChatPage>`, `<EventsPanel>`, `<DirectoryGate>`, etc. + slash-command dispatcher |
+| Env | `env/env.ts` | `buildResolvedEnv(getEnvVar)` — host injects its env getter (e.g. `(k) => import.meta.env[k]`) so this package never reaches Vite globals |
 
-**Bundler module resolution.** `tsconfig.build.json` uses `module: "ESNext", moduleResolution: "Bundler"` so Dexie's conditional `production`/`development`/`default` exports resolve correctly under tsgo. Subclassing `Dexie` trips tsgo's class-extension typing — we use composition (`openBodhiPiBrowserDb` returns `{ db, sessions, entries }`).
+## Package exports
 
-**ZenFS state is realm-global.** `configure({ mounts: {} })` runs once per worker/tab; subsequent `mount(path, backend)` calls add per-volume mounts. We use `/mnt/<name>` as the canonical path convention (matches `BodhiSearch/web-acp`'s pattern).
+- `.` — flat barrel: every adapter + runtime + UI + store + workspace + env helper. Main thread imports from here.
+- `./worker-entry` — direct alias to `runtime/bootstrap-worker.js`. **Worker entries must use this subpath**, not the flat barrel. The barrel transitively imports React UI modules whose Vite-dev `@react-refresh` runtime touches `window`, which doesn't exist in a Worker realm. The subpath bypasses everything React.
 
-**No DOM-only types in interfaces.** Public types use `FileSystemDirectoryHandle` (DOM lib), `MessagePort` (DOM lib) — fine for browser consumers, irrelevant for tests because vitest's Node environment imports `MessageChannel` from `node:worker_threads` and casts.
+## Host contract
 
-**FSA handles structured-clone for free.** Storing in IndexedDB via `idb-keyval` works without serialization. Posting to a worker via `postMessage(init, [port])` works. We do NOT need separate transferable handling.
+A browser host needs only:
 
-## Key files
+```ts
+// host/src/agent/worker.ts
+import { bootstrapAgentWorker } from "@bodhiapp/bodhi-pi-browser/worker-entry";
+bootstrapAgentWorker({ dbName: "<host-specific>" });
 
-| Path | Role |
-|---|---|
-| `src/index.ts` | Public exports barrel — every factory + every type |
-| `src/transport/message-port-stream.ts` | `createMessagePortStream(port)` — wraps `MessagePort` into `{readable, writable}` `Uint8Array` streams for ACP SDK's `ndJsonStream` |
-| `src/sessions/db.ts` | `openBodhiPiBrowserDb(dbName)` — Dexie schema v1: `sessions: '&id, cwd, updatedAt'` + `entries: '++pk, sessionId, [sessionId+seq]'` |
-| `src/sessions/dexie-session-store.ts` | `createDexieSessionStore({ dbName? })` — implements bodhi-pi's `SessionStore` over IndexedDB |
-| `src/filesystem/zenfs-mount.ts` | `mountFsaHandle({ handle, mountName })` mounts a Chrome FSA handle at `/mnt/<mountName>`. `unmountAt(rootPath)` releases it. Production-only — in-memory test seeds belong with the consuming host (e.g. `bodhi-pi-web`'s `seedWorkspaceProvider`). |
-| `src/filesystem/zenfs-filesystem.ts` | `createZenfsFilesystem()` — implements bodhi-pi's `Filesystem` by delegating to ZenFS's `fs.promises` (Node-fs-shaped) |
-| `src/filesystem/fsa-handle-store.ts` | `loadHandle` / `saveHandle` / `clearHandle` (idb-keyval) + `queryPermission` / `requestPermission` wrappers around the FSA handle's non-spec methods |
-| `src/script-executor/browser-script-executor.ts` | `createBrowserScriptExecutor({ filesystem })` — wraps script body in `AsyncFunction("args","cwd","console", code)`. console.log/info → stdout; console.error/warn → stderr; thrown error → exitCode=1; `Promise.race` timeout |
+// host/src/agent/runtime.ts
+export function workerFactory(): Worker {
+  return new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+}
+
+// host/src/env.ts
+import { buildResolvedEnv } from "@bodhiapp/bodhi-pi-browser";
+export const env = buildResolvedEnv((k) => (import.meta.env as Record<string, string | undefined>)[k]);
+
+// host/src/App.tsx
+import { RuntimeProvider, ChatPage, EventsPanel, DirectoryGate, bootstrapWorkspace, ... } from "@bodhiapp/bodhi-pi-browser";
+import { workerFactory } from "./agent/runtime";
+import { env } from "./env";
+// ... <RuntimeProvider workspace={...} env={env} workerFactory={workerFactory}>
+```
+
+That's the entire host surface besides `main.tsx`, CSS, `vite.config.ts`, `index.html`, package config, and an extension manifest where applicable.
+
+## Build + test
+
+- `npm run build` — tsgo + tsc-alias compiles `src/**/*.ts(x)` to `dist/`. JSX uses `react-jsx`.
+- `npm run test` — vitest runs adapter unit tests (`src/**/*.test.ts`) under fake-indexeddb. UI/runtime/store have no unit tests in this package — they're covered by host e2e.
 
 ## Source code rules
 
-- **ESM only.** `"type": "module"`. No `require()`. No CJS adapters.
-- **No `node:*` imports.** Browser-target only. The package is consumed by Vite/Rollup/esbuild — `@types/node` is in devDeps for tsgo's typing of `MessagePort` via `node:worker_threads` in tests, but src never imports from `node:*`.
-- **Public API stays thin.** Factories + minimal options. No classes exported beyond Dexie's own `Table` typings (re-exported via the schema).
-- **Match `bodhi-pi-node` shape.** Same factory naming convention (`createXxxFilesystem`, `createXxxSessionStore`, `createXxxScriptExecutor`) AND same call shape (options object on every factory). Hosts switch runtimes by changing one import line. The one genuine asymmetry is `createBrowserScriptExecutor({filesystem})` requires an injected `Filesystem` (no in-process disk in a browser realm) while `createNodeScriptExecutor()` reads from disk via `node:fs/promises` — document the asymmetry at the factory site, do not paper over it.
-- **No singletons across factories.** Each factory returns a fresh adapter, holding its own internal state. `mountFsaHandle` is the one exception — ZenFS's mount table is realm-global by design.
-- **`requestPermission` requires a user gesture.** Document this on the helper. The browser host (e.g. `bodhi-pi-web/DirectoryGate.tsx`) is responsible for invoking from a click handler. We do NOT call `requestPermission` after `showDirectoryPicker({mode:"readwrite"})` — the picker dialog already grants the requested mode and consumes the activation.
-- **AsyncFunction-based executor needs `unsafe-eval` CSP.** Document for prod consumers. No nested-Worker fallback in v1.
-- **Compose, don't subclass `Dexie`.** tsgo's class-extension resolution against Dexie's `var Dexie: DexieConstructor` typing breaks. `openBodhiPiBrowserDb` returns `{ db, sessions, entries }` — see `db.ts`.
-- **Test fixtures stay out of the publishable surface.** Helpers that exist solely to support vitest/Playwright (in-memory seeds, mocks, fixture generators) belong in the consuming host (e.g. `bodhi-pi-web/src/workspace/provider.ts`'s `seedWorkspaceProvider`), NOT in this package's `src/`. The default barrel (`src/index.ts`) is production-only. No `vitest`/`fake-indexeddb`/test-only conditional branches in production `src/` paths. Test-only deps stay in `devDependencies`. Per-file unit-test fixtures may live alongside the SUT in a `*.test.ts` (not exported), e.g. `zenfs-filesystem.test.ts` inlines its own InMemory mount.
-
-## Test conventions
-
-- **vitest + `fake-indexeddb/auto`.** Every `*.test.ts` imports the polyfill at the top so Dexie + idb-keyval work in the Node test environment.
-- **Reset DBs between tests.** Use `indexedDB.deleteDatabase(dbName)` in `beforeEach`/`afterEach`. fake-indexeddb persists across tests by default.
-- **Cast `node:worker_threads` `MessagePort` to DOM `MessagePort`.** Their declarations live in different libs but the runtime API is compatible for our usage. See `src/transport/message-port-stream.test.ts`.
-- **No e2e in this package.** End-to-end coverage lives in `bodhi-pi-web/e2e/`. Unit tests here cover adapter contracts in isolation.
-- **Each test seeds its own ZenFS mount with a unique `mountName`.** ZenFS keeps a process-global mount table; reusing names across tests in the same vitest run causes "already mounted" errors.
-
-## Feature workflow
-
-When `bodhi-pi` ships a new host-injected interface (or extends an existing one), the corresponding adapter lands here:
-
-1. Add the factory in `src/<area>/`.
-2. Vitest unit tests in `src/<area>/*.test.ts` — happy path + error paths + boundary conditions, against in-memory backends only (no real FSA picker, no real network).
-3. Re-export from `src/index.ts`.
-4. Bump `bodhi-pi-web`'s consumer code; add a Playwright spec in `bodhi-pi-web/e2e/` proving the feature reaches the LLM.
-
-The Node-side equivalent ships in `@bodhiapp/bodhi-pi-node` — keep both in lockstep.
+- **Worker-context vs main-thread separation.** `runtime/bootstrap-worker.ts` runs in worker realm and uses `self`/`DedicatedWorkerGlobalScope`. Everything else is main-thread. UI imports React; never import any UI module from worker code.
+- **No `node:*` imports.** Browser-target only. `@types/node` exists in devDeps for tooling type compat (e.g. `MessagePort` lib resolution in test files).
+- **No `import.meta.env` references.** Env reading is host-injected via `buildResolvedEnv(getEnvVar)`.
+- **Compose, don't subclass `Dexie`** (tsgo extends-typing limitation).
+- **AsyncFunction-based `ScriptExecutor` needs `unsafe-eval` CSP.** Document for production hosts.
+- **`requestPermission` must run from a user gesture.** `<DirectoryGate>` calls it inside a click handler.

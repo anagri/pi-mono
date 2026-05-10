@@ -1,4 +1,4 @@
-import { loadHandle, queryPermission, requestPermission, saveHandle } from "@bodhiapp/bodhi-pi-browser";
+import { loadHandle, queryPermission, requestPermission, saveHandle } from "../filesystem/fsa-handle-store";
 import { fsaWorkspaceProvider, seedWorkspaceProvider, type WorkspaceProvider } from "./provider";
 
 // These globals are implementation details of bootstrap; nothing else in src/

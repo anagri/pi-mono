@@ -1,0 +1,30 @@
+{
+	"name": "@bodhiapp/bodhi-pi-chrome-ext",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"gen-key": "node scripts/gen-ext-key.mjs",
+		"build": "tsc -b && vite build && node scripts/copy-manifest.mjs",
+		"dev": "tsc -b && vite build --watch",
+		"test:e2e": "playwright test"
+	},
+	"dependencies": {
+		"@bodhiapp/bodhi-pi": "*",
+		"@bodhiapp/bodhi-pi-browser": "*",
+		"react": "^19.2.5",
+		"react-dom": "^19.2.5"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.49.0",
+		"@types/chrome": "^0.0.270",
+		"@types/node": "^24.12.2",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"dotenv": "^16.4.5",
+		"typescript": "~6.0.2",
+		"vite": "^8.0.10",
+		"vite-plugin-node-polyfills": "^0.26.0"
+	}
+}

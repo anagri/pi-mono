@@ -1,7 +1,8 @@
 {
 	"name": "@bodhiapp/bodhi-pi-browser",
+	"private": true,
 	"version": "0.0.1",
-	"description": "Browser adapters (ZenFS, Dexie, AsyncFunction) for @bodhiapp/bodhi-pi.",
+	"description": "Shared PoC infrastructure (adapters + runtime + UI + stores) for browser hosts of @bodhiapp/bodhi-pi.",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -9,28 +10,34 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./worker-entry": {
+			"types": "./dist/runtime/bootstrap-worker.d.ts",
+			"import": "./dist/runtime/bootstrap-worker.js"
 		}
 	},
-	"files": [
-		"dist",
-		"README.md"
-	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
-		"test": "vitest --run",
-		"prepublishOnly": "npm run clean && npm run build"
+		"test": "vitest --run"
 	},
 	"dependencies": {
+		"@agentclientprotocol/sdk": "^0.21.0",
 		"@bodhiapp/bodhi-pi": "^0.0.1",
+		"@mariozechner/pi-ai": "*",
 		"@zenfs/core": "^2.5.0",
 		"@zenfs/dom": "^1.2.0",
 		"dexie": "^4.0.11",
-		"idb-keyval": "^6.2.2"
+		"idb-keyval": "^6.2.2",
+		"react": "^19.2.5",
+		"react-dom": "^19.2.5",
+		"zustand": "^5.0.2"
 	},
 	"devDependencies": {
 		"@types/node": "^24.3.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
 		"fake-indexeddb": "^6.0.0",
 		"tsc-alias": "^1.8.10",
 		"typescript": "^5.7.3",
