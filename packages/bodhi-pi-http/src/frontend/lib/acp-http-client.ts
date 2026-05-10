@@ -142,6 +142,30 @@ export class AcpHttpClient {
 		}>;
 	}
 
+	forkSession(params: { sessionId: string; entryId: string; position?: "before" | "at" }): Promise<{
+		newSessionId: string;
+		selectedText?: string;
+	}> {
+		return this.call("_bodhi-pi/session/fork", params as unknown as Record<string, unknown>) as Promise<{
+			newSessionId: string;
+			selectedText?: string;
+		}>;
+	}
+
+	cloneSession(params: { sessionId: string }): Promise<{ newSessionId: string }> {
+		return this.call("_bodhi-pi/session/clone", params as unknown as Record<string, unknown>) as Promise<{
+			newSessionId: string;
+		}>;
+	}
+
+	listSessionEntries(params: { sessionId: string }): Promise<{
+		entries: { id: string; role: string; preview: string }[];
+	}> {
+		return this.call("_bodhi-pi/session/entries", params as unknown as Record<string, unknown>) as Promise<{
+			entries: { id: string; role: string; preview: string }[];
+		}>;
+	}
+
 	cancel(sessionId: string): Promise<unknown> {
 		return this.call("session/cancel", { sessionId });
 	}

@@ -1,6 +1,13 @@
 export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
-export { EXT_DELETE_SESSION, EXT_SESSION_COMPACT, MODEL_CONFIG_ID } from "./acp/constants.js";
+export {
+	EXT_DELETE_SESSION,
+	EXT_SESSION_CLONE,
+	EXT_SESSION_COMPACT,
+	EXT_SESSION_ENTRIES,
+	EXT_SESSION_FORK,
+	MODEL_CONFIG_ID,
+} from "./acp/constants.js";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,

@@ -149,6 +149,33 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 			});
 		},
 
+		async forkRecord(sourceSessionId, fromEntryId, position) {
+			return await db.transaction("rw", sessions, entries, async () => {
+				const sourceRow = await sessions.get(sourceSessionId);
+				if (!sourceRow) throw new Error(`session ${sourceSessionId} not found`);
+				const sourceEntries = await entries.where({ sessionId: sourceSessionId }).sortBy("seq");
+				const byId = new Map(sourceEntries.map((r) => [r.entry.id, r]));
+				if (!byId.has(fromEntryId)) throw new Error(`entry ${fromEntryId} not found in session ${sourceSessionId}`);
+
+				const chain: typeof sourceEntries = [];
+				let curId: string | null | undefined = fromEntryId;
+				while (curId) {
+					const node = byId.get(curId);
+					if (!node) break;
+					chain.unshift(node);
+					curId = node.entry.parentId ?? null;
+				}
+				const copied = position === "before" ? chain.slice(0, -1) : chain;
+				const newId = crypto.randomUUID();
+				const now = Date.now();
+				await sessions.put({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now });
+				for (let i = 0; i < copied.length; i++) {
+					await entries.add({ sessionId: newId, seq: i, entry: copied[i].entry });
+				}
+				return { newSessionId: newId };
+			});
+		},
+
 		async readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]> {
 			const rows = await entries.where({ sessionId }).sortBy("seq");
 			const exts = rows.map((r) => r.entry).filter((e): e is ExtensionEntry => e.type === "extension");

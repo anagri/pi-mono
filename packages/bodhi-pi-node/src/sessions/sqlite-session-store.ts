@@ -196,6 +196,54 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 			return Promise.resolve();
 		},
 
+		forkRecord(sourceSessionId, fromEntryId, position) {
+			try {
+				const sourceRow = db.select().from(sessions).where(eq(sessions.id, sourceSessionId)).get();
+				if (!sourceRow) throw new Error(`session ${sourceSessionId} not found`);
+				const entryRows = db
+					.select()
+					.from(sessionEntries)
+					.where(eq(sessionEntries.sessionId, sourceSessionId))
+					.orderBy(sessionEntries.ordinal)
+					.all();
+				const parsed = entryRows.map((r) => ({ row: r, entry: parseSessionEntry(r.payload) }));
+				const byId = new Map(parsed.map((p) => [p.entry.id, p]));
+				if (!byId.has(fromEntryId)) throw new Error(`entry ${fromEntryId} not found in session ${sourceSessionId}`);
+
+				const chain: typeof parsed = [];
+				let curId: string | null | undefined = fromEntryId;
+				while (curId) {
+					const node = byId.get(curId);
+					if (!node) break;
+					chain.unshift(node);
+					curId = node.entry.parentId ?? null;
+				}
+				const copied = position === "before" ? chain.slice(0, -1) : chain;
+
+				const newId = crypto.randomUUID();
+				const now = Date.now();
+				db.transaction((tx) => {
+					tx.insert(sessions).values({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now }).run();
+					for (let i = 0; i < copied.length; i++) {
+						const node = copied[i];
+						tx.insert(sessionEntries)
+							.values({
+								sessionId: newId,
+								ordinal: i,
+								entryId: node.entry.id,
+								type: node.row.type,
+								timestamp: node.row.timestamp,
+								payload: node.row.payload,
+							})
+							.run();
+					}
+				});
+				return Promise.resolve({ newSessionId: newId });
+			} catch (err) {
+				return Promise.reject(err as Error);
+			}
+		},
+
 		readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]> {
 			const rows = db
 				.select()

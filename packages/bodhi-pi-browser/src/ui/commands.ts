@@ -1,5 +1,11 @@
 import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
-import { EXT_DELETE_SESSION, EXT_SESSION_COMPACT } from "@bodhiapp/bodhi-pi";
+import {
+	EXT_DELETE_SESSION,
+	EXT_SESSION_CLONE,
+	EXT_SESSION_COMPACT,
+	EXT_SESSION_ENTRIES,
+	EXT_SESSION_FORK,
+} from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ChatState } from "../store/chatStore";
 
@@ -59,6 +65,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /close             close the current session (data persists)",
 				"  /delete <id>       permanently delete a session",
 				"  /compact [hint]    summarize earlier turns to free context",
+				"  /entries           list message entry ids on the current branch",
+				"  /fork <entryId>    fork before <entryId> (returns new session id)",
+				"  /clone             clone the current session at the leaf",
 			];
 			if (ctx.state.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -198,6 +207,57 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				})) as { summary?: string; tokensBefore?: number };
 				const tokens = typeof result.tokensBefore === "number" ? ` (was ~${result.tokensBefore} tokens)` : "";
 				ctx.addSystemMessage(`compacted${tokens}\n\n${result.summary ?? ""}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/entries": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_ENTRIES, {
+					sessionId: ctx.state.sessionId,
+				})) as { entries: { id: string; role: string; preview: string }[] };
+				if (result.entries.length === 0) {
+					ctx.addSystemMessage("(no message entries)");
+				} else {
+					ctx.addSystemMessage(
+						["entries:", ...result.entries.map((e) => `  ${e.id}  ${e.role.padEnd(9)} ${e.preview}`)].join("\n"),
+					);
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/fork": {
+			const entryId = parts[1];
+			if (!entryId) {
+				ctx.addSystemMessage("usage: /fork <entry-id>");
+				return true;
+			}
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_FORK, {
+					sessionId: ctx.state.sessionId,
+					entryId,
+					position: "before",
+				})) as { newSessionId: string; selectedText?: string };
+				ctx.addSystemMessage(
+					`forked: ${result.newSessionId}${result.selectedText ? `\n  user message: ${result.selectedText}` : ""}`,
+				);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/clone": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_CLONE, {
+					sessionId: ctx.state.sessionId,
+				})) as { newSessionId: string };
+				ctx.addSystemMessage(`cloned: ${result.newSessionId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

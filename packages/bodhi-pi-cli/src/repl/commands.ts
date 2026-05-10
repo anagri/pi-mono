@@ -1,5 +1,12 @@
 import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
-import { EXT_DELETE_SESSION, EXT_SESSION_COMPACT, type SessionStore } from "@bodhiapp/bodhi-pi";
+import {
+	EXT_DELETE_SESSION,
+	EXT_SESSION_CLONE,
+	EXT_SESSION_COMPACT,
+	EXT_SESSION_ENTRIES,
+	EXT_SESSION_FORK,
+	type SessionStore,
+} from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { Renderer } from "./render.js";
 
@@ -40,6 +47,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /delete <id>       permanently delete a session",
 				"  /model <id>        switch model for current session",
 				"  /compact [hint]    summarize earlier turns to free context",
+				"  /entries           list message entry ids on the current branch",
+				"  /fork <entryId>    fork before <entryId> (returns new session id)",
+				"  /clone             clone the current session at the leaf",
 				"  /quit              exit",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -184,6 +194,58 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				})) as { summary?: string; tokensBefore?: number };
 				const tokens = typeof result.tokensBefore === "number" ? ` (was ~${result.tokensBefore} tokens)` : "";
 				process.stdout.write(`compacted${tokens}\n${result.summary ?? ""}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/entries": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_ENTRIES, {
+					sessionId: ctx.state.sessionId,
+				})) as { entries: { id: string; role: string; preview: string }[] };
+				if (result.entries.length === 0) {
+					process.stdout.write("  (no message entries)\n");
+				} else {
+					for (const e of result.entries) {
+						process.stdout.write(`  ${e.id}  ${e.role.padEnd(9)} ${e.preview}\n`);
+					}
+				}
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/fork": {
+			const entryId = parts[1];
+			if (!entryId) {
+				process.stdout.write("usage: /fork <entry-id>\n");
+				return false;
+			}
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_FORK, {
+					sessionId: ctx.state.sessionId,
+					entryId,
+					position: "before",
+				})) as { newSessionId: string; selectedText?: string };
+				process.stdout.write(`forked: ${result.newSessionId}\n`);
+				if (result.selectedText) process.stdout.write(`  user message: ${result.selectedText}\n`);
+				process.stdout.write(`  use /resume ${result.newSessionId} to continue from the fork\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/clone": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_CLONE, {
+					sessionId: ctx.state.sessionId,
+				})) as { newSessionId: string };
+				process.stdout.write(`cloned: ${result.newSessionId}\n`);
+				process.stdout.write(`  use /resume ${result.newSessionId} to continue on the clone\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}

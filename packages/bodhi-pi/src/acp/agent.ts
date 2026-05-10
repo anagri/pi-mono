@@ -60,7 +60,14 @@ import type { Skill } from "@/skills/skill.js";
 import { composeSystemPrompt } from "@/skills/system-prompt.js";
 import { createBuiltinTools, toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
-import { EXT_DELETE_SESSION, EXT_SESSION_COMPACT, MODEL_CONFIG_ID } from "./constants.js";
+import {
+	EXT_DELETE_SESSION,
+	EXT_SESSION_CLONE,
+	EXT_SESSION_COMPACT,
+	EXT_SESSION_ENTRIES,
+	EXT_SESSION_FORK,
+	MODEL_CONFIG_ID,
+} from "./constants.js";
 import {
 	agentToolContentForAcp,
 	extractText,
@@ -380,7 +387,85 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (method === EXT_SESSION_COMPACT) {
 			return await this.handleSessionCompact(params);
 		}
+		if (method === EXT_SESSION_FORK) {
+			return await this.handleSessionFork(params);
+		}
+		if (method === EXT_SESSION_CLONE) {
+			return await this.handleSessionClone(params);
+		}
+		if (method === EXT_SESSION_ENTRIES) {
+			return await this.handleSessionEntries(params);
+		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
+	}
+
+	private async handleSessionEntries(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_ENTRIES}: sessionId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const path = walkPath(record.entries, record.leafId ?? null);
+		const out: { id: string; role: string; preview: string }[] = [];
+		for (const entry of path) {
+			if (entry.type !== "message") continue;
+			const role = entry.message.role;
+			if (role !== "user" && role !== "assistant") continue;
+			const text = extractText(entry.message).trim();
+			const preview = text.length > 60 ? `${text.slice(0, 60)}…` : text;
+			out.push({ id: entry.id, role, preview });
+		}
+		return { entries: out };
+	}
+
+	private async handleSessionFork(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		const entryId = params.entryId;
+		const position = params.position === "at" ? "at" : "before";
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_FORK}: sessionId must be a string`);
+		}
+		if (typeof entryId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_FORK}: entryId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const target = record.entries.find((e) => e.id === entryId);
+		if (!target) throw new RequestError(-32602, `unknown entry: ${entryId}`);
+		if (!this.config.sessionStore.forkRecord) {
+			throw new RequestError(-32603, "session store does not support forking");
+		}
+		const { newSessionId } = await this.config.sessionStore.forkRecord(sessionId, entryId, position);
+		const out: Record<string, unknown> = { newSessionId };
+		if (position === "before" && target.type === "message" && target.message.role === "user") {
+			const text = target.message.content;
+			const selectedText =
+				typeof text === "string"
+					? text
+					: text
+							.filter((b): b is { type: "text"; text: string } => b.type === "text")
+							.map((b) => b.text)
+							.join("");
+			if (selectedText) out.selectedText = selectedText;
+		}
+		return out;
+	}
+
+	private async handleSessionClone(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_CLONE}: sessionId must be a string`);
+		}
+		const record = await this.config.sessionStore.load(sessionId);
+		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
+		const leafId = record.leafId ?? record.entries[record.entries.length - 1]?.id;
+		if (!leafId) throw new RequestError(-32603, "cannot clone an empty session");
+		if (!this.config.sessionStore.forkRecord) {
+			throw new RequestError(-32603, "session store does not support cloning");
+		}
+		const { newSessionId } = await this.config.sessionStore.forkRecord(sessionId, leafId, "at");
+		return { newSessionId };
 	}
 
 	private async handleSessionCompact(params: Record<string, unknown>): Promise<Record<string, unknown>> {

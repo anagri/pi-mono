@@ -43,6 +43,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /close             close the current session (data persists)",
 				"  /delete <id>       permanently delete a session",
 				"  /compact [hint]    summarize earlier turns to free context",
+				"  /entries           list message entry ids on the current branch",
+				"  /fork <entryId>    fork before <entryId> (returns new session id)",
+				"  /clone             clone the current session at the leaf",
 			];
 			if (ctx.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -198,6 +201,61 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					...(customInstructions ? { customInstructions } : {}),
 				});
 				ctx.addSystemMessage(`compacted (was ~${result.tokensBefore} tokens)\n\n${result.summary}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/entries": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			try {
+				const result = await ctx.client.listSessionEntries({ sessionId: ctx.sessionId });
+				if (result.entries.length === 0) {
+					ctx.addSystemMessage("(no message entries)");
+				} else {
+					ctx.addSystemMessage(
+						["entries:", ...result.entries.map((e) => `  ${e.id}  ${e.role.padEnd(9)} ${e.preview}`)].join("\n"),
+					);
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/fork": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			const entryId = parts[1];
+			if (!entryId) {
+				ctx.addSystemMessage("usage: /fork <entry-id>");
+				return true;
+			}
+			try {
+				const result = await ctx.client.forkSession({ sessionId: ctx.sessionId, entryId, position: "before" });
+				ctx.addSystemMessage(
+					`forked: ${result.newSessionId}${result.selectedText ? `\n  user message: ${result.selectedText}` : ""}`,
+				);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/clone": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			try {
+				const result = await ctx.client.cloneSession({ sessionId: ctx.sessionId });
+				ctx.addSystemMessage(`cloned: ${result.newSessionId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}
