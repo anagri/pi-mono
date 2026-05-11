@@ -7,6 +7,10 @@ test("M3 agent round trip with gpt-4o-mini", async ({ chat }) => {
 		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
 	});
 
+	await test.step("seed openai auth", async () => {
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
+	});
+
 	await test.step("send a prompt", async () => {
 		await chat.send("Reply with the single word: ping");
 	});

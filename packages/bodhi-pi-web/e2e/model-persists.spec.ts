@@ -8,6 +8,7 @@ test.describe("M16 model_change persists across /resume", () => {
 			await chat.goto();
 			await chat.waitForState("idle");
 			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("/model gpt-4o + one turn so model_change is persisted", async () => {

@@ -1,7 +1,7 @@
 import type { BodhiPiEvent, BodhiPiEventHandlers, BodhiPiEventType } from "@/index.js";
 
 /**
- * Single source of truth for the 19-event lifecycle recorder used across
+ * Single source of truth for the lifecycle recorder used across
  * `bodhi-pi/test/*.test.ts` and `bodhi-pi/e2e/*.e2e.ts`. Mirrored at
  * `packages/bodhi-pi-cli/test/helpers/event-recorder.ts` so every layer
  * captures the full contract — no per-suite drift in which events are forwarded.
@@ -29,6 +29,14 @@ export const ALL_EVENT_TYPES: readonly BodhiPiEventType[] = [
 	"tool_call",
 	"tool_result",
 	"model_select",
+	"auth_change",
+	"settings_change",
+	"compaction_start",
+	"compaction_end",
+	"branch_summary_created",
+	"session_navigate",
+	"session_fork",
+	"session_clone",
 ] as const;
 
 export interface EventRecorder {

@@ -16,6 +16,7 @@ test.describe("M11 scripted skill via run_script", () => {
 		await test.step("boot", async () => {
 			await chat.goto();
 			await chat.waitForState("idle");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("send the scripted skill invocation", async () => {

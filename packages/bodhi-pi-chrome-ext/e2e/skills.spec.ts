@@ -13,6 +13,7 @@ test.describe("M10 markdown skills", () => {
 		await test.step("boot", async () => {
 			await chat.goto();
 			await chat.waitForState("idle");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("/help advertises skill:say-hello", async () => {
@@ -46,6 +47,7 @@ test.describe("M16 hidden skill (disable-model-invocation)", () => {
 		await test.step("boot", async () => {
 			await chat.goto();
 			await chat.waitForState("idle");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("/help advertises the hidden skill name", async () => {
@@ -71,6 +73,7 @@ test.describe("M16 unknown /skill: passthrough", () => {
 	test("/skill:nonexistent forwards the literal text to the LLM", async ({ chat }) => {
 		await chat.goto();
 		await chat.waitForState("idle");
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
 		await chat.send("/skill:nonexistent Reply with the single word: gravy");
 		await chat.waitForState("streaming");
 		await chat.waitForState("idle");

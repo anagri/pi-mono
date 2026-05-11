@@ -16,6 +16,7 @@ test.describe("browser extension loader", () => {
 		await test.step("boot lands on idle state", async () => {
 			await chat.goto();
 			await chat.waitForState("idle");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("send a prompt that triggers the read tool on /leak.txt", async () => {

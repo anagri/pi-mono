@@ -85,6 +85,13 @@ export class AppPage {
 		await this.sendButton.click();
 	}
 
+	async login(provider: string, apiKey: string) {
+		const before = await this.systemMessages().count();
+		await this.send(`/login ${provider} ${apiKey}`);
+		await expect(this.systemMessages()).toHaveCount(before + 1);
+		await expect(this.systemMessages().nth(before)).toContainText(`stored auth for ${provider}`);
+	}
+
 	async expectChatStatus(status: "idle" | "streaming" | "error") {
 		await expect(this.status).toHaveAttribute("data-chat-status", status);
 	}

@@ -2,18 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
-import { config as loadEnv } from "dotenv";
-
-loadEnv();
-
-const requiredEnv = ["VITE_OPENAI_API_KEY", "VITE_ANTHROPIC_API_KEY"] as const;
-const missingEnv = requiredEnv.filter((k) => !process.env[k]);
-if (missingEnv.length > 0) {
-	throw new Error(
-		`Missing required env vars for bodhi-pi-chrome-ext e2e: ${missingEnv.join(", ")}. ` +
-			`Copy packages/bodhi-pi-cli/.env to packages/bodhi-pi-chrome-ext/.env and re-prefix keys with VITE_.`,
-	);
-}
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const extIdPath = resolve(here, ".ext-id");
@@ -24,6 +12,7 @@ const extId = readFileSync(extIdPath, "utf8").trim();
 
 export default defineConfig({
 	testDir: "./e2e",
+	globalSetup: "./e2e/global-setup.ts",
 	timeout: 120_000,
 	expect: { timeout: 30_000 },
 	fullyParallel: false,

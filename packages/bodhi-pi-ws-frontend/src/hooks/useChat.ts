@@ -158,6 +158,24 @@ export function useChat({ conn, cwd, onSessionIdChange }: UseChatArgs) {
 		if (kind === "available_commands_update") {
 			const commands = (update.availableCommands as AvailableCommand[] | undefined) ?? [];
 			setAvailableCommands(commands);
+			return;
+		}
+
+		if (kind === "config_option_update") {
+			const options = (update.configOptions as Array<{ id: string; currentValue?: unknown }> | undefined) ?? [];
+			const modelOption = options.find((o) => o.id === "model");
+			if (modelOption && typeof modelOption.currentValue === "string") {
+				setCurrentModelId(modelOption.currentValue);
+			}
+			return;
+		}
+
+		if (kind === "session_info_update") {
+			const title = update.title;
+			if (typeof title === "string") {
+				setItems((prev) => [...prev, { kind: "system", text: `[session renamed: ${title}]` }]);
+			}
+			return;
 		}
 	}, []);
 

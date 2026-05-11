@@ -6,6 +6,8 @@ test.describe("cross-provider chat in same session", () => {
 		await app.setSettings();
 		await app.clickConnect();
 		await app.expectStatus("connected");
+		await app.login("openai", process.env.OPENAI_API_KEY!);
+		await app.login("anthropic", process.env.ANTHROPIC_API_KEY!);
 
 		await app.send("Reply with the single word: openai-side");
 		await app.expectChatStatus("idle");

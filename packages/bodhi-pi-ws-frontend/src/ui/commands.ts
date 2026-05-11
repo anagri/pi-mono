@@ -532,16 +532,13 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_KV_SET, {
+				await ctx.conn.extMethod(EXT_KV_SET, {
 					sessionId: ctx.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
 					value: apiKey,
 					secret: true,
-				})) as { configOptions?: Array<{ id: string; currentValue?: unknown }> };
-				const modelOption = result.configOptions?.find((o) => o.id === "model");
-				if (modelOption && typeof modelOption.currentValue === "string") {
-					ctx.setCurrentModelId(modelOption.currentValue);
-				}
+				});
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				ctx.addSystemMessage(`stored auth for ${provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -556,14 +553,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_KV_REMOVE, {
+				await ctx.conn.extMethod(EXT_KV_REMOVE, {
 					sessionId: ctx.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
-				})) as { configOptions?: Array<{ id: string; currentValue?: unknown }> };
-				const modelOption = result.configOptions?.find((o) => o.id === "model");
-				if (modelOption && typeof modelOption.currentValue === "string") {
-					ctx.setCurrentModelId(modelOption.currentValue);
-				}
+				});
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				ctx.addSystemMessage(`removed auth for ${provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);

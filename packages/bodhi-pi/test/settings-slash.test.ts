@@ -15,6 +15,7 @@ import {
 } from "@/acp/constants.js";
 import { createInMemoryFilesystem } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
+import { findUpdateOfKind, hasUpdateOfKind } from "./helpers/acp-narrow.js";
 import { seedGlobalSettings } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";
 
@@ -217,33 +218,38 @@ test("string values JSON.parse when possible; fall back to raw string", async ()
 	expect(written2.appendSystemPrompt).toBe("hello-world");
 });
 
-test("settings/set defaultModel returns fresh configOptions (auto-refresh)", async () => {
+test("settings/set defaultModel emits config_option_update sessionUpdate", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
 	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	harness.updates.length = 0;
 
 	const result = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
 		sessionId,
 		key: "defaultModel",
 		value: model.id,
 		scope: "project",
-	})) as { configOptions?: Array<{ id: string }> };
-	expect(result.configOptions).toBeDefined();
-	expect(result.configOptions?.[0]?.id).toBe("model");
+	})) as Record<string, unknown>;
+	expect(result).not.toHaveProperty("configOptions");
+
+	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
+	expect(update.configOptions[0]?.id).toBe("model");
 });
 
-test("settings/set non-model key omits configOptions", async () => {
+test("settings/set non-picker key emits no config_option_update", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
 	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	harness.updates.length = 0;
 
 	const result = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
 		sessionId,
 		key: "appendSystemPrompt",
 		value: "ignored",
 		scope: "session",
-	})) as { configOptions?: unknown };
-	expect(result.configOptions).toBeUndefined();
+	})) as Record<string, unknown>;
+	expect(result).not.toHaveProperty("configOptions");
+	expect(hasUpdateOfKind(harness.updates, "config_option_update")).toBe(false);
 });

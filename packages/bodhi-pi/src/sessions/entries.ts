@@ -58,12 +58,6 @@ export interface SessionInfoEntry extends BaseEntry {
 	name?: string;
 }
 
-export interface LabelEntry extends BaseEntry {
-	type: "label";
-	targetId: string;
-	label?: string;
-}
-
 /**
  * Naming note: coding-agent calls this `custom`. bodhi-pi keeps the name
  * `extension` because the runtime discriminator is exposed across five store
@@ -93,7 +87,6 @@ export type SessionEntry =
 	| CompactionEntry
 	| BranchSummaryEntry
 	| SessionInfoEntry
-	| LabelEntry
 	| ExtensionEntry
 	| CustomMessageEntry;
 

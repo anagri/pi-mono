@@ -1,6 +1,7 @@
 import type {
 	AvailableCommand,
 	ContentBlock,
+	SessionConfigOption,
 	SessionNotification,
 	ToolCallContent,
 	ToolCallStatus,
@@ -46,6 +47,10 @@ export interface RenderActions {
 	addToolCall: ChatState["addToolCall"];
 	updateToolCall: ChatState["updateToolCall"];
 	setAvailableCommands?: (commands: AvailableCommand[]) => void;
+	/** Apply a fresh `configOptions[]` snapshot from the agent's `config_option_update` notification. */
+	refreshConfigOptions?: (options: readonly SessionConfigOption[]) => void;
+	/** Apply a session title change from the agent's `session_info_update` notification. */
+	setSessionTitle?: (title: string | null, updatedAt: string | null) => void;
 }
 
 export function dispatchNotification(notif: SessionNotification, actions: RenderActions): void {
@@ -65,6 +70,14 @@ export function dispatchNotification(notif: SessionNotification, actions: Render
 		}
 		case "available_commands_update": {
 			actions.setAvailableCommands?.(update.availableCommands);
+			return;
+		}
+		case "config_option_update": {
+			actions.refreshConfigOptions?.(update.configOptions);
+			return;
+		}
+		case "session_info_update": {
+			actions.setSessionTitle?.(update.title ?? null, update.updatedAt ?? null);
 			return;
 		}
 		case "tool_call": {

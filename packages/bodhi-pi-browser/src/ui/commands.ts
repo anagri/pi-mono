@@ -52,8 +52,6 @@ export interface UiCommandContext {
 	setStatus: ChatState["setStatus"];
 	clear: ChatState["clear"];
 	cwd: string;
-	/** Apply a fresh `configOptions[]` snapshot from `/login`/`/logout`/`/model`/`/settings set`. */
-	refreshConfigOptions: (options: readonly SessionConfigOption[] | undefined) => void;
 }
 
 export function isCommand(line: string): boolean {
@@ -138,7 +136,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					configId: "model",
 					value: modelId,
 				});
-				ctx.refreshConfigOptions(result.configOptions);
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				const newId = modelIdFromOption(result.configOptions.find((o) => o.id === "model")) ?? modelId;
 				ctx.addSystemMessage(`model switched to: ${newId}`);
 			} catch (err) {
@@ -178,7 +176,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				const result = await ctx.conn.newSession({ cwd: ctx.cwd, mcpServers: [] });
 				ctx.clear();
 				ctx.setSessionId(result.sessionId);
-				ctx.setCurrentModelId(ctx.state.defaultModelId);
+				ctx.setCurrentModelId(modelIdFromOption(result.configOptions?.[0]) ?? ctx.state.defaultModelId);
 				ctx.setStatus("idle");
 				ctx.addSystemMessage(`new session: ${result.sessionId.slice(0, 8)}…`);
 			} catch (err) {
@@ -482,8 +480,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 						key,
 						value,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown; configOptions?: SessionConfigOption[] };
-					ctx.refreshConfigOptions(result.configOptions);
+					})) as { scope: string; effective: unknown };
 					ctx.addSystemMessage(
 						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}`,
 					);
@@ -498,8 +495,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown; configOptions?: SessionConfigOption[] };
-					ctx.refreshConfigOptions(result.configOptions);
+					})) as { scope: string; effective: unknown };
 					ctx.addSystemMessage(
 						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}`,
 					);
@@ -520,13 +516,13 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_KV_SET, {
+				await ctx.conn.extMethod(EXT_KV_SET, {
 					sessionId: ctx.state.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
 					value: apiKey,
 					secret: true,
-				})) as { configOptions?: SessionConfigOption[] };
-				ctx.refreshConfigOptions(result.configOptions);
+				});
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				ctx.addSystemMessage(`stored auth for ${provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -541,11 +537,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_KV_REMOVE, {
+				await ctx.conn.extMethod(EXT_KV_REMOVE, {
 					sessionId: ctx.state.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
-				})) as { configOptions?: SessionConfigOption[] };
-				ctx.refreshConfigOptions(result.configOptions);
+				});
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				ctx.addSystemMessage(`removed auth for ${provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);

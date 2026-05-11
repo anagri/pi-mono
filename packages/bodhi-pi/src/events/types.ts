@@ -176,6 +176,96 @@ export interface ModelSelectEvent {
 	toModelId: string;
 }
 
+// === Auth / KV state changes ===
+
+/**
+ * Fired after `_bodhi-pi/kv/set` or `_bodhi-pi/kv/remove` with a key under
+ * `auth/<provider>`. `sessionId` is the calling session if the request carried
+ * one (typical for /login); off-session writes pass `undefined`.
+ */
+export interface AuthChangeEvent {
+	type: "auth_change";
+	sessionId: string | undefined;
+	provider: string;
+	action: "login" | "logout";
+}
+
+// === Settings state changes ===
+
+/**
+ * Fired after a settings write/clear at any scope. `value` is the new value for
+ * `set`, `null` for `unset`. The agent's internal subscriber refreshes the
+ * picker via `config_option_update` when `key` is `defaultModel` or
+ * `defaultThinkingLevel`; extensions may subscribe for any key.
+ */
+export interface SettingsChangeEvent {
+	type: "settings_change";
+	sessionId: string;
+	scope: "global" | "project" | "session";
+	key: string;
+	value: unknown | null;
+	reason: "set" | "unset";
+}
+
+// === Compaction lifecycle ===
+
+export interface CompactionStartEvent {
+	type: "compaction_start";
+	sessionId: string;
+	reason: "manual" | "proactive" | "recovery";
+}
+
+export interface CompactionEndEvent {
+	type: "compaction_end";
+	sessionId: string;
+	reason: "manual" | "proactive" | "recovery";
+	/** Defined when the compaction succeeded; absent on failure. */
+	summary?: string;
+	firstKeptEntryId?: string;
+	tokensBefore?: number;
+	/** Defined when the compaction failed (caught error). */
+	errorMessage?: string;
+}
+
+// === Branch summary ===
+
+export interface BranchSummaryCreatedEvent {
+	type: "branch_summary_created";
+	sessionId: string;
+	abandonedTailLeafId: string;
+	commonAncestorId: string | null;
+	summary: string;
+}
+
+// === Session navigate ===
+
+export interface SessionNavigateEvent {
+	type: "session_navigate";
+	sessionId: string;
+	fromLeafId: string | null;
+	toLeafId: string;
+	crossedBranches: boolean;
+}
+
+// === Session fork / clone ===
+
+export interface SessionForkEvent {
+	type: "session_fork";
+	/** The source session that was forked from. */
+	sessionId: string;
+	newSessionId: string;
+	fromEntryId: string;
+	position: "before" | "at";
+}
+
+export interface SessionCloneEvent {
+	type: "session_clone";
+	/** The source session that was cloned from. */
+	sessionId: string;
+	newSessionId: string;
+	fromLeafId: string;
+}
+
 // === Discriminated union ===
 
 export type BodhiPiEvent =
@@ -197,7 +287,15 @@ export type BodhiPiEvent =
 	| ToolExecutionEndEvent
 	| ToolCallEvent
 	| ToolResultEvent
-	| ModelSelectEvent;
+	| ModelSelectEvent
+	| AuthChangeEvent
+	| SettingsChangeEvent
+	| CompactionStartEvent
+	| CompactionEndEvent
+	| BranchSummaryCreatedEvent
+	| SessionNavigateEvent
+	| SessionForkEvent
+	| SessionCloneEvent;
 
 export type BodhiPiEventType = BodhiPiEvent["type"];
 
@@ -205,6 +303,16 @@ export type BodhiPiEventType = BodhiPiEvent["type"];
 
 type Awaitable<T> = T | Promise<T>;
 
+/**
+ * Per-event handler arrays. Handlers run sequentially in registration order.
+ *
+ * Errors thrown by a handler are caught by `EventDispatcher` and logged via
+ * `console.error`; peer handlers continue to run, and event propagation is
+ * not interrupted. Handlers MUST NOT rely on synchronous propagation of
+ * exceptions — use the dispatched payload's mutation channels (the result
+ * shapes for the five mutable events) when intentional cross-handler signals
+ * are required.
+ */
 export interface BodhiPiEventHandlers {
 	session_start?: ((event: SessionStartEvent) => Awaitable<void>)[];
 	session_shutdown?: ((event: SessionShutdownEvent) => Awaitable<void>)[];
@@ -225,4 +333,12 @@ export interface BodhiPiEventHandlers {
 	tool_call?: ((event: ToolCallEvent) => Awaitable<ToolCallEventResult | undefined>)[];
 	tool_result?: ((event: ToolResultEvent) => Awaitable<ToolResultEventResult | undefined>)[];
 	model_select?: ((event: ModelSelectEvent) => Awaitable<void>)[];
+	auth_change?: ((event: AuthChangeEvent) => Awaitable<void>)[];
+	settings_change?: ((event: SettingsChangeEvent) => Awaitable<void>)[];
+	compaction_start?: ((event: CompactionStartEvent) => Awaitable<void>)[];
+	compaction_end?: ((event: CompactionEndEvent) => Awaitable<void>)[];
+	branch_summary_created?: ((event: BranchSummaryCreatedEvent) => Awaitable<void>)[];
+	session_navigate?: ((event: SessionNavigateEvent) => Awaitable<void>)[];
+	session_fork?: ((event: SessionForkEvent) => Awaitable<void>)[];
+	session_clone?: ((event: SessionCloneEvent) => Awaitable<void>)[];
 }

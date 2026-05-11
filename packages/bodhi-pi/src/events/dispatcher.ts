@@ -1,35 +1,28 @@
 import type {
-	AfterProviderResponseEvent,
-	AgentEndEvent,
-	AgentStartEvent,
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
 	BeforeProviderRequestEvent,
+	BodhiPiEvent,
 	BodhiPiEventHandlers,
 	InputEvent,
 	InputEventResult,
-	MessageEndEvent,
-	MessageStartEvent,
-	MessageUpdateEvent,
-	ModelSelectEvent,
-	SessionShutdownEvent,
-	SessionStartEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
-	ToolExecutionEndEvent,
-	ToolExecutionStartEvent,
-	ToolExecutionUpdateEvent,
 	ToolResultEvent,
 	ToolResultEventResult,
-	TurnEndEvent,
-	TurnStartEvent,
 } from "./types.js";
 
 /**
  * Sequential async dispatcher for bodhi-pi lifecycle events.
  *
- * Errors thrown by handlers are caught and logged; peer handlers still run.
- * Mutation-aware emitters return the merged/mutated payload — callers apply it.
+ * Errors thrown by handlers are caught and logged via `console.error`; peer
+ * handlers still run, and event propagation is not blocked. See
+ * {@link BodhiPiEventHandlers} for the full per-event contract.
+ *
+ * Observation-only events (the discriminated members of {@link BodhiPiEvent}
+ * other than the five mutation-aware ones) all flow through {@link emit}.
+ * The five mutation-aware emitters keep dedicated methods because they merge
+ * handler return values into the dispatched payload.
  */
 export class EventDispatcher {
 	private readonly handlers: BodhiPiEventHandlers;
@@ -56,63 +49,20 @@ export class EventDispatcher {
 		}
 	}
 
-	// === Observation-only emitters ===
-
-	async emitSessionStart(event: SessionStartEvent): Promise<void> {
-		for (const h of this.handlers.session_start ?? []) await this.safeRun(h, event, "session_start");
-	}
-
-	async emitSessionShutdown(event: SessionShutdownEvent): Promise<void> {
-		for (const h of this.handlers.session_shutdown ?? []) await this.safeRun(h, event, "session_shutdown");
-	}
-
-	async emitAgentStart(event: AgentStartEvent): Promise<void> {
-		for (const h of this.handlers.agent_start ?? []) await this.safeRun(h, event, "agent_start");
-	}
-
-	async emitAgentEnd(event: AgentEndEvent): Promise<void> {
-		for (const h of this.handlers.agent_end ?? []) await this.safeRun(h, event, "agent_end");
-	}
-
-	async emitTurnStart(event: TurnStartEvent): Promise<void> {
-		for (const h of this.handlers.turn_start ?? []) await this.safeRun(h, event, "turn_start");
-	}
-
-	async emitTurnEnd(event: TurnEndEvent): Promise<void> {
-		for (const h of this.handlers.turn_end ?? []) await this.safeRun(h, event, "turn_end");
-	}
-
-	async emitMessageStart(event: MessageStartEvent): Promise<void> {
-		for (const h of this.handlers.message_start ?? []) await this.safeRun(h, event, "message_start");
-	}
-
-	async emitMessageUpdate(event: MessageUpdateEvent): Promise<void> {
-		for (const h of this.handlers.message_update ?? []) await this.safeRun(h, event, "message_update");
-	}
-
-	async emitMessageEnd(event: MessageEndEvent): Promise<void> {
-		for (const h of this.handlers.message_end ?? []) await this.safeRun(h, event, "message_end");
-	}
-
-	async emitToolExecutionStart(event: ToolExecutionStartEvent): Promise<void> {
-		for (const h of this.handlers.tool_execution_start ?? []) await this.safeRun(h, event, "tool_execution_start");
-	}
-
-	async emitToolExecutionUpdate(event: ToolExecutionUpdateEvent): Promise<void> {
-		for (const h of this.handlers.tool_execution_update ?? []) await this.safeRun(h, event, "tool_execution_update");
-	}
-
-	async emitToolExecutionEnd(event: ToolExecutionEndEvent): Promise<void> {
-		for (const h of this.handlers.tool_execution_end ?? []) await this.safeRun(h, event, "tool_execution_end");
-	}
-
-	async emitAfterProviderResponse(event: AfterProviderResponseEvent): Promise<void> {
-		for (const h of this.handlers.after_provider_response ?? [])
-			await this.safeRun(h, event, "after_provider_response");
-	}
-
-	async emitModelSelect(event: ModelSelectEvent): Promise<void> {
-		for (const h of this.handlers.model_select ?? []) await this.safeRun(h, event, "model_select");
+	/**
+	 * Fire an observation-only event. The handler list is read by the event's
+	 * `type` discriminator; the event object is passed unchanged. Return values
+	 * from handlers are ignored — use the dedicated mutation emitters
+	 * (`emitInput`, `emitBeforeAgentStart`, `emitBeforeProviderRequest`,
+	 * `emitToolCall`, `emitToolResult`) when handler output should mutate the
+	 * dispatched payload.
+	 */
+	async emit<E extends BodhiPiEvent>(event: E): Promise<void> {
+		const list = this.handlers[event.type as keyof BodhiPiEventHandlers] as
+			| ReadonlyArray<(e: E) => unknown>
+			| undefined;
+		if (!list || list.length === 0) return;
+		for (const h of list) await this.safeRun(h, event, event.type);
 	}
 
 	// === Mutable emitters ===

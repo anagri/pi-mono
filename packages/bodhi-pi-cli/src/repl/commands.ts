@@ -46,12 +46,15 @@ export function isCommand(line: string): boolean {
 }
 
 /**
- * Update `state.models`/`currentModelId` from a fresh `configOptions[]` payload
- * returned by `setSessionConfigOption`, `/login`, `/logout`, or
- * `/settings set defaultModel*`. Non-destructive — silently no-ops if no `model`
- * option is present.
+ * Update `state.models`/`currentModelId` from a fresh `configOptions[]` payload.
+ * Called from the `config_option_update` sessionUpdate handler in `repl.ts`,
+ * and from `loadSession`'s response (stable ACP) on `/resume`. Non-destructive —
+ * silently no-ops if no `model` option is present.
  */
-function refreshStateFromConfigOptions(state: ReplState, options: readonly SessionConfigOption[] | undefined): void {
+export function refreshStateFromConfigOptions(
+	state: ReplState,
+	options: readonly SessionConfigOption[] | undefined,
+): void {
 	if (!options) return;
 	const modelOption = options.find((o) => o.id === "model");
 	if (!modelOption || modelOption.type !== "select") return;
@@ -503,8 +506,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						key,
 						value,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown; configOptions?: SessionConfigOption[] };
-					refreshStateFromConfigOptions(ctx.state, result.configOptions);
+					})) as { scope: string; effective: unknown };
 					process.stdout.write(
 						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
 					);
@@ -519,8 +521,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown; configOptions?: SessionConfigOption[] };
-					refreshStateFromConfigOptions(ctx.state, result.configOptions);
+					})) as { scope: string; effective: unknown };
 					process.stdout.write(
 						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
 					);
@@ -541,13 +542,13 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_KV_SET, {
+				await ctx.clientConn.extMethod(EXT_KV_SET, {
 					sessionId: ctx.state.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
 					value: apiKey,
 					secret: true,
-				})) as { configOptions?: SessionConfigOption[] };
-				refreshStateFromConfigOptions(ctx.state, result.configOptions);
+				});
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				process.stdout.write(`stored auth for ${provider}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
@@ -562,11 +563,11 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_KV_REMOVE, {
+				await ctx.clientConn.extMethod(EXT_KV_REMOVE, {
 					sessionId: ctx.state.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
-				})) as { configOptions?: SessionConfigOption[] };
-				refreshStateFromConfigOptions(ctx.state, result.configOptions);
+				});
+				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				process.stdout.write(`removed auth for ${provider}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);

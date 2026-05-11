@@ -7,6 +7,7 @@ test.describe("M15 tool-failure rendering", () => {
 		await test.step("boot to idle on empty workspace", async () => {
 			await chat.goto();
 			await chat.waitForState("idle");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("ask agent to read a missing file", async () => {

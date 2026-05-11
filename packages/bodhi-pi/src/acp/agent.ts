@@ -252,6 +252,62 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// AND extension-registered handlers merged. Extension handlers are added
 		// asynchronously via `ensureExtensionRunner()` on first session use.
 		this.events = new EventDispatcher(config.eventHandlers);
+
+		// Internal subscribers: route state-change events into spec-stable ACP
+		// `config_option_update` notifications. Demonstrates the same hook surface
+		// available to extensions — bodhi-pi's picker-refresh side-effect ships
+		// through the same bus.
+		this.events.appendHandlers("auth_change", [
+			async (e) => {
+				if (e.sessionId !== undefined) await this.emitConfigOptionUpdate(e.sessionId);
+			},
+		]);
+		this.events.appendHandlers("settings_change", [
+			async (e) => {
+				if (this.affectsPickerKey(e.key)) await this.emitConfigOptionUpdate(e.sessionId);
+			},
+		]);
+		this.events.appendHandlers("model_select", [
+			async (e) => {
+				await this.emitConfigOptionUpdate(e.sessionId);
+			},
+		]);
+	}
+
+	/** True for the dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */
+	private affectsPickerKey(key: string): boolean {
+		return (
+			key === "defaultModel" ||
+			key.startsWith("defaultModel.") ||
+			key === "defaultThinkingLevel" ||
+			key.startsWith("defaultThinkingLevel.")
+		);
+	}
+
+	/**
+	 * Emit the spec-stable `config_option_update` sessionUpdate so connected
+	 * clients refresh their picker without polling. No-op for sessions that
+	 * are no longer loaded (e.g., picker change targeted a closed session).
+	 */
+	private async emitConfigOptionUpdate(sessionId: string): Promise<void> {
+		if (!this.sessions.has(sessionId)) return;
+		const configOptions = await this.buildAllConfigOptions(sessionId);
+		await this.conn.sessionUpdate({
+			sessionId,
+			update: { sessionUpdate: "config_option_update", configOptions },
+		});
+	}
+
+	/** Emit the spec-stable `session_info_update` sessionUpdate after a name change. */
+	private async emitSessionInfoUpdate(
+		sessionId: string,
+		title: string | null,
+		updatedAt: string | null,
+	): Promise<void> {
+		await this.conn.sessionUpdate({
+			sessionId,
+			update: { sessionUpdate: "session_info_update", title, updatedAt },
+		});
 	}
 
 	/**
@@ -327,7 +383,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		await this._buildSessionState(record.id, null, record.cwd);
 		await this.advertiseSlashable(record.id);
-		await this.events.emitSessionStart({
+		await this.events.emit({
 			type: "session_start",
 			sessionId: record.id,
 			cwd: record.cwd,
@@ -408,7 +464,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 
 		await this.advertiseSlashable(params.sessionId);
-		await this.events.emitSessionStart({
+		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
 			cwd: params.cwd,
@@ -424,7 +480,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// Per ACP spec: rehydrate without replaying history.
 		await this.rehydrateSession(params.sessionId, params.cwd);
 		await this.advertiseSlashable(params.sessionId);
-		await this.events.emitSessionStart({
+		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
 			cwd: params.cwd,
@@ -455,7 +511,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// Per ACP session/close: drop runtime state but keep the persisted record.
 		cached?.piAgent.abort();
 		this.sessions.delete(params.sessionId);
-		await this.events.emitSessionShutdown({ type: "session_shutdown", sessionId: params.sessionId });
+		await this.events.emit({ type: "session_shutdown", sessionId: params.sessionId });
 		return {};
 	}
 
@@ -468,7 +524,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			this.sessions.get(sessionId)?.piAgent.abort();
 			this.sessions.delete(sessionId);
 			await this.config.sessionStore.delete(sessionId);
-			await this.events.emitSessionShutdown({ type: "session_shutdown", sessionId });
+			await this.events.emit({ type: "session_shutdown", sessionId });
 			return {};
 		}
 		if (method === EXT_SESSION_COMPACT) {
@@ -646,17 +702,19 @@ class BodhiPiAcpAgent implements AcpAgent {
 			})() as BodhiPiProjectSettings;
 		}
 
-		// Keys that affect the model picker — include fresh configOptions in the response.
-		const affectsPicker = path[0] === "defaultModel" || path[0] === "defaultThinkingLevel";
-		const configOptions = affectsPicker ? await this.buildAllConfigOptions(params.sessionId as string) : undefined;
+		await this.events.emit({
+			type: "settings_change",
+			sessionId: params.sessionId as string,
+			scope,
+			key,
+			value,
+			reason: "set",
+		});
 
 		return {
 			key,
 			scope,
 			effective: getAt(this.effectiveSettings(session) as Record<string, unknown>, path) ?? null,
-			...(configOptions !== undefined
-				? { configOptions: configOptions as unknown as Record<string, unknown>[] }
-				: {}),
 		};
 	}
 
@@ -696,16 +754,19 @@ class BodhiPiAcpAgent implements AcpAgent {
 			session.sessionOverrides = root as BodhiPiProjectSettings;
 		}
 
-		const affectsPicker = path[0] === "defaultModel" || path[0] === "defaultThinkingLevel";
-		const configOptions = affectsPicker ? await this.buildAllConfigOptions(params.sessionId as string) : undefined;
+		await this.events.emit({
+			type: "settings_change",
+			sessionId: params.sessionId as string,
+			scope,
+			key,
+			value: null,
+			reason: "unset",
+		});
 
 		return {
 			key,
 			scope,
 			effective: getAt(this.effectiveSettings(session) as Record<string, unknown>, path) ?? null,
-			...(configOptions !== undefined
-				? { configOptions: configOptions as unknown as Record<string, unknown>[] }
-				: {}),
 		};
 	}
 
@@ -750,13 +811,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 		const secret = params.secret === true;
 		await kv.set(key, value, { secret });
-		// Auth keys reshape the dynamic model registry. When the caller passes a
-		// sessionId, include the fresh `configOptions` for that session in the
-		// response so the host can update its picker in one round-trip.
-		const sessionId = params.sessionId;
-		if (key.startsWith(AUTH_PREFIX) && typeof sessionId === "string" && this.sessions.has(sessionId)) {
-			const configOptions = await this.buildAllConfigOptions(sessionId);
-			return { key, secret, configOptions: configOptions as unknown as Record<string, unknown>[] };
+		if (key.startsWith(AUTH_PREFIX)) {
+			const sessionId = params.sessionId;
+			await this.events.emit({
+				type: "auth_change",
+				sessionId: typeof sessionId === "string" ? sessionId : undefined,
+				provider: key.slice(AUTH_PREFIX.length),
+				action: "login",
+			});
 		}
 		return { key, secret };
 	}
@@ -795,10 +857,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 			throw new RequestError(-32602, `${EXT_KV_REMOVE}: key must be a non-empty string`);
 		}
 		await kv.remove(key);
-		const sessionId = params.sessionId;
-		if (key.startsWith(AUTH_PREFIX) && typeof sessionId === "string" && this.sessions.has(sessionId)) {
-			const configOptions = await this.buildAllConfigOptions(sessionId);
-			return { key, configOptions: configOptions as unknown as Record<string, unknown>[] };
+		if (key.startsWith(AUTH_PREFIX)) {
+			const sessionId = params.sessionId;
+			await this.events.emit({
+				type: "auth_change",
+				sessionId: typeof sessionId === "string" ? sessionId : undefined,
+				provider: key.slice(AUTH_PREFIX.length),
+				action: "logout",
+			});
 		}
 		return { key };
 	}
@@ -859,13 +925,15 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!session) {
 			throw new RequestError(-32602, `session ${sessionId} is not loaded. Call session/load first.`);
 		}
+		const timestamp = Date.now();
 		await this.appendEntry(sessionId, session, {
 			type: "session_info",
 			id: randomUUID(),
 			parentId: session.leafId,
-			timestamp: Date.now(),
+			timestamp,
 			name,
 		});
+		await this.emitSessionInfoUpdate(sessionId, name, new Date(timestamp).toISOString());
 		return { ok: true, name };
 	}
 
@@ -977,7 +1045,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// If navigation crosses branches, summarize the abandoned tail and append
 		// a branch_summary entry on the new branch BEFORE moving the leaf.
 		const cross = detectCrossBranch(record.entries, oldLeaf, targetEntryId);
-		if (cross && session) {
+		if (cross && session && oldLeaf) {
 			try {
 				const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
 				if (apiKey) {
@@ -999,6 +1067,20 @@ class BodhiPiAcpAgent implements AcpAgent {
 							const ctx = buildSessionContext(refreshed, session.leafId);
 							session.piAgent.state.messages = ctx.messages;
 						}
+						await this.events.emit({
+							type: "branch_summary_created",
+							sessionId,
+							abandonedTailLeafId: oldLeaf,
+							commonAncestorId: cross.commonAncestorId,
+							summary: result.summary,
+						});
+						await this.events.emit({
+							type: "session_navigate",
+							sessionId,
+							fromLeafId: oldLeaf,
+							toLeafId: targetEntryId,
+							crossedBranches: true,
+						});
 						return { leafId: session.leafId };
 					}
 				}
@@ -1017,6 +1099,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 				session.piAgent.state.messages = ctx.messages;
 			}
 		}
+		await this.events.emit({
+			type: "session_navigate",
+			sessionId,
+			fromLeafId: oldLeaf,
+			toLeafId: targetEntryId,
+			crossedBranches: !!cross,
+		});
 		return { leafId: targetEntryId };
 	}
 
@@ -1058,6 +1147,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 			throw new RequestError(-32603, "session store does not support forking");
 		}
 		const { newSessionId } = await this.config.sessionStore.forkRecord(sessionId, entryId, position);
+		await this.events.emit({
+			type: "session_fork",
+			sessionId,
+			newSessionId,
+			fromEntryId: entryId,
+			position,
+		});
 		const out: Record<string, unknown> = { newSessionId };
 		if (position === "before" && target.type === "message" && target.message.role === "user") {
 			const text = target.message.content;
@@ -1086,6 +1182,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 			throw new RequestError(-32603, "session store does not support cloning");
 		}
 		const { newSessionId } = await this.config.sessionStore.forkRecord(sessionId, leafId, "at");
+		await this.events.emit({
+			type: "session_clone",
+			sessionId,
+			newSessionId,
+			fromLeafId: leafId,
+		});
 		return { newSessionId };
 	}
 
@@ -1113,7 +1215,20 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!apiKey) {
 			throw new RequestError(-32603, `no API key available for provider "${model.provider}"`);
 		}
-		const result = await runCompaction(preparation, model, apiKey, customInstructions);
+
+		await this.events.emit({ type: "compaction_start", sessionId, reason: "manual" });
+		let result: Awaited<ReturnType<typeof runCompaction>>;
+		try {
+			result = await runCompaction(preparation, model, apiKey, customInstructions);
+		} catch (err) {
+			await this.events.emit({
+				type: "compaction_end",
+				sessionId,
+				reason: "manual",
+				errorMessage: err instanceof Error ? err.message : String(err),
+			});
+			throw err;
+		}
 
 		const compactionEntry: CompactionEntry = {
 			type: "compaction",
@@ -1133,6 +1248,15 @@ class BodhiPiAcpAgent implements AcpAgent {
 			const ctx = buildSessionContext(refreshed, session.leafId);
 			session.piAgent.state.messages = ctx.messages;
 		}
+
+		await this.events.emit({
+			type: "compaction_end",
+			sessionId,
+			reason: "manual",
+			summary: result.summary,
+			firstKeptEntryId: result.firstKeptEntryId,
+			tokensBefore: result.tokensBefore,
+		});
 
 		return {
 			summary: result.summary,
@@ -1194,7 +1318,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			provider: newModel.provider,
 			modelId: newModel.id,
 		});
-		await this.events.emitModelSelect({
+		await this.events.emit({
 			type: "model_select",
 			sessionId,
 			fromModelId: previousModelId,
@@ -1269,7 +1393,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 		const promptText = before.userPrompt;
 
-		await events.emitAgentStart({ type: "agent_start", sessionId, userPrompt: promptText });
+		await events.emit({ type: "agent_start", sessionId, userPrompt: promptText });
 
 		const outcome: { stopReason?: PiStopReason; errorMessage?: string } = {};
 		const unsubscribe = this.subscribeToAgent(sessionId, session, outcome);
@@ -1278,7 +1402,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			await session.piAgent.prompt(promptText);
 			await session.piAgent.waitForIdle();
 			if (session.cancelled) {
-				await events.emitAgentEnd({
+				await events.emit({
 					type: "agent_end",
 					sessionId,
 					stopReason: "cancelled",
@@ -1292,7 +1416,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				if (recovered) {
 					return { stopReason: "end_turn", userMessageId: params.messageId ?? null };
 				}
-				await events.emitAgentEnd({
+				await events.emit({
 					type: "agent_end",
 					sessionId,
 					messages: session.piAgent.state.messages,
@@ -1301,7 +1425,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				throw new RequestError(-32603, outcome.errorMessage ?? "model error");
 			}
 			const stopReason = mapStopReason(outcome.stopReason);
-			await events.emitAgentEnd({
+			await events.emit({
 				type: "agent_end",
 				sessionId,
 				stopReason,
@@ -1351,6 +1475,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!preparation) return undefined;
 		const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
 		if (!apiKey) return undefined;
+		await this.events.emit({ type: "compaction_start", sessionId, reason: "proactive" });
 		try {
 			const result = await runCompaction(preparation, session.piAgent.state.model, apiKey);
 			const compactionEntry: CompactionEntry = {
@@ -1365,12 +1490,36 @@ class BodhiPiAcpAgent implements AcpAgent {
 			};
 			await this.appendEntry(sessionId, session, compactionEntry);
 			const refreshed = await this.config.sessionStore.load(sessionId);
-			if (!refreshed) return undefined;
+			if (!refreshed) {
+				await this.events.emit({
+					type: "compaction_end",
+					sessionId,
+					reason: "proactive",
+					summary: result.summary,
+					firstKeptEntryId: result.firstKeptEntryId,
+					tokensBefore: result.tokensBefore,
+				});
+				return undefined;
+			}
 			const rebuilt = buildSessionContext(refreshed, session.leafId);
 			session.piAgent.state.messages = rebuilt.messages;
+			await this.events.emit({
+				type: "compaction_end",
+				sessionId,
+				reason: "proactive",
+				summary: result.summary,
+				firstKeptEntryId: result.firstKeptEntryId,
+				tokensBefore: result.tokensBefore,
+			});
 			return { messages: rebuilt.messages };
-		} catch {
+		} catch (err) {
 			// Auto-compact errors are non-fatal — leave the session uncompacted.
+			await this.events.emit({
+				type: "compaction_end",
+				sessionId,
+				reason: "proactive",
+				errorMessage: err instanceof Error ? err.message : String(err),
+			});
 			return undefined;
 		}
 	}
@@ -1407,6 +1556,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!preparation) return false;
 		const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
 		if (!apiKey) return false;
+		await this.events.emit({ type: "compaction_start", sessionId, reason: "recovery" });
 		try {
 			const result = await runCompaction(preparation, session.piAgent.state.model, apiKey);
 			const compactionEntry: CompactionEntry = {
@@ -1425,7 +1575,21 @@ class BodhiPiAcpAgent implements AcpAgent {
 				const ctx = buildSessionContext(refreshed, session.leafId);
 				session.piAgent.state.messages = ctx.messages;
 			}
-		} catch {
+			await this.events.emit({
+				type: "compaction_end",
+				sessionId,
+				reason: "recovery",
+				summary: result.summary,
+				firstKeptEntryId: result.firstKeptEntryId,
+				tokensBefore: result.tokensBefore,
+			});
+		} catch (err) {
+			await this.events.emit({
+				type: "compaction_end",
+				sessionId,
+				reason: "recovery",
+				errorMessage: err instanceof Error ? err.message : String(err),
+			});
 			return false;
 		}
 
@@ -1443,7 +1607,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			outcome.errorMessage = retryOutcome.errorMessage;
 			return false;
 		}
-		await this.events.emitAgentEnd({
+		await this.events.emit({
 			type: "agent_end",
 			sessionId,
 			stopReason: mapStopReason(retryOutcome.stopReason),
@@ -1470,11 +1634,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 		return session.piAgent.subscribe(async (event) => {
 			switch (event.type) {
 				case "turn_start": {
-					await events.emitTurnStart({ type: "turn_start", sessionId });
+					await events.emit({ type: "turn_start", sessionId });
 					return;
 				}
 				case "turn_end": {
-					await events.emitTurnEnd({
+					await events.emit({
 						type: "turn_end",
 						sessionId,
 						message: event.message,
@@ -1483,11 +1647,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "message_start": {
-					await events.emitMessageStart({ type: "message_start", sessionId, message: event.message });
+					await events.emit({ type: "message_start", sessionId, message: event.message });
 					return;
 				}
 				case "message_update": {
-					await events.emitMessageUpdate({
+					await events.emit({
 						type: "message_update",
 						sessionId,
 						message: event.message,
@@ -1504,7 +1668,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "tool_execution_start": {
-					await events.emitToolExecutionStart({
+					await events.emit({
 						type: "tool_execution_start",
 						sessionId,
 						toolCallId: event.toolCallId,
@@ -1525,7 +1689,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "tool_execution_update": {
-					await events.emitToolExecutionUpdate({
+					await events.emit({
 						type: "tool_execution_update",
 						sessionId,
 						toolCallId: event.toolCallId,
@@ -1545,7 +1709,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "tool_execution_end": {
-					await events.emitToolExecutionEnd({
+					await events.emit({
 						type: "tool_execution_end",
 						sessionId,
 						toolCallId: event.toolCallId,
@@ -1566,7 +1730,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					return;
 				}
 				case "message_end": {
-					await events.emitMessageEnd({ type: "message_end", sessionId, message: event.message });
+					await events.emit({ type: "message_end", sessionId, message: event.message });
 					const message = event.message;
 					if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return;
 					if (message.role === "assistant") {
@@ -1655,12 +1819,16 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (explicit && models.find((m) => m.id === explicit)) return explicit;
 		const fromSettings = merged.defaultModel;
 		if (fromSettings && models.find((m) => m.id === fromSettings)) return fromSettings;
+		// Prefer gpt-4o-mini when available — predictable default that matches
+		// the documented design intent regardless of upstream catalog ordering.
+		const preferred = models.find((m) => m.id === "gpt-4o-mini");
+		if (preferred) return preferred.id;
 		const first = models[0]?.id;
 		if (first) return first;
 		// No auth-available models — fall back to a pi-ai catalog placeholder so
 		// the session can boot. Any prompt will fail clearly with "no api key".
 		const openai = getModels("openai" as KnownProvider) as Model<Api>[];
-		return openai[0]?.id ?? "gpt-4o-mini";
+		return openai.find((m) => m.id === "gpt-4o-mini")?.id ?? openai[0]?.id ?? "gpt-4o-mini";
 	}
 
 	private async buildModelConfigOption(currentValue: string): Promise<SessionConfigOption> {
@@ -1726,10 +1894,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 			const hit = models.find((m) => m.id === requestedId);
 			if (hit) return hit;
 		}
-		if (models.length > 0) return models[0];
+		if (models.length > 0) {
+			return models.find((m) => m.id === "gpt-4o-mini") ?? models[0];
+		}
 		// No auth-available models — fall back to a pi-ai catalog placeholder.
 		const openai = getModels("openai" as KnownProvider) as Model<Api>[];
-		return openai[0];
+		return openai.find((m) => m.id === "gpt-4o-mini") ?? openai[0];
 	}
 
 	// Skills must load before Agent construction so the composed systemPrompt
@@ -1828,7 +1998,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				});
 			},
 			onResponse: async (response: ProviderResponse, m) => {
-				await events.emitAfterProviderResponse({
+				await events.emit({
 					type: "after_provider_response",
 					sessionId,
 					provider: m.provider,

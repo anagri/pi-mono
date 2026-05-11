@@ -5,7 +5,6 @@ export type {
 	CompactionEntry,
 	CustomMessageEntry,
 	ExtensionEntry,
-	LabelEntry,
 	MessageEntry,
 	ModelChangeEntry,
 	ReadExtensionEntriesFilter,

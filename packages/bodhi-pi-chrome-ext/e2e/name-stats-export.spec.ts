@@ -4,6 +4,7 @@ test("/name + /session + /export through the chat UI", async ({ chat, context })
 	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 	await chat.goto();
 	await chat.waitForState("idle");
+	await chat.login("openai", process.env.OPENAI_API_KEY!);
 
 	await test.step("seed a turn", async () => {
 		await chat.send("Reply only with: hello");

@@ -1,10 +1,10 @@
 import type { BodhiPiEvent, BodhiPiEventHandlers, BodhiPiEventType } from "@bodhiapp/bodhi-pi";
 
 /**
- * Single source of truth for the 19-event lifecycle recorder used across
+ * Single source of truth for the lifecycle recorder used across
  * `bodhi-pi-cli/e2e/`. Mirrors `bodhi-pi/test/helpers/event-recorder.ts`
- * (slated by the May-09 core review C.1) so e2e at every layer captures the
- * full contract — no per-spec drift in which events are forwarded.
+ * so e2e at every layer captures the full contract — no per-spec drift
+ * in which events are forwarded.
  *
  * Returns `{ log, handlers }`; pass `handlers` to `createCliTestHarness({
  * eventHandlers })` and read `log` after the run.
@@ -29,6 +29,14 @@ export const ALL_EVENT_TYPES: readonly BodhiPiEventType[] = [
 	"tool_call",
 	"tool_result",
 	"model_select",
+	"auth_change",
+	"settings_change",
+	"compaction_start",
+	"compaction_end",
+	"branch_summary_created",
+	"session_navigate",
+	"session_fork",
+	"session_clone",
 ] as const;
 
 export interface EventRecorder {

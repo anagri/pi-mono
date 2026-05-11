@@ -8,6 +8,7 @@ test("M7 seeded workspace mounts at /mnt/<name> and chat reaches idle", async ({
 	await test.step("boot to idle", async () => {
 		await chat.goto();
 		await chat.waitForState("idle");
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
 	});
 
 	await test.step("status bar reflects the mount path", async () => {

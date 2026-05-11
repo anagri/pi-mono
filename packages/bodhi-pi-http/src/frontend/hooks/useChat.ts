@@ -39,17 +39,26 @@ export interface UseChatResult {
 	addSystemMessage: (text: string) => void;
 }
 
+export interface UseChatOptions {
+	/** Called when the agent emits `config_option_update` with a new model currentValue. */
+	onModelChange?: (modelId: string) => void;
+}
+
 /**
  * Drives a single ACP session: streams session/update notifications into
  * `items`, exposes send/cancel/loadSession. The session id is passed in;
  * caller manages session lifecycle (new/list/delete).
  */
-export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResult {
+export function useChat(client: AcpHttpClient, sessionId?: string, opts?: UseChatOptions): UseChatResult {
 	const [items, setItems] = useState<ChatItem[]>([]);
 	const [status, setStatus] = useState<ChatStatus>("idle");
 	const [error, setError] = useState<string | undefined>();
 	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
 	const abortRef = useRef<AbortController | undefined>(undefined);
+	const onModelChangeRef = useRef(opts?.onModelChange);
+	useEffect(() => {
+		onModelChangeRef.current = opts?.onModelChange;
+	}, [opts?.onModelChange]);
 
 	useEffect(() => {
 		const unsub = client.onSessionUpdate((n) => {
@@ -60,9 +69,25 @@ export function useChat(client: AcpHttpClient, sessionId?: string): UseChatResul
 				title?: string;
 				status?: string;
 				availableCommands?: AvailableCommand[];
+				configOptions?: Array<{ id: string; currentValue?: unknown }>;
 			};
 			if (update.sessionUpdate === "available_commands_update" && Array.isArray(update.availableCommands)) {
 				setAvailableCommands(update.availableCommands);
+				return;
+			}
+			if (update.sessionUpdate === "config_option_update" && Array.isArray(update.configOptions)) {
+				const modelOption = update.configOptions.find((o) => o.id === "model");
+				if (modelOption && typeof modelOption.currentValue === "string") {
+					onModelChangeRef.current?.(modelOption.currentValue);
+				}
+				return;
+			}
+			if (update.sessionUpdate === "session_info_update" && typeof update.title === "string") {
+				const title = update.title;
+				setItems((prev) => [
+					...prev,
+					{ type: "system", system: { id: `sys-${Date.now()}`, text: `[session renamed: ${title}]` } },
+				]);
 				return;
 			}
 			setItems((prev) => applyUpdate(prev, update));

@@ -57,4 +57,15 @@ export class ChatPage {
 		await this.input.fill(text);
 		await this.sendButton.click();
 	}
+
+	systemMessages() {
+		return this.page.locator('[data-testid="message"][data-message-role="system"]');
+	}
+
+	async login(provider: string, apiKey: string) {
+		const before = await this.systemMessages().count();
+		await this.send(`/login ${provider} ${apiKey}`);
+		await expect(this.systemMessages()).toHaveCount(before + 1);
+		await expect(this.systemMessages().nth(before)).toContainText(`stored auth for ${provider}`);
+	}
 }

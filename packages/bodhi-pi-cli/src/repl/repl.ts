@@ -4,7 +4,6 @@ import {
 	type Agent,
 	AgentSideConnection,
 	type AnyMessage,
-	type AvailableCommand,
 	type Client,
 	ClientSideConnection,
 	type Stream,
@@ -12,7 +11,7 @@ import {
 import type { createBodhiPiAgent, SessionStore } from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import chalk from "chalk";
-import { handleCommand, isCommand, type ReplState } from "./commands.js";
+import { handleCommand, isCommand, type ReplState, refreshStateFromConfigOptions } from "./commands.js";
 import { createRenderer } from "./render.js";
 
 const INIT_PARAMS = {
@@ -81,9 +80,13 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	const clientConn = new ClientSideConnection(
 		(_agent: Agent): Client => ({
 			sessionUpdate: async (params) => {
-				const update = params.update as Record<string, unknown>;
+				const update = params.update;
 				if (update.sessionUpdate === "available_commands_update") {
-					state.availableCommands = (update.availableCommands as AvailableCommand[]) ?? [];
+					state.availableCommands = update.availableCommands ?? [];
+				} else if (update.sessionUpdate === "config_option_update") {
+					refreshStateFromConfigOptions(state, update.configOptions);
+				} else if (update.sessionUpdate === "session_info_update") {
+					if (update.title) process.stdout.write(chalk.dim(`[session renamed: ${update.title}]\n`));
 				}
 				renderer.onNotification(params);
 			},

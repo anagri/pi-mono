@@ -7,6 +7,8 @@ test.describe("model selection persists across /new + /resume", () => {
 		await app.clickConnect();
 		await app.expectStatus("connected");
 		await expect(app.status).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await app.login("openai", process.env.OPENAI_API_KEY!);
+		await app.login("anthropic", process.env.ANTHROPIC_API_KEY!);
 
 		await app.send("Reply with the single word: alpha");
 		await app.expectChatStatus("idle");

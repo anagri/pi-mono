@@ -2,7 +2,33 @@
 
 ## [Unreleased]
 
+### Changed (BREAKING)
+- ACP-conforming notifications replace ad-hoc `configOptions` response
+  fields. The four ext methods `_bodhi-pi/session/settings/{set,unset}`
+  and `_bodhi-pi/kv/{set,remove}` no longer carry `configOptions` in
+  their response. Hosts subscribe to the spec-stable
+  `sessionUpdate: "config_option_update"` notification (SDK shape:
+  `{ configOptions }`) instead. `setSessionConfigOption`'s response
+  `configOptions` (spec-mandated for that method) is unchanged AND now
+  also fires the same notification via the internal `model_select`
+  subscriber. `_bodhi-pi/session/setName` newly fires
+  `sessionUpdate: "session_info_update"` (`{ title, updatedAt }`).
+- `LabelEntry` (unused since introduction) removed from
+  `SessionEntry` union and public exports. Sessions stores that ever
+  persisted entries with `type: "label"` will surface them as unknown
+  types — none exist in the matrix today (PoC stance).
+
 ### Added
+- Eight new lifecycle events: `auth_change`, `settings_change`,
+  `compaction_start`, `compaction_end`, `branch_summary_created`,
+  `session_navigate`, `session_fork`, `session_clone`. Extensions
+  subscribe via `BodhiPiEventHandlers`. Compaction events carry a
+  `reason: "manual" | "proactive" | "recovery"` discriminator;
+  `compaction_end` carries `summary`/`firstKeptEntryId`/`tokensBefore`
+  on success and `errorMessage` on failure. The agent itself
+  registers internal subscribers on `auth_change`/`settings_change`/
+  `model_select` to dispatch the `config_option_update` notification —
+  same hook surface available to extensions.
 - `ScriptExecutor` host interface + `run_script` built-in tool.
   Optional `BodhiPiConfig.scriptExecutor` (no default helper — runtime
   choice belongs to the host). When provided, `run_script` is

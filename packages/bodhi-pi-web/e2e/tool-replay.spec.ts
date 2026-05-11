@@ -7,6 +7,7 @@ test.describe("M15 tool-call replay across /resume", () => {
 		await test.step("boot to idle", async () => {
 			await chat.goto();
 			await chat.waitForState("idle");
+			await chat.login("openai", process.env.OPENAI_API_KEY!);
 		});
 
 		await test.step("session A: write a file (creates a tool_call entry)", async () => {

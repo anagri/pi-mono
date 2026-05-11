@@ -9,6 +9,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 			await test.step("boot", async () => {
 				await chat.goto();
 				await chat.waitForState("idle");
+				await chat.login("openai", process.env.OPENAI_API_KEY!);
 			});
 
 			await test.step("send write+read prompt", async () => {
@@ -47,6 +48,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 			await test.step("boot", async () => {
 				await chat.goto();
 				await chat.waitForState("idle");
+				await chat.login("openai", process.env.OPENAI_API_KEY!);
 			});
 
 			await test.step("send edit+read prompt", async () => {
@@ -85,6 +87,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 			await test.step("boot", async () => {
 				await chat.goto();
 				await chat.waitForState("idle");
+				await chat.login("openai", process.env.OPENAI_API_KEY!);
 			});
 
 			await test.step("send ls prompt", async () => {
@@ -121,6 +124,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 			await test.step("boot", async () => {
 				await chat.goto();
 				await chat.waitForState("idle");
+				await chat.login("openai", process.env.OPENAI_API_KEY!);
 			});
 
 			await test.step("send find prompt", async () => {
@@ -154,6 +158,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 			await test.step("boot", async () => {
 				await chat.goto();
 				await chat.waitForState("idle");
+				await chat.login("openai", process.env.OPENAI_API_KEY!);
 			});
 
 			await test.step("send grep prompt", async () => {

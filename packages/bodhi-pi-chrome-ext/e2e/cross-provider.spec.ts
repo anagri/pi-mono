@@ -8,6 +8,8 @@ test("M13 cross-provider switch: gpt-4o-mini → claude-haiku-4-5", async ({ cha
 		await chat.goto();
 		await chat.waitForState("idle");
 		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await chat.login("anthropic", process.env.ANTHROPIC_API_KEY!);
 	});
 
 	await test.step("OpenAI turn says openai", async () => {

@@ -6,6 +6,7 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 	await test.step("session A: prompt with a fact", async () => {
 		await chat.goto();
 		await chat.waitForState("idle");
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
 		await chat.send("Remember the codeword 'aurora'. Reply only with: noted");
 		await chat.waitForState("streaming");
 		await chat.waitForState("idle");
@@ -75,6 +76,7 @@ test("M6 reload resumes the last session via Dexie + sessionStorage", async ({ c
 	await test.step("seed a session with a known fact", async () => {
 		await chat.goto();
 		await chat.waitForState("idle");
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
 		await chat.send("Remember the codeword 'cobalt'. Reply only with: noted");
 		await chat.waitForState("streaming");
 		await chat.waitForState("idle");

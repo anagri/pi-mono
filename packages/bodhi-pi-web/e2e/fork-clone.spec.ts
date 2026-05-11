@@ -3,6 +3,7 @@ import { expect, test } from "./fixtures";
 test("/fork before a user message creates a new session whose /entries excludes that turn", async ({ chat }) => {
 	await chat.goto();
 	await chat.waitForState("idle");
+	await chat.login("openai", process.env.OPENAI_API_KEY!);
 
 	let forkAtId = "";
 
@@ -39,6 +40,7 @@ test("/fork before a user message creates a new session whose /entries excludes 
 test("/clone produces a new session id", async ({ chat }) => {
 	await chat.goto();
 	await chat.waitForState("idle");
+	await chat.login("openai", process.env.OPENAI_API_KEY!);
 
 	let originalId = "";
 
@@ -48,6 +50,7 @@ test("/clone produces a new session id", async ({ chat }) => {
 		await chat.waitForState("idle");
 		await chat.send("/sessions");
 		const sysLocator = chat.messages("system").last();
+		await expect(sysLocator).toContainText(/sessions:/);
 		const sys = (await sysLocator.textContent()) ?? "";
 		const match = sys.match(/\* ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
 		expect(match).not.toBeNull();

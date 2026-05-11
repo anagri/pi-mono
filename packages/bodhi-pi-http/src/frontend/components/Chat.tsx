@@ -14,7 +14,9 @@ export interface ChatProps {
 }
 
 export function Chat(props: ChatProps) {
-	const chat = useChat(props.client, props.sessionId);
+	const chat = useChat(props.client, props.sessionId, {
+		onModelChange: props.setCurrentModelId,
+	});
 	const [draft, setDraft] = useState("");
 	const lastReportedStatus = useRef<string>("");
 

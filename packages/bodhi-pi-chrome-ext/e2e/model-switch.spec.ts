@@ -5,6 +5,7 @@ test("M4 multi-model switching with /model", async ({ chat }) => {
 		await chat.goto();
 		await chat.waitForState("idle");
 		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await chat.login("openai", process.env.OPENAI_API_KEY!);
 	});
 
 	await test.step("/help lists local commands", async () => {

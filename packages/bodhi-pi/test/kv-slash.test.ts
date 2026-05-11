@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { EXT_KV_GET, EXT_KV_LIST, EXT_KV_REMOVE, EXT_KV_SET } from "@/acp/constants.js";
 import { AUTH_PREFIX, createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
+import { findUpdateOfKind, hasUpdateOfKind } from "./helpers/acp-narrow.js";
 import { createTestHarness } from "./helpers/harness.js";
 import { createInProcessAcpPair } from "./helpers/in-process-connection.js";
 
@@ -97,39 +98,43 @@ test("kv/remove clears the entry; subsequent get returns value: null", async () 
 	expect(got.value).toBeNull();
 });
 
-test("kv/set with sessionId returns fresh configOptions on auth/* writes", async () => {
+test("kv/set with auth/* key emits config_option_update sessionUpdate", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
 	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	harness.updates.length = 0;
 
 	const result = (await harness.clientConn.extMethod(EXT_KV_SET, {
 		sessionId,
 		key: `${AUTH_PREFIX}${model.provider}`,
 		value: "sk-XYZ",
 		secret: true,
-	})) as { configOptions?: Array<{ id: string; currentValue: string }> };
+	})) as Record<string, unknown>;
+	expect(result).not.toHaveProperty("configOptions");
 
-	expect(result.configOptions).toBeDefined();
-	expect(result.configOptions?.[0]?.id).toBe("model");
-	expect(result.configOptions?.[0]?.currentValue).toBe(model.id);
+	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
+	expect(update.configOptions[0]?.id).toBe("model");
+	expect(update.configOptions[0]?.currentValue).toBe(model.id);
 });
 
-test("kv/set non-auth key omits configOptions", async () => {
+test("kv/set non-auth key emits no config_option_update", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
 	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	harness.updates.length = 0;
 
 	const result = (await harness.clientConn.extMethod(EXT_KV_SET, {
 		sessionId,
 		key: "unrelated/key",
 		value: "v",
-	})) as { configOptions?: unknown };
-	expect(result.configOptions).toBeUndefined();
+	})) as Record<string, unknown>;
+	expect(result).not.toHaveProperty("configOptions");
+	expect(hasUpdateOfKind(harness.updates, "config_option_update")).toBe(false);
 });
 
-test("kv/remove with sessionId returns fresh configOptions on auth/* removes", async () => {
+test("kv/remove with auth/* key emits config_option_update sessionUpdate", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
@@ -140,13 +145,15 @@ test("kv/remove with sessionId returns fresh configOptions on auth/* removes", a
 		value: "sk-XYZ",
 		secret: true,
 	});
+	harness.updates.length = 0;
 	const result = (await harness.clientConn.extMethod(EXT_KV_REMOVE, {
 		sessionId,
 		key: `${AUTH_PREFIX}${model.provider}`,
-	})) as { configOptions?: Array<{ id: string }> };
+	})) as Record<string, unknown>;
+	expect(result).not.toHaveProperty("configOptions");
 
-	expect(result.configOptions).toBeDefined();
-	expect(result.configOptions?.[0]?.id).toBe("model");
+	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
+	expect(update.configOptions[0]?.id).toBe("model");
 });
 
 test("kv handlers throw -32601 when kvStore is not configured", async () => {
