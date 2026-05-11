@@ -32,7 +32,7 @@ function isLikelyBinary(content: string): boolean {
 
 function truncateLine(line: string): string {
 	if (line.length <= GREP_MAX_LINE_LENGTH) return line;
-	return `${line.slice(0, GREP_MAX_LINE_LENGTH)}...`;
+	return `${line.slice(0, GREP_MAX_LINE_LENGTH)}... [truncated]`;
 }
 
 export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {

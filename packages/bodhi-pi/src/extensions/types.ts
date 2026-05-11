@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import type { Api, Model, TextContent } from "@earendil-works/pi-ai";
 import type { Static, TSchema } from "typebox";
 import type {
@@ -25,6 +25,7 @@ export interface ExtensionToolDefinition<TParameters extends TSchema = TSchema, 
 		toolCallId: string,
 		params: Static<TParameters>,
 		signal?: AbortSignal,
+		onUpdate?: AgentToolUpdateCallback<TDetails>,
 	) => Promise<AgentToolResult<TDetails>> | AgentToolResult<TDetails>;
 }
 

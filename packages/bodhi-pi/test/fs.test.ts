@@ -138,6 +138,54 @@ test("edit fails when oldText is not unique", async () => {
 	expect(await harness.filesystem.readTextFile("/dup.txt")).toBe("x x");
 });
 
+test("edit preserves CRLF line endings on round-trip", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	await harness.filesystem.writeTextFile("/crlf.txt", "line1\r\nline2\r\nline3\r\n");
+	scriptToolThenDone(faux, "edit", {
+		path: "/crlf.txt",
+		edits: [{ oldText: "line1", newText: "line1-new" }],
+	});
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "edit it" }] });
+
+	expect(await harness.filesystem.readTextFile("/crlf.txt")).toBe("line1-new\r\nline2\r\nline3\r\n");
+});
+
+test("edit preserves LF line endings on round-trip", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	await harness.filesystem.writeTextFile("/lf.txt", "line1\nline2\nline3\n");
+	scriptToolThenDone(faux, "edit", {
+		path: "/lf.txt",
+		edits: [{ oldText: "line1", newText: "line1-new" }],
+	});
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "edit it" }] });
+
+	expect(await harness.filesystem.readTextFile("/lf.txt")).toBe("line1-new\nline2\nline3\n");
+});
+
+test("edit preserves UTF-8 BOM", async () => {
+	const faux = newProvider();
+	const harness = harnessFor(faux);
+	await harness.filesystem.writeTextFile("/bom.txt", "﻿hello\nworld\n");
+	scriptToolThenDone(faux, "edit", {
+		path: "/bom.txt",
+		edits: [{ oldText: "hello", newText: "hi" }],
+	});
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "edit it" }] });
+
+	expect(await harness.filesystem.readTextFile("/bom.txt")).toBe("﻿hi\nworld\n");
+});
+
 test("ls lists directory entries", async () => {
 	const faux = newProvider();
 	const harness = harnessFor(faux);
@@ -372,7 +420,7 @@ test("grep truncates a long matched line at GREP_MAX_LINE_LENGTH with ellipsis",
 
 	const text = toolUpdateText(toolCallUpdates(harness.updates)[0]);
 	const matchLine = text.split("\n").find((l) => l.startsWith("/long.txt:")) ?? "";
-	expect(matchLine.endsWith("...")).toBe(true);
+	expect(matchLine.endsWith("... [truncated]")).toBe(true);
 });
 
 test("ls byte-truncation kicks in for a directory with many entries", async () => {

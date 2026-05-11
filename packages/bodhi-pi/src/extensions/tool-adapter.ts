@@ -9,8 +9,8 @@ export function adaptExtensionTool<P extends TSchema, D>(def: ExtensionToolDefin
 		label: def.name,
 		description: def.description,
 		parameters: def.parameters,
-		execute: async (toolCallId, params, signal) => {
-			const result = await def.execute(toolCallId, params, signal);
+		execute: async (toolCallId, params, signal, onUpdate) => {
+			const result = await def.execute(toolCallId, params, signal, onUpdate);
 			return result;
 		},
 	};

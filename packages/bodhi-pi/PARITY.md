@@ -31,6 +31,12 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | AGENTS.md / CLAUDE.md walk | (`loadProjectContextFiles` at session boot) | ✅ | Walks `<cwd>` → ancestors → root via injected `Filesystem`. Candidates per dir: `AGENTS.md > AGENTS.MD > CLAUDE.md > CLAUDE.MD` (first match wins). Root-first ordering so cwd lands last in the prompt. Tests: `bodhi-pi/test/resource-loader.test.ts`, `bodhi-pi/test/system-prompt-context.test.ts`. |
 | Project settings (`.bodhi-pi/settings.json`) | (`loadProjectSettings` at session boot) | ✅ | Reads `compaction.*` overrides + `appendSystemPrompt`. Precedence: defaults < project settings < host-explicit `BodhiPiConfig.compaction`. Surfaced for blackbox testing via `_bodhi-pi/session/config` + per-host `/config` slash. Tests: `bodhi-pi/test/settings.test.ts`, `bodhi-pi/test/session-config-ext.test.ts`. |
 | Per-session resolved config | `_bodhi-pi/session/config` | ✅ | Returns `{ cwd, defaultModelId, currentModelId, compaction, appendSystemPrompt, contextFilePaths, projectSettingsPresent, projectSettings }`. Per-host `/config` slash command renders this for visual blackbox verification. |
+| Streaming tool output (`tool_call_update.content` mid-flight) | (`tool_execution_update` → `sessionUpdate`) | ✅ core | Phase H. `subscribeToAgent` now forwards `tool_execution_update` to ACP as `tool_call_update` with `status:"in_progress"` + content snapshot. Extension `ExtensionToolDefinition.execute` gained an optional `onUpdate` callback so extension-registered tools can stream. Test: `bodhi-pi/test/streaming-tool-output.test.ts`. Browser/ws/http renderers already update tool-card preview for any status; CLI deliberately renders only `completed`/`failed` (no terminal redraw). |
+| `edit` preserves CRLF/LF line endings | (`tools/edit.ts`) | ✅ core | Phase H. Detect → normalise to LF for matching → restore original ending on write. Helpers in `tools/_text-encoding.ts` (`detectLineEnding`, `restoreLineEndings`, `normalizeToLF`). Tests: `bodhi-pi/test/fs.test.ts` (CRLF + LF round-trip). |
+| `edit` preserves UTF-8 BOM | (`tools/edit.ts`) | ✅ core | Phase H. `stripBom` strips on read, prepended back on write. Test: `bodhi-pi/test/fs.test.ts`. |
+| `edit` rejects ambiguous `oldText` | (`tools/edit.ts`) | ✅ | Pre-existing; coverage tightened in Phase H. Throws with byte offsets when `oldText` appears more than once. Test: `bodhi-pi/test/fs.test.ts`. |
+| File-mutation queue (serialise concurrent writes/edits per path) | (`tools/file-mutation-queue.ts`) | ✅ core | Phase H. Module-global `Map<absolutePath, Promise>` promise-chain. Wraps `edit` + `write` execute bodies. Keyed by resolved absolute path (no `realpath` resolution — keeps core browser-safe; symlink aliases on Node won't share a lock — accepted trade-off). Test: `bodhi-pi/test/file-mutation-queue.test.ts`. |
+| `grep` long-line truncation marker | (`tools/grep.ts`) | ✅ | Phase H. Marker aligned to coding-agent: `... [truncated]` (was `...`). Lines > `GREP_MAX_LINE_LENGTH` (500 chars) truncated. Test: `bodhi-pi/test/fs.test.ts`. |
 
 ## Deferred
 
@@ -47,6 +53,8 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | Thinking levels (`setSessionConfigOption("thinking", ...)`) | Reasoning models supported; level wiring is a separate milestone. |
 | Sub-agents (`.claude/agents/`) | Not on the bodhi-pi roadmap. |
 | Package manager (git-pinned packs of extensions/skills/commands) | Defer until users ask for shared packs. |
+| `bash` tool + Terminal interface | Phase H deliberately deferred. Larger surface (streaming, abort, exit-code, optional SSH ops); needs host-injected `Terminal` capability. Will reuse `harness/utils/shell-output.ts` per upstream-alignment plan. |
+| Per-host streaming-tool e2e specs | Phase H. Core wire-through is tested. Browser/ws/http renderers already handle `tool_call_update` with any status uniformly (visible by inspection). Production built-in tools don't yet emit `onUpdate` — they will when the `bash` tool lands. Add per-host streaming e2e then. |
 
 ## Excluded by design
 

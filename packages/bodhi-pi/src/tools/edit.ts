@@ -1,5 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
+import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./_text-encoding.js";
+import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { resolvePath, type ToolDeps } from "./index.js";
 
 const replaceSchema = Type.Object(
@@ -38,29 +40,34 @@ export function createEditTool(deps: ToolDeps): AgentTool<typeof editSchema> {
 				throw new Error("edit: edits[] must contain at least one replacement");
 			}
 			const absolutePath = resolvePath(deps.cwd, filePath);
-			const original = await deps.filesystem.readTextFile(absolutePath);
+			return withFileMutationQueue(absolutePath, async () => {
+				const raw = await deps.filesystem.readTextFile(absolutePath);
+				const { bom, text: stripped } = stripBom(raw);
+				const originalEnding = detectLineEnding(stripped);
+				let working = normalizeToLF(stripped);
 
-			let working = original;
-			for (let i = 0; i < edits.length; i++) {
-				const { oldText, newText } = edits[i];
-				const firstIdx = working.indexOf(oldText);
-				if (firstIdx < 0) {
-					throw new Error(`edit #${i + 1}: oldText not found in ${filePath}`);
+				for (let i = 0; i < edits.length; i++) {
+					const { oldText, newText } = edits[i];
+					const firstIdx = working.indexOf(oldText);
+					if (firstIdx < 0) {
+						throw new Error(`edit #${i + 1}: oldText not found in ${filePath}`);
+					}
+					const secondIdx = working.indexOf(oldText, firstIdx + 1);
+					if (secondIdx >= 0) {
+						throw new Error(
+							`edit #${i + 1}: oldText is not unique in ${filePath} (found at offsets ${firstIdx} and ${secondIdx}). Make oldText more specific.`,
+						);
+					}
+					working = working.slice(0, firstIdx) + newText + working.slice(firstIdx + oldText.length);
 				}
-				const secondIdx = working.indexOf(oldText, firstIdx + 1);
-				if (secondIdx >= 0) {
-					throw new Error(
-						`edit #${i + 1}: oldText is not unique in ${filePath} (found at offsets ${firstIdx} and ${secondIdx}). Make oldText more specific.`,
-					);
-				}
-				working = working.slice(0, firstIdx) + newText + working.slice(firstIdx + oldText.length);
-			}
 
-			await deps.filesystem.writeTextFile(absolutePath, working);
-			return {
-				content: [{ type: "text", text: `Applied ${edits.length} edit(s) to ${filePath}` }],
-				details: undefined,
-			};
+				const final = bom + restoreLineEndings(working, originalEnding);
+				await deps.filesystem.writeTextFile(absolutePath, final);
+				return {
+					content: [{ type: "text", text: `Applied ${edits.length} edit(s) to ${filePath}` }],
+					details: undefined,
+				};
+			});
 		},
 	};
 }

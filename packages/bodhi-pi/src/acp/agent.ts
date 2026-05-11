@@ -1109,6 +1109,16 @@ class BodhiPiAcpAgent implements AcpAgent {
 						toolName: event.toolName,
 						partialResult: event.partialResult,
 					});
+					const partialContent = Array.isArray(event.partialResult?.content) ? event.partialResult.content : [];
+					await conn.sessionUpdate({
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: event.toolCallId,
+							status: "in_progress",
+							content: agentToolContentForAcp(partialContent),
+						},
+					});
 					return;
 				}
 				case "tool_execution_end": {
