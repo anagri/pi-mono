@@ -12,7 +12,6 @@ import {
 import { useEffect, useState } from "react";
 import "./App.css";
 import { workerFactory } from "./agent/runtime";
-import { env } from "./env";
 
 function App() {
 	const [boot, setBoot] = useState<BootstrapResult | null>(null);
@@ -66,7 +65,7 @@ function App() {
 	}
 
 	return (
-		<RuntimeProvider workspace={boot.workspace} env={env} workerFactory={workerFactory} onUnmount={handleUnmount}>
+		<RuntimeProvider workspace={boot.workspace} workerFactory={workerFactory} onUnmount={handleUnmount}>
 			<div className="app-shell" data-testid="app-shell">
 				<ChatPage />
 				<EventsPanel />

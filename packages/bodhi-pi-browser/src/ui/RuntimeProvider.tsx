@@ -1,4 +1,4 @@
-import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { dispatchNotification } from "../runtime/render";
@@ -32,11 +32,6 @@ export interface RuntimeProviderProps {
 	onUnmount?: () => void | Promise<void>;
 	children: React.ReactNode;
 	/**
-	 * Resolved env (api keys + model registry + default model id). Hosts read
-	 * their own env (e.g. `import.meta.env.VITE_*`) and pass the result.
-	 */
-	env: { apiKeys: Record<string, string>; models: Model<Api>[]; defaultModelId: string };
-	/**
 	 * Spawns the agent worker. Host-owned so Vite can resolve the worker URL
 	 * against host source: `() => new Worker(new URL("./agent/worker.ts", import.meta.url), { type: "module" })`.
 	 */
@@ -50,11 +45,40 @@ export interface RuntimeProviderProps {
 	sandboxPortFactory?: () => Promise<MessagePort>;
 }
 
+function modelsFromConfigOptions(options: readonly SessionConfigOption[] | undefined): {
+	models: Model<Api>[];
+	defaultModelId: string;
+} {
+	const modelOption = options?.find((o) => o.id === "model");
+	if (!modelOption || modelOption.type !== "select") return { models: [], defaultModelId: "" };
+	const items = modelOption.options ?? [];
+	// `options` is `(Option | Group)[]`; flatten group children into top-level options.
+	const flat: Array<{ value: string; name?: string }> = [];
+	for (const item of items) {
+		if ("value" in item) flat.push({ value: item.value, ...(item.name ? { name: item.name } : {}) });
+	}
+	const models = flat.map(
+		(o): Model<Api> =>
+			({
+				id: o.value,
+				name: o.name ?? o.value,
+				provider: "unknown",
+				api: "unknown",
+				baseUrl: "",
+				reasoning: false,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128000,
+				maxTokens: 16384,
+			}) as unknown as Model<Api>,
+	);
+	return { models, defaultModelId: (modelOption.currentValue as string) ?? "" };
+}
+
 export function RuntimeProvider({
 	workspace,
 	onUnmount,
 	children,
-	env,
 	workerFactory,
 	sandboxPortFactory,
 }: RuntimeProviderProps) {
@@ -85,14 +109,8 @@ export function RuntimeProvider({
 		setMountPath(workspace.rootPath);
 
 		(async () => {
-			setModels(env.models);
-			setDefaultModelId(env.defaultModelId);
-
 			const sandboxPort = sandboxPortFactory ? await sandboxPortFactory() : undefined;
 			const runtime = await startAgentRuntime({
-				models: env.models,
-				defaultModelId: env.defaultModelId,
-				apiKeys: env.apiKeys,
 				workspace,
 				workerFactory,
 				...(sandboxPort !== undefined ? { sandboxPort } : {}),
@@ -117,13 +135,15 @@ export function RuntimeProvider({
 			// Auto-resume per-tab last session if Dexie still has it.
 			const lastId = readLastSessionId();
 			let activeId: string | undefined;
+			let configOptions: readonly SessionConfigOption[] | undefined;
 			if (lastId) {
 				try {
-					await runtime.conn.loadSession({
+					const loaded = await runtime.conn.loadSession({
 						sessionId: lastId,
 						cwd: workspace.rootPath,
 						mcpServers: [],
 					});
+					configOptions = loaded.configOptions ?? undefined;
 					activeId = lastId;
 				} catch {
 					clearLastSessionId();
@@ -134,6 +154,7 @@ export function RuntimeProvider({
 					cwd: workspace.rootPath,
 					mcpServers: [],
 				});
+				configOptions = created.configOptions ?? undefined;
 				activeId = created.sessionId;
 			}
 			if (cancelled) {
@@ -141,9 +162,12 @@ export function RuntimeProvider({
 				return;
 			}
 
+			const { models: derivedModels, defaultModelId: derivedDefault } = modelsFromConfigOptions(configOptions);
+			setModels(derivedModels);
+			setDefaultModelId(derivedDefault);
 			setSessionId(activeId);
 			writeLastSessionId(activeId);
-			setCurrentModelId(env.defaultModelId);
+			setCurrentModelId(derivedDefault);
 			setConn(runtime.conn);
 			setStatus("idle");
 		})().catch((err) => {
@@ -161,7 +185,7 @@ export function RuntimeProvider({
 		// All captured setters are referentially stable (Zustand bound actions + useState setters);
 		// `workspace` is the only re-init trigger.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workspace, env, workerFactory, sandboxPortFactory]);
+	}, [workspace, workerFactory, sandboxPortFactory]);
 
 	useEffect(() => {
 		if (status === "closed") {

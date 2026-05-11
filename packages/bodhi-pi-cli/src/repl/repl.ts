@@ -1,4 +1,5 @@
 import readline from "node:readline/promises";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
 	type Agent,
 	AgentSideConnection,
@@ -26,7 +27,34 @@ export interface ReplOptions {
 	factory: ReturnType<typeof createBodhiPiAgent>;
 	cwd: string;
 	sessionStore: SessionStore;
+}
+
+function modelsFromConfigOptions(options: readonly SessionConfigOption[] | undefined): {
 	models: Model<Api>[];
+	defaultModelId: string;
+} {
+	const modelOption = options?.find((o) => o.id === "model");
+	if (!modelOption || modelOption.type !== "select") return { models: [], defaultModelId: "" };
+	const flat: Array<{ value: string; name?: string }> = [];
+	for (const item of modelOption.options ?? []) {
+		if ("value" in item) flat.push({ value: item.value, ...(item.name ? { name: item.name } : {}) });
+	}
+	const models = flat.map(
+		(o): Model<Api> =>
+			({
+				id: o.value,
+				name: o.name ?? o.value,
+				provider: "unknown",
+				api: "unknown",
+				baseUrl: "",
+				reasoning: false,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128000,
+				maxTokens: 16384,
+			}) as unknown as Model<Api>,
+	);
+	return { models, defaultModelId: (modelOption.currentValue as string) ?? "" };
 }
 
 export async function runRepl(opts: ReplOptions): Promise<void> {
@@ -43,9 +71,9 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 
 	const state: ReplState = {
 		sessionId: "",
-		currentModelId: opts.models[0]?.id ?? "",
-		defaultModelId: opts.models[0]?.id ?? "",
-		models: opts.models,
+		currentModelId: "",
+		defaultModelId: "",
+		models: [],
 		availableCommands: [],
 		closed: false,
 	};
@@ -65,8 +93,12 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	);
 
 	await clientConn.initialize(INIT_PARAMS);
-	const { sessionId: initialSessionId } = await clientConn.newSession({ cwd: opts.cwd, mcpServers: [] });
-	state.sessionId = initialSessionId;
+	const created = await clientConn.newSession({ cwd: opts.cwd, mcpServers: [] });
+	state.sessionId = created.sessionId;
+	const { models: derivedModels, defaultModelId: derivedDefault } = modelsFromConfigOptions(created.configOptions);
+	state.models = derivedModels;
+	state.defaultModelId = derivedDefault;
+	state.currentModelId = derivedDefault;
 
 	// terminal: false when piped so readline doesn't try raw-mode on a non-TTY.
 	const rl = readline.createInterface({

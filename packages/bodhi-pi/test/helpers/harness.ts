@@ -50,7 +50,12 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 		createBodhiPiAgent({
 			models: opts.models,
 			defaultModelId: opts.defaultModelId,
-			getApiKey: opts.getApiKey ?? (() => "test-key"),
+			// Default: provide a stub key only for providers that the host actually
+			// supplied via `models[]` (so faux + custom baseUrl mocks pass an
+			// Authorization header). Real-LLM tests override this explicitly.
+			getApiKey:
+				opts.getApiKey ??
+				((provider) => ((opts.models ?? []).some((m) => m.provider === provider) ? "test-key" : undefined)),
 			sessionStore,
 			filesystem,
 			kvStore,

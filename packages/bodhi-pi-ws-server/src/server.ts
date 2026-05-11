@@ -14,9 +14,9 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 export interface BuildServerOptions {
 	port?: number;
 	dataDir: string;
-	models: Model<Api>[];
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
+	models?: Model<Api>[];
+	defaultModelId?: string;
+	getApiKey?: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	/** Single-tenant override: every connection uses this dir as cwd. */
@@ -73,9 +73,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			user: ctx.user,
 			dataDir: opts.dataDir,
 			db,
-			models: opts.models,
-			defaultModelId: opts.defaultModelId,
-			getApiKey: opts.getApiKey,
+			...(opts.models !== undefined ? { models: opts.models } : {}),
+			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
+			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),

@@ -25,6 +25,7 @@ export interface RetrySettings {
 export interface BodhiPiProjectSettings {
 	compaction?: Partial<CompactionSettings>;
 	appendSystemPrompt?: string;
+	defaultModel?: string;
 	defaultThinkingLevel?: ModelThinkingLevel;
 	providerOptions?: Record<string, ProviderOptionsEntry>;
 	retry?: RetrySettings;

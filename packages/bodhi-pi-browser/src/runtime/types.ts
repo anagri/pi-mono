@@ -1,12 +1,8 @@
-import type { Api, Model } from "@earendil-works/pi-ai";
 import type { WorkspaceData } from "../workspace/provider";
 
 export interface InitMessage {
 	type: "init";
 	agentPort: MessagePort;
-	models: Model<Api>[];
-	defaultModelId: string;
-	apiKeys: Record<string, string>;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	// `WorkspaceData` is the structured-cloneable shape; closures (toData/mount)

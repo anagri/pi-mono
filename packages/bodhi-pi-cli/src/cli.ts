@@ -1,11 +1,9 @@
 #!/usr/bin/env node
+import os from "node:os";
 import { createNodeExtensionLoader } from "@bodhiapp/bodhi-pi-node";
-import { config as loadEnv } from "dotenv";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";
 import { runRepl } from "./repl/repl.js";
-
-loadEnv();
 
 const cfg = resolveConfig(process.argv.slice(2));
 const cwd = cfg.cwd;
@@ -15,9 +13,7 @@ const extensionFactories = cfg.loadExtensions ? await createNodeExtensionLoader(
 const agent = createCliAgent({
 	cwd,
 	dbPath: cfg.dbPath,
-	models: cfg.models,
-	defaultModelId: cfg.defaultModelId,
-	getApiKey: cfg.getApiKey,
+	homeDir: os.homedir(),
 	...(cfg.systemPrompt !== undefined ? { systemPrompt: cfg.systemPrompt } : {}),
 	...(cfg.appendSystemPrompt !== undefined ? { appendSystemPrompt: cfg.appendSystemPrompt } : {}),
 	...(cfg.eventHandlers ? { eventHandlers: cfg.eventHandlers } : {}),
@@ -28,4 +24,4 @@ if (cfg.loadExtensions && extensionFactories.length > 0) {
 	process.stderr.write(`[bodhi-pi-cli] loaded ${extensionFactories.length} extension(s) from .bodhi-pi/extensions/\n`);
 }
 
-await runRepl({ factory: agent.factory, cwd: agent.cwd, sessionStore: agent.sessionStore, models: agent.models });
+await runRepl({ factory: agent.factory, cwd: agent.cwd, sessionStore: agent.sessionStore });

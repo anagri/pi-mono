@@ -71,6 +71,7 @@ export async function startTestServer(opts: StartTestServerOptions = {}): Promis
 		dataDir,
 		models: [fauxModel],
 		defaultModelId: fauxModel.id,
+		// Faux providers ignore the actual key value but the compaction path requires a non-undefined result.
 		getApiKey: () => "test-key",
 		// Tests don't need static asset serving and the dist/public dir often isn't present.
 		staticDir: null,

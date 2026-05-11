@@ -10,11 +10,14 @@ import { createStaticHandler, type StaticHandler } from "./static.js";
 export interface BuildServerOptions {
 	port?: number;
 	dataDir: string;
-	models: Model<Api>[];
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
+	/** Host-additive models (faux providers for tests, local LLMs for production). */
+	models?: Model<Api>[];
+	/** Optional default model id. When unset, the agent picks the first auth-available model. */
+	defaultModelId?: string;
+	/** Optional pre-kvStore fallback; production passes nothing, tests pass `() => "test-key"` for faux. */
+	getApiKey?: (provider: string) => string | undefined;
 	/** Single-tenant override: every request uses this dir as cwd. */
 	workspaceOverride?: string;
 	/** Directory to serve static assets from. Defaults to the package's `dist/public`. Set to `null` to disable. */
@@ -35,9 +38,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 	const handleAcp = createAcpHandler({
 		dataDir: opts.dataDir,
 		db,
-		models: opts.models,
-		defaultModelId: opts.defaultModelId,
-		getApiKey: opts.getApiKey,
+		...(opts.models !== undefined ? { models: opts.models } : {}),
+		...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
+		...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 		...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),

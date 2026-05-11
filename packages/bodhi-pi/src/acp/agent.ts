@@ -40,8 +40,11 @@ import {
 	type Api,
 	type AssistantMessage,
 	clampThinkingLevel,
+	getModels,
+	getProviders,
 	getSupportedThinkingLevels,
 	isContextOverflow,
+	type KnownProvider,
 	type Model,
 	type ModelThinkingLevel,
 	type StopReason as PiStopReason,
@@ -123,10 +126,11 @@ import {
 } from "./notifications.js";
 
 export interface BodhiPiConfig {
-	models: Model<Api>[];
-	/** Must be one of `models[i].id`. */
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
+	/** Additive host-supplied models for providers not in pi-ai's built-in catalog (e.g. local Ollama). */
+	models?: Model<Api>[];
+	/** Optional override. When unset or unavailable, the agent picks the first auth-available model. */
+	defaultModelId?: string;
+	getApiKey?: (provider: string) => string | undefined;
 	sessionStore: SessionStore;
 	filesystem: Filesystem;
 	/** Replaces the built-in template entirely. Not persisted; reread from config on every load/resume. */
@@ -225,11 +229,6 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 	if (!config.filesystem) {
 		throw new Error("BodhiPiConfig.filesystem is required (no default fallback)");
 	}
-	// Defaults must be in the host-supplied models registry. Extension-contributed
-	// providers are *additive* — they cannot satisfy the default model requirement.
-	if (!config.models.find((m) => m.id === config.defaultModelId)) {
-		throw new Error(`defaultModelId "${config.defaultModelId}" not in models registry`);
-	}
 	return (conn: AgentSideConnection): AcpAgent => new BodhiPiAcpAgent(config, conn);
 }
 
@@ -326,8 +325,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
 		await this.ensureExtensionRunner();
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
-		const defaultModel = this.findModel(this.config.defaultModelId);
-		await this._buildSessionState(record.id, defaultModel, record.cwd);
+		await this._buildSessionState(record.id, null, record.cwd);
 		await this.advertiseSlashable(record.id);
 		await this.events.emitSessionStart({
 			type: "session_start",
@@ -337,7 +335,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		return {
 			sessionId: record.id,
-			configOptions: this.buildAllConfigOptions(record.id),
+			configOptions: await this.buildAllConfigOptions(record.id),
 		};
 	}
 
@@ -417,7 +415,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			reason: "load",
 		});
 		return {
-			configOptions: this.buildAllConfigOptions(params.sessionId),
+			configOptions: await this.buildAllConfigOptions(params.sessionId),
 		};
 	}
 
@@ -433,7 +431,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			reason: "resume",
 		});
 		return {
-			configOptions: this.buildAllConfigOptions(params.sessionId),
+			configOptions: await this.buildAllConfigOptions(params.sessionId),
 		};
 	}
 
@@ -795,7 +793,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		return {
 			sessionId,
 			cwd: session.cwd,
-			defaultModelId: this.config.defaultModelId,
+			defaultModelId: this.config.defaultModelId ?? null,
 			currentModelId: session.currentModelId,
 			thinkingLevel: session.thinkingLevel,
 			retryOptions: { ...session.retryOptions },
@@ -1119,9 +1117,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	private async resolveProviderApiKey(provider: string): Promise<string | undefined> {
+		// Order: kvStore (set by /login) > BodhiPiConfig.getApiKey > extension fallback.
 		const kvKey = await this.config.kvStore?.get(AUTH_PREFIX + provider);
 		if (kvKey !== undefined) return kvKey;
-		const hostKey = this.config.getApiKey(provider);
+		const hostKey = this.config.getApiKey?.(provider);
 		if (hostKey !== undefined) return hostKey;
 		const ext = await this.extensionRunner?.resolveProviderKey(provider);
 		return ext ?? undefined;
@@ -1143,14 +1142,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		} else {
 			throw new RequestError(-32602, `unknown configId: ${params.configId}`);
 		}
-		return { configOptions: this.buildAllConfigOptions(params.sessionId) };
+		return { configOptions: await this.buildAllConfigOptions(params.sessionId) };
 	}
 
 	private async setSessionModel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
 		if (typeof value !== "string") {
 			throw new RequestError(-32602, `model config requires string value, got ${typeof value}`);
 		}
-		const newModel = this.findModel(value);
+		const newModel = await this.findModel(value);
 		const previousModelId = session.currentModelId;
 		// pi-ai's streamSimple reads state.model per turn, so mutating here routes the next prompt to the new model.
 		session.piAgent.state.model = newModel;
@@ -1568,29 +1567,85 @@ class BodhiPiAcpAgent implements AcpAgent {
 		session.piAgent.abort();
 	}
 
-	private allModels(): Model<Api>[] {
-		const ext = this.extensionRunner?.getProviderModels() ?? [];
-		const seen = new Set(this.config.models.map((m) => m.id));
-		return [...this.config.models, ...ext.filter((m) => !seen.has(m.id))];
+	/**
+	 * Dynamic model registry: pi-ai built-in catalog filtered by stored auth,
+	 * plus host-additive `config.models` (for non-pi-ai providers like local
+	 * Ollama), plus extension-provided models. Deduped by id.
+	 */
+	private async allModels(): Promise<Model<Api>[]> {
+		const out: Model<Api>[] = [];
+		const seen = new Set<string>();
+		const hostProviders = new Set<string>();
+		const push = (m: Model<Api>) => {
+			if (seen.has(m.id)) return;
+			seen.add(m.id);
+			out.push(m);
+		};
+		// Host-supplied models win — if the host listed ANY model for a provider,
+		// pi-ai's catalog is suppressed for that provider (the host knows best,
+		// including custom baseUrls for tests / local LLMs).
+		for (const m of this.config.models ?? []) {
+			push(m);
+			hostProviders.add(m.provider);
+		}
+		for (const m of this.extensionRunner?.getProviderModels() ?? []) {
+			push(m);
+			hostProviders.add(m.provider);
+		}
+		// pi-ai catalog filtered by stored auth, skipping provider names the host
+		// already supplied.
+		for (const provider of getProviders()) {
+			if (hostProviders.has(provider)) continue;
+			const key = await this.resolveProviderApiKey(provider);
+			if (!key) continue;
+			for (const m of getModels(provider as KnownProvider) as Model<Api>[]) push(m);
+		}
+		return out;
 	}
 
-	private findModel(id: string): Model<Api> {
-		const m = this.allModels().find((x) => x.id === id);
-		if (!m) throw new RequestError(-32602, `unknown model id: ${id}`);
+	private async findModel(id: string): Promise<Model<Api>> {
+		const models = await this.allModels();
+		const m = models.find((x) => x.id === id);
+		if (!m) {
+			throw new RequestError(
+				-32602,
+				`unknown or unavailable model id: "${id}" — run /login <provider> <api-key> first`,
+			);
+		}
 		return m;
 	}
 
-	private buildModelConfigOption(currentValue: string): SessionConfigOption {
+	/**
+	 * Pick a model id at session bootstrap, preferring (in order):
+	 *   1. `BodhiPiConfig.defaultModelId` when it resolves in the dynamic registry,
+	 *   2. `mergedFileSettings.defaultModel` when it resolves,
+	 *   3. The first auth-available model,
+	 *   4. The first model in pi-ai's catalog for openai (placeholder; prompts
+	 *      fail until /login runs).
+	 */
+	private async pickDefaultModelId(merged: BodhiPiProjectSettings): Promise<string> {
+		const models = await this.allModels();
+		const explicit = this.config.defaultModelId;
+		if (explicit && models.find((m) => m.id === explicit)) return explicit;
+		const fromSettings = merged.defaultModel;
+		if (fromSettings && models.find((m) => m.id === fromSettings)) return fromSettings;
+		const first = models[0]?.id;
+		if (first) return first;
+		// No auth-available models — fall back to a pi-ai catalog placeholder so
+		// the session can boot. Any prompt will fail clearly with "no api key".
+		const openai = getModels("openai" as KnownProvider) as Model<Api>[];
+		return openai[0]?.id ?? "gpt-4o-mini";
+	}
+
+	private async buildModelConfigOption(currentValue: string): Promise<SessionConfigOption> {
+		const models = await this.allModels();
 		return {
 			id: MODEL_CONFIG_ID,
 			name: "Model",
 			category: "model",
 			type: "select",
 			currentValue,
-			options: this.allModels().map((m) => ({
-				value: m.id,
-				name: m.name,
-			})),
+			options: models.map((m) => ({ value: m.id, name: m.name })),
 		};
 	}
 
@@ -1609,10 +1664,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 		};
 	}
 
-	private buildAllConfigOptions(sessionId: string): SessionConfigOption[] {
+	private async buildAllConfigOptions(sessionId: string): Promise<SessionConfigOption[]> {
 		const session = this.sessions.get(sessionId);
 		if (!session) return [];
-		const options: SessionConfigOption[] = [this.buildModelConfigOption(session.currentModelId)];
+		const options: SessionConfigOption[] = [await this.buildModelConfigOption(session.currentModelId)];
 		const thinking = this.buildThinkingConfigOption(session);
 		if (thinking) options.push(thinking);
 		return options;
@@ -1626,24 +1681,36 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
 
 		const ctx = buildSessionContext(record);
-		const modelId = ctx.currentModelId ?? this.config.defaultModelId;
-		const restoredModel = this.findModel(modelId);
-
 		const leafId =
 			record.leafId !== undefined
 				? record.leafId
 				: record.entries.length > 0
 					? record.entries[record.entries.length - 1].id
 					: null;
+		// Resolve to whatever's available: previous session model > whatever pickDefaultModelId returns.
+		const requested = ctx.currentModelId ?? this.config.defaultModelId ?? null;
+		const restoredModel = await this._resolveSessionModel(requested);
 		await this._buildSessionState(sessionId, restoredModel, cwd, ctx.messages, leafId, ctx.currentThinkingLevel);
-		return { entries: record.entries, currentModelId: modelId };
+		return { entries: record.entries, currentModelId: restoredModel.id };
+	}
+
+	private async _resolveSessionModel(requestedId: string | null): Promise<Model<Api>> {
+		const models = await this.allModels();
+		if (requestedId) {
+			const hit = models.find((m) => m.id === requestedId);
+			if (hit) return hit;
+		}
+		if (models.length > 0) return models[0];
+		// No auth-available models — fall back to a pi-ai catalog placeholder.
+		const openai = getModels("openai" as KnownProvider) as Model<Api>[];
+		return openai[0];
 	}
 
 	// Skills must load before Agent construction so the composed systemPrompt
 	// (base + <available_skills>) is in the initial state.
 	private async _buildSessionState(
 		sessionId: string,
-		model: Model<Api>,
+		model: Model<Api> | null,
 		cwd: string,
 		messages: AgentMessage[] = [],
 		leafId: string | null = null,
@@ -1662,6 +1729,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 			? await loadGlobalSettings(this.config.globalFilesystem ?? this.config.filesystem, this.config.homeDir)
 			: undefined;
 		const mergedFileSettings = mergeSettings(globalSettingsResult?.settings ?? {}, projectSettingsResult.settings);
+		// Resolve the bootstrap model: explicit (from rehydrate) > default-picker against the dynamic registry.
+		const resolvedModel =
+			model ?? (await this._resolveSessionModel(await this.pickDefaultModelId(mergedFileSettings)));
 		// Merge extension tools/commands. Builtins + project commands win on collision.
 		const tools = this.extensionRunner ? mergeTools(builtinTools, this.extensionRunner.getTools()) : builtinTools;
 		const commands = this.extensionRunner
@@ -1685,14 +1755,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		};
 		const requestedThinking: ModelThinkingLevel =
 			initialThinkingLevel ?? this.config.defaultThinkingLevel ?? mergedFileSettings.defaultThinkingLevel ?? "off";
-		const resolvedThinkingLevel = clampThinkingLevel(model, requestedThinking);
-		const retryOptions = resolveProviderStreamOptions(model.provider, mergedFileSettings);
+		const resolvedThinkingLevel = clampThinkingLevel(resolvedModel, requestedThinking);
+		const retryOptions = resolveProviderStreamOptions(resolvedModel.provider, mergedFileSettings);
 		const events = this.events;
 		const resolveApiKey = (provider: string) => this.resolveProviderApiKey(provider);
 		const piAgent = new Agent({
 			...retryOptions,
 			initialState: {
-				model,
+				model: resolvedModel,
 				...(messages.length > 0 ? { messages } : {}),
 				tools,
 				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
@@ -1751,7 +1821,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		this.sessions.set(sessionId, {
 			piAgent,
-			currentModelId: model.id,
+			currentModelId: resolvedModel.id,
 			thinkingLevel: resolvedThinkingLevel,
 			pendingThinkingLevelChange: false,
 			cwd,

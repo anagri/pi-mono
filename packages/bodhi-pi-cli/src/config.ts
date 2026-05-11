@@ -3,13 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
 import { defaultDbPath } from "@bodhiapp/bodhi-pi-node";
-import type { Api, Model } from "@earendil-works/pi-ai";
-import { getEnvApiKey, getModels, getProviders } from "@earendil-works/pi-ai";
 
 export interface ResolvedConfig {
-	models: Model<Api>[];
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	dbPath: string;
@@ -49,51 +44,16 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 		process.exit(0);
 	}
 
-	const allModels: Model<Api>[] = getProviders().flatMap((p) => getModels(p) as Model<Api>[]);
-
-	const getApiKey = (provider: string): string | undefined => getEnvApiKey(provider);
-
-	// Only expose models whose provider has a key — prevents routing to providers
-	// like azure-openai-responses that share model ids with openai.
-	const modelsWithKey = allModels.filter((m) => !!getApiKey(m.provider));
-
-	if (modelsWithKey.length === 0) {
-		const knownVars = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"];
-		process.stderr.write(`Error: no API key found. Set one of: ${knownVars.join(", ")}\n`);
-		process.exit(1);
-	}
-
-	const modelArg = typeof args.model === "string" ? args.model : undefined;
-	const modelEnv = process.env.BODHI_MODEL;
-	const requestedId = modelArg ?? modelEnv;
-
-	let defaultModelId: string;
-	if (requestedId) {
-		const found = modelsWithKey.find((m) => m.id === requestedId);
-		if (!found) {
-			const ids = modelsWithKey.map((m) => m.id).join(", ");
-			process.stderr.write(`Error: model "${requestedId}" not available. Available: ${ids}\n`);
-			process.exit(1);
-		}
-		defaultModelId = found.id;
-	} else {
-		defaultModelId = modelsWithKey[0].id;
-	}
-
 	let systemPrompt: string | undefined;
 	if (typeof args["system-prompt"] === "string") {
 		systemPrompt = args["system-prompt"];
 	} else if (typeof args["system-prompt-file"] === "string") {
 		systemPrompt = fs.readFileSync(args["system-prompt-file"], "utf-8");
-	} else if (process.env.BODHI_SYSTEM_PROMPT) {
-		systemPrompt = process.env.BODHI_SYSTEM_PROMPT;
 	}
 
 	let appendSystemPrompt: string | undefined;
 	if (typeof args["append-system-prompt"] === "string") {
 		appendSystemPrompt = args["append-system-prompt"];
-	} else if (process.env.BODHI_APPEND_SYSTEM_PROMPT) {
-		appendSystemPrompt = process.env.BODHI_APPEND_SYSTEM_PROMPT;
 	}
 
 	const dbPath =
@@ -111,13 +71,10 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 
 	const loadExtensions = !args["no-extensions"];
 
-	const debugEvents = args["debug-events"] === true || process.env.BODHI_DEBUG_EVENTS === "1";
+	const debugEvents = args["debug-events"] === true;
 	const eventHandlers = debugEvents ? buildDebugEventHandlers() : undefined;
 
 	return {
-		models: modelsWithKey,
-		defaultModelId,
-		getApiKey,
 		systemPrompt,
 		appendSystemPrompt,
 		dbPath,
@@ -127,11 +84,7 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 	};
 }
 
-/**
- * Print one-line stderr diagnostics per lifecycle event when `--debug-events` /
- * `BODHI_DEBUG_EVENTS=1` is on. Stays on stderr so REPL stdout (model text,
- * tool cards) remains clean and pipe-safe.
- */
+/** One-line stderr diagnostics per lifecycle event, enabled by `--debug-events`. */
 function buildDebugEventHandlers(): BodhiPiEventHandlers {
 	const log = (event: BodhiPiEvent) => {
 		const sid = "sessionId" in event ? String(event.sessionId).slice(0, 8) : "—";
@@ -178,7 +131,6 @@ function printHelp(): void {
 Usage: bodhi-pi-cli [options]
 
 Options:
-  --model <id>                   Model to use (default: first model with an API key)
   --system-prompt <text>         System prompt for the agent (replaces built-in)
   --system-prompt-file <path>    Read system prompt from file
   --append-system-prompt <text>  Append text to the system prompt (keeps tool descriptions)
@@ -189,13 +141,6 @@ Options:
   --help, -h                     Show this help
   --version, -v                  Show version
 
-Environment:
-  ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, etc.
-  BODHI_MODEL                  Default model id
-  BODHI_SYSTEM_PROMPT          System prompt text (replaces built-in)
-  BODHI_APPEND_SYSTEM_PROMPT   Appended to system prompt (keeps tool descriptions)
-  BODHI_DEBUG_EVENTS=1         Same as --debug-events
-
 REPL commands:
   /help             List commands
   /new              Start a new session
@@ -204,6 +149,10 @@ REPL commands:
   /close            Close the current session (data persists)
   /delete <id>      Permanently delete a session
   /model <id>       Switch model for current session
+  /login <provider> <api-key>   Store an API key (secret) for a provider
+  /logout <provider>            Remove a stored API key
+  /logins           List providers with stored auth (masked)
+  /settings list|get|set|unset <key> <value> [--global|--project|--session]
   /quit             Exit
 `);
 }

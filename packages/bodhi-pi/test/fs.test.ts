@@ -7,7 +7,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
+import { createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { scriptToolThenDone } from "./helpers/faux-script.js";
 import { createTestHarness } from "./helpers/harness.js";
@@ -512,18 +512,4 @@ test("prompt rejects with -32602 when session is unknown", async () => {
 	await expect(
 		harness.clientConn.prompt({ sessionId: "no-such-session", prompt: [{ type: "text", text: "x" }] }),
 	).rejects.toThrow(/not loaded/);
-});
-
-test("createBodhiPiAgent throws synchronously when defaultModelId is not in models", () => {
-	const faux = newProvider();
-	const model = faux.getModel() as Model<Api>;
-	expect(() =>
-		createBodhiPiAgent({
-			models: [model],
-			defaultModelId: "nonexistent",
-			getApiKey: () => "test-key",
-			sessionStore: createInMemorySessionStore(),
-			filesystem: createInMemoryFilesystem(),
-		}),
-	).toThrow(/defaultModelId.*nonexistent/);
 });

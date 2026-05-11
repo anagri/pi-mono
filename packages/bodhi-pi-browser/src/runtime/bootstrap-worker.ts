@@ -94,16 +94,7 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 		if (ev.data?.type !== "init") return;
 		self.removeEventListener("message", onInit);
 
-		const {
-			agentPort,
-			models,
-			defaultModelId,
-			apiKeys,
-			systemPrompt,
-			appendSystemPrompt,
-			workspace: workspaceData,
-			sandboxPort,
-		} = ev.data;
+		const { agentPort, systemPrompt, appendSystemPrompt, workspace: workspaceData, sandboxPort } = ev.data;
 
 		void (async () => {
 			const workspace = workspaceProviderFromData(workspaceData);
@@ -123,9 +114,6 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 				: await createBrowserExtensionLoader({ filesystem, cwd: workspace.rootPath });
 
 			const factory = createBodhiPiAgent({
-				models,
-				defaultModelId,
-				getApiKey: (provider: string) => apiKeys[provider],
 				filesystem,
 				sessionStore,
 				kvStore,

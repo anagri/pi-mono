@@ -19,9 +19,11 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 export interface CliAgentOptions {
 	cwd: string;
 	dbPath: string;
-	models: Model<Api>[];
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
+	/** Host-additive models (for non-pi-ai providers like local Ollama). Optional. */
+	models?: Model<Api>[];
+	defaultModelId?: string;
+	/** Optional fallback below kvStore. Tests use it; production CLI doesn't. */
+	getApiKey?: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	eventHandlers?: BodhiPiEventHandlers;
@@ -36,7 +38,6 @@ export interface CliAgent {
 	filesystem: Filesystem;
 	kvStore: KvStore;
 	cwd: string;
-	models: Model<Api>[];
 }
 
 export function createCliAgent(opts: CliAgentOptions): CliAgent {
@@ -47,13 +48,13 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 	const kvDir = opts.kvDir ?? (opts.homeDir ? path.join(opts.homeDir, ".bodhi-pi-cli", "kv") : undefined);
 	const kvStore = createNodeKvStore(kvDir ? { dir: kvDir } : {});
 	const factory = createBodhiPiAgent({
-		models: opts.models,
-		defaultModelId: opts.defaultModelId,
-		getApiKey: opts.getApiKey,
 		sessionStore,
 		filesystem,
 		kvStore,
 		scriptExecutor: createNodeScriptExecutor(),
+		...(opts.models !== undefined ? { models: opts.models } : {}),
+		...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
+		...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
@@ -61,5 +62,5 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
 		...(globalFilesystem !== undefined ? { globalFilesystem } : {}),
 	});
-	return { factory, sessionStore, filesystem, kvStore, cwd: opts.cwd, models: opts.models };
+	return { factory, sessionStore, filesystem, kvStore, cwd: opts.cwd };
 }

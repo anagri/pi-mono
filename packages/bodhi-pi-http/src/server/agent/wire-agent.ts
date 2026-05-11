@@ -15,9 +15,9 @@ export interface WireAgentOptions {
 	user: UserCtx;
 	dataDir: string;
 	db: Db;
-	models: Model<Api>[];
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
+	models?: Model<Api>[];
+	defaultModelId?: string;
+	getApiKey?: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	/** When set, all users share this dir as cwd (CLI `--workspace <dir>`). */
@@ -138,13 +138,13 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 	const factory: AgentFactory = (conn) => {
 		// Inner factory built here so eventHandlers close over the per-request conn.
 		const innerFactory = createBodhiPiAgent({
-			models: opts.models,
-			defaultModelId: opts.defaultModelId,
-			getApiKey: opts.getApiKey,
 			sessionStore,
 			filesystem,
 			kvStore,
 			scriptExecutor,
+			...(opts.models !== undefined ? { models: opts.models } : {}),
+			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
+			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
 			eventHandlers: eventForwardingHandlers(conn),
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),

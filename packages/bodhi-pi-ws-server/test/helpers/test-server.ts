@@ -27,6 +27,7 @@ export async function startTestServer(opts: StartTestServerOptions = {}): Promis
 		dataDir,
 		models: [fauxModel],
 		defaultModelId: fauxModel.id,
+		// Faux providers ignore the actual key value; the compaction path requires a non-undefined result.
 		getApiKey: () => "test-key",
 		...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
 	});

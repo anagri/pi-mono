@@ -68,13 +68,12 @@ Options:
   --workspace <dir>     Use <dir> as the agent's cwd for ALL connections (single-tenant test mode).
                         When omitted, each user gets <dataDir>/users/<id>/workspace/.
   --data-dir <dir>      Server data directory (sessions.db + per-user workspaces).
-                        Default: env BODHI_PI_HTTP_DATA_DIR or ./.bodhi-pi-http.
+                        Default: ./.bodhi-pi-http.
   -h, --help            Show this help.
 
 Environment:
   PORT                          Same as --port.
-  BODHI_PI_HTTP_DATA_DIR        Same as --data-dir.
-  OPENAI_API_KEY                Required for openai/gpt-4o-mini.
-  ANTHROPIC_API_KEY             Optional; enables anthropic/claude-haiku-4-5.
+
+Auth: clients populate the server's KvStore via /login <provider> <api-key>.
 `;
 }

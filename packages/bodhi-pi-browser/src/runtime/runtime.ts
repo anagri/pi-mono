@@ -5,7 +5,6 @@ import {
 	ndJsonStream,
 	type SessionNotification,
 } from "@agentclientprotocol/sdk";
-import type { Api, Model } from "@earendil-works/pi-ai";
 import { parseWireFrame, useEventStore } from "../store/eventStore";
 import { createMessagePortStream } from "../transport/message-port-stream";
 import type { WorkspaceProvider } from "../workspace/provider";
@@ -20,9 +19,6 @@ const STD_INIT_PARAMS = {
 } as const;
 
 export interface RuntimeOptions {
-	models: Model<Api>[];
-	defaultModelId: string;
-	apiKeys: Record<string, string>;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	workspace: WorkspaceProvider;
@@ -54,9 +50,6 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 	const init: InitMessage = {
 		type: "init",
 		agentPort: channel.port2,
-		models: opts.models,
-		defaultModelId: opts.defaultModelId,
-		apiKeys: opts.apiKeys,
 		// Provider closures don't survive structured clone — wire the discriminated
 		// data record. Worker reconstructs a provider via `workspaceProviderFromData`.
 		workspace: opts.workspace.toData(),

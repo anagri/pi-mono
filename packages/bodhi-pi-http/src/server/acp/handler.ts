@@ -10,9 +10,9 @@ import { writeSseEvent, writeSseHeaders } from "./sse.js";
 export interface AcpHandlerOptions {
 	dataDir: string;
 	db: Db;
-	models: Model<Api>[];
-	defaultModelId: string;
-	getApiKey: (provider: string) => string | undefined;
+	models?: Model<Api>[];
+	defaultModelId?: string;
+	getApiKey?: (provider: string) => string | undefined;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	workspaceOverride?: string;
@@ -120,9 +120,9 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 			user,
 			dataDir: opts.dataDir,
 			db: opts.db,
-			models: opts.models,
-			defaultModelId: opts.defaultModelId,
-			getApiKey: opts.getApiKey,
+			...(opts.models !== undefined ? { models: opts.models } : {}),
+			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
+			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
