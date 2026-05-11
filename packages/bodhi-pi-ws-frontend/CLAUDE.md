@@ -6,6 +6,8 @@ Reference browser client for `@bodhiapp/bodhi-pi-ws-server`. Vite + React + Type
 
 `README.md` covers user-facing setup.
 
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
+
 ## Architecture pillars
 
 **No agent in the browser.** `bodhi-pi`, `@bodhiapp/bodhi-pi-node`, `better-sqlite3` etc. live on the server. This package owns the WS handshake, the React UI, and the ACP `Client` handlers (permission auto-approve, session-update routing, lifecycle/wire capture). `bodhi-pi-web` runs the agent in a Web Worker; this app runs it on a remote Node process — same UI surface, different transport.

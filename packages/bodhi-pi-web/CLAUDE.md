@@ -6,6 +6,8 @@ Reference browser host for `@bodhiapp/bodhi-pi`. Vite + React + TypeScript app o
 
 `README.md` covers user-facing setup. `ai-docs/plans/` carries the milestone plans (M1–M16) with rationale for each design choice.
 
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
+
 ## Feature surface (the parity contract)
 
 Each row below is a user-visible capability. The same row must be visible in `bodhi-pi-cli` and in the `bodhi-pi-ws-*` pair, observable through analogous DOM/CLI affordances.

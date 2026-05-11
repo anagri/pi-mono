@@ -4,6 +4,8 @@ Reference Chrome extension host for `@bodhiapp/bodhi-pi`. **PoC** — proves the
 
 Real apps that follow the same shape: a sidepanel + page-tools agent (Claude-in-Chrome style) and a bookmarks/history agent. They will reuse this PoC's recipe — extension page + Web Worker + shared package — and add their own tool surfaces.
 
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
+
 ## Architecture
 
 ```

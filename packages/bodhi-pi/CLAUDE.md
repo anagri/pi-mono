@@ -80,12 +80,7 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 ## Source code rules
 
 - **No fallbacks.** Throw at factory time if required field missing. `systemPrompt` is the sole exception.
-- **`systemPrompt` is config-time only.** Rebuilt on every session load; never persisted as a `SessionEntry`.
 - **No `node:fs` in core, but `Filesystem`-based walks are allowed.** Core never imports `node:fs`/`node:os`. Walks over project-rooted files (AGENTS.md / CLAUDE.md, `.bodhi-pi/settings.json`, `.bodhi-pi/commands/`, `.bodhi-pi/skills/`) go through the injected `Filesystem`. The walk starts at the session `cwd` and ascends ancestors using `path.posix.dirname` — terminates naturally when the host's mount root is reached (FSA-rooted browser hosts) or at `/` for Node.
-- **`stopReason` mapping:** `"aborted"→"cancelled"`, `"length"→"max_tokens"`, `"stop"|"toolUse"→"end_turn"`, `"error"→throws RequestError(-32603)`.
-- **`SessionStore.append` must bump `updatedAt`.**
-- **No `as` casts in ACP message handling.** Narrow on `role` via pi-ai's `Message` discriminator.
-- **`accumulateBounded` is canonical** for list-producing tools. `read.ts` uses `Buffer.byteLength` — intentional exception.
 - **ACP `fs/*` methods are deliberately absent** — orthogonal to our host-injected `Filesystem`.
 
 ## Test conventions

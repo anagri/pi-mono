@@ -6,6 +6,8 @@ WebSocket-hosted multi-user agent backend for `@bodhiapp/bodhi-pi`. Single Node 
 
 `README.md` covers user-facing setup. Plan lives in `ai-docs/plans/we-have-packages-bodhi-pi-which-imperative-popcorn.md`.
 
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
+
 ## Feature surface (the parity contract)
 
 What this server enables clients (the ws-frontend, or any other ACP/WS client) to do. Mirrors `packages/bodhi-pi-web/CLAUDE.md`'s feature list:

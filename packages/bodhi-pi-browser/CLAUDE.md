@@ -2,7 +2,9 @@
 
 **Workspace-internal PoC infrastructure** for browser hosts of `@bodhiapp/bodhi-pi`. Used by `bodhi-pi-web` and `bodhi-pi-chrome-ext`. Not published; `package.json` is `private: true`.
 
-This package was previously scoped as a publishable adapter library (adapters only — no React, no UI). That policy is reversed: the shared content for browser-host PoCs (UI components, agent runtime glue, stores, workspace bootstrap, env helper) lives here so each browser host can stay thin.
+The shared content for browser-host PoCs (UI components, agent runtime glue, stores, workspace bootstrap, env helper) lives here so each browser host can stay thin.
+
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
 
 ## Contents
 

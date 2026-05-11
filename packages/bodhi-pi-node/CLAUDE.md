@@ -4,6 +4,8 @@ Publishable Node adapters for `@bodhiapp/bodhi-pi`. ESM library — no UI, no ap
 
 Mirrors `@bodhiapp/bodhi-pi-browser` shape so any host can swap runtimes by changing one import line.
 
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
+
 ## Architecture pillars
 
 **Pure factories, runtime-bound.** `createNodeFilesystem(rootCwd)` and `createNodeScriptExecutor()` and `createSqliteSessionStore(dbPath)` are independently constructible. No global singletons — each call returns a fresh adapter.

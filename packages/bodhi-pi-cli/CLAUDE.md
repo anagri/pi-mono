@@ -4,6 +4,8 @@ Reference Node host for `@bodhiapp/bodhi-pi`. Hand-rolled REPL CLI for live-test
 
 `README.md` covers user-facing setup. Live testing tool, not a product. Stays small, easy to read, in lockstep with bodhi-pi's evolving surface.
 
+All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is no production deployment of these PoCs, there is no backwards compatability requirement, no data migration requirment, makes development of bodhi-pi quicker with these PoCs checking it works in all runtimes.
+
 ## Architecture pillars
 
 **In-process ACP pair.** No real network transport — `repl/repl.ts` builds two `TransformStream`s and connects `AgentSideConnection` ↔ `ClientSideConnection` directly. Mirrors `bodhi-pi/test/helpers/harness.ts`. Switching to a real stdio transport is a future milestone.
