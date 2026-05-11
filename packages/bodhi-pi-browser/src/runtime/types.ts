@@ -8,6 +8,7 @@ export interface InitMessage {
 	defaultModelId: string;
 	apiKeys: Record<string, string>;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	// `WorkspaceData` is the structured-cloneable shape; closures (toData/mount)
 	// don't cross the postMessage boundary.
 	workspace: WorkspaceData;

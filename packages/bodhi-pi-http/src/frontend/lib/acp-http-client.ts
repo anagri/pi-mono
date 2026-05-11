@@ -217,6 +217,28 @@ export class AcpHttpClient {
 		}>;
 	}
 
+	getSessionConfig(params: { sessionId: string }): Promise<{
+		sessionId: string;
+		cwd: string;
+		defaultModelId: string;
+		currentModelId: string;
+		compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
+		appendSystemPrompt: string | null;
+		contextFilePaths: string[];
+		projectSettingsPresent: boolean;
+	}> {
+		return this.call("_bodhi-pi/session/config", params as unknown as Record<string, unknown>) as Promise<{
+			sessionId: string;
+			cwd: string;
+			defaultModelId: string;
+			currentModelId: string;
+			compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
+			appendSystemPrompt: string | null;
+			contextFilePaths: string[];
+			projectSettingsPresent: boolean;
+		}>;
+	}
+
 	cancel(sessionId: string): Promise<unknown> {
 		return this.call("session/cancel", { sessionId });
 	}

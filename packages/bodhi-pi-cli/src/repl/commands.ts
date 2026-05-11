@@ -3,6 +3,7 @@ import {
 	EXT_DELETE_SESSION,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
+	EXT_SESSION_CONFIG,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_EXPORT,
 	EXT_SESSION_FORK,
@@ -60,6 +61,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /name <text>       set the session display name",
 				"  /session           show session stats (counts + leaf id)",
 				"  /export            print the session as JSONL to stdout",
+				"  /config            show resolved per-session config (compaction, append, AGENTS.md paths)",
 				"  /quit              exit",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -357,6 +359,38 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 					sessionId: ctx.state.sessionId,
 				})) as { format: string; content: string };
 				process.stdout.write(`${result.content}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/config": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_SESSION_CONFIG, {
+					sessionId: ctx.state.sessionId,
+				})) as {
+					cwd: string;
+					defaultModelId: string;
+					currentModelId: string;
+					compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
+					appendSystemPrompt: string | null;
+					contextFilePaths: string[];
+					projectSettingsPresent: boolean;
+				};
+				const lines = [
+					`  cwd: ${result.cwd}`,
+					`  default model: ${result.defaultModelId}`,
+					`  current model: ${result.currentModelId}`,
+					`  compaction.enabled: ${result.compaction.enabled}`,
+					`  compaction.reserveTokens: ${result.compaction.reserveTokens}`,
+					`  compaction.keepRecentTokens: ${result.compaction.keepRecentTokens}`,
+					`  appendSystemPrompt: ${result.appendSystemPrompt ?? "(none)"}`,
+					`  project settings present: ${result.projectSettingsPresent}`,
+					`  context files: ${result.contextFilePaths.length === 0 ? "(none)" : ""}`,
+					...result.contextFilePaths.map((p) => `    - ${p}`),
+				];
+				process.stdout.write(`${lines.join("\n")}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}

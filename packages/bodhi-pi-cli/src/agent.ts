@@ -16,6 +16,7 @@ export interface CliAgentOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	eventHandlers?: BodhiPiEventHandlers;
 	extensionFactories?: RegisteredExtension[];
 }
@@ -39,6 +40,7 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 		filesystem,
 		scriptExecutor: createNodeScriptExecutor(),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
 		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 	});

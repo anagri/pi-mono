@@ -14,6 +14,7 @@ export interface BuildServerOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	/** Single-tenant override: every request uses this dir as cwd. */
 	workspaceOverride?: string;
 	/** Directory to serve static assets from. Defaults to the package's `dist/public`. Set to `null` to disable. */
@@ -38,6 +39,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 		defaultModelId: opts.defaultModelId,
 		getApiKey: opts.getApiKey,
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 		...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
 	});
 

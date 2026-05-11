@@ -26,6 +26,11 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | Session stats (`/session`) | `_bodhi-pi/session/stats` | ✅ | Returns `messageCount`, `toolCallCount`, `leafId`, optional `name`. |
 | Session export (`/export`) | `_bodhi-pi/session/export` | ✅ | JSONL header line + active-branch entries. CLI prints to stdout; browser hosts copy to clipboard. |
 | Session deletion | `_bodhi-pi/session/delete` | ✅ | Pre-existing extension method. |
+| Built-in system prompt with tool descriptions | (composed at session boot) | ✅ | `buildSystemPrompt` ported from coding-agent; tool snippets keyed off registered tool names; `run_script` snippet only when `scriptExecutor` is configured. Tests: `bodhi-pi/test/system-prompt-builtin.test.ts`. |
+| Append surface (`appendSystemPrompt`) | `BodhiPiConfig.appendSystemPrompt` | ✅ | New config field; CLI mirrors with `--append-system-prompt` flag + `BODHI_APPEND_SYSTEM_PROMPT` env. Project settings may also supply it; host-explicit wins. Tests: `bodhi-pi/test/system-prompt-append.test.ts`. |
+| AGENTS.md / CLAUDE.md walk | (`loadProjectContextFiles` at session boot) | ✅ | Walks `<cwd>` → ancestors → root via injected `Filesystem`. Candidates per dir: `AGENTS.md > AGENTS.MD > CLAUDE.md > CLAUDE.MD` (first match wins). Root-first ordering so cwd lands last in the prompt. Tests: `bodhi-pi/test/resource-loader.test.ts`, `bodhi-pi/test/system-prompt-context.test.ts`. |
+| Project settings (`.bodhi-pi/settings.json`) | (`loadProjectSettings` at session boot) | ✅ | Reads `compaction.*` overrides + `appendSystemPrompt`. Precedence: defaults < project settings < host-explicit `BodhiPiConfig.compaction`. Surfaced for blackbox testing via `_bodhi-pi/session/config` + per-host `/config` slash. Tests: `bodhi-pi/test/settings.test.ts`, `bodhi-pi/test/session-config-ext.test.ts`. |
+| Per-session resolved config | `_bodhi-pi/session/config` | ✅ | Returns `{ cwd, defaultModelId, currentModelId, compaction, appendSystemPrompt, contextFilePaths, projectSettingsPresent, projectSettings }`. Per-host `/config` slash command renders this for visual blackbox verification. |
 
 ## Deferred
 
@@ -34,6 +39,8 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | `/import` (re-create a session from JSONL) | Multiple runtimes complicate "where do we import from" (filesystem injection differs in browser hosts). Round-trip with `/export` also needs schema validation + security review for untrusted bytes; revisit if a real consumer needs it. |
 | Session-cwd switching mid-run | Niche; ship if a host asks. |
 | Skill `allowed-tools` runtime enforcement | Will land alongside the permissions phase (host-injected `Permissioner`). |
+| User-level `~/.bodhi-pi/settings.json` merge | Project settings ship in Phase G; user-level deferred until a real consumer asks. Browser hosts have no natural "user level" (FSA-rooted), so per-host divergence isn't worth it yet. |
+| Tool snippet customization in system prompt | Niche (parity §3.4 P3). The current snippet table is hard-coded next to the built-in tool factory. |
 | HTML export | Host concern; out of scope for the agent. A separate `@bodhiapp/bodhi-pi-export-html` helper can be added if a host wants it. |
 | `/share` (gist upload) | Auth + GitHub integration; out of scope. |
 | Auth credential store / OAuth refresh | Hosts inject API keys via `getApiKey`; persistent credential storage is a host concern for now. |

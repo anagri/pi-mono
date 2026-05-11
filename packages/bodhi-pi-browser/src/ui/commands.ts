@@ -3,6 +3,7 @@ import {
 	EXT_DELETE_SESSION,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
+	EXT_SESSION_CONFIG,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_EXPORT,
 	EXT_SESSION_FORK,
@@ -78,6 +79,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /name <text>       set the session display name",
 				"  /session           show session stats (counts + leaf id)",
 				"  /export            copy the session JSONL to clipboard",
+				"  /config            show resolved per-session config (compaction, append, AGENTS.md paths)",
 			];
 			if (ctx.state.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -367,6 +369,38 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				} catch {
 					ctx.addSystemMessage(`exported (${result.format}, ${result.content.length} bytes)\n${result.content}`);
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/config": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_CONFIG, {
+					sessionId: ctx.state.sessionId,
+				})) as {
+					cwd: string;
+					defaultModelId: string;
+					currentModelId: string;
+					compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
+					appendSystemPrompt: string | null;
+					contextFilePaths: string[];
+					projectSettingsPresent: boolean;
+				};
+				const lines = [
+					`cwd: ${result.cwd}`,
+					`default model: ${result.defaultModelId}`,
+					`current model: ${result.currentModelId}`,
+					`compaction.enabled: ${result.compaction.enabled}`,
+					`compaction.reserveTokens: ${result.compaction.reserveTokens}`,
+					`compaction.keepRecentTokens: ${result.compaction.keepRecentTokens}`,
+					`appendSystemPrompt: ${result.appendSystemPrompt ?? "(none)"}`,
+					`project settings present: ${result.projectSettingsPresent}`,
+					`context files: ${result.contextFilePaths.length === 0 ? "(none)" : ""}`,
+					...result.contextFilePaths.map((p) => `  - ${p}`),
+				];
+				ctx.addSystemMessage(lines.join("\n"));
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

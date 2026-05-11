@@ -14,6 +14,7 @@ export interface AcpHandlerOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	workspaceOverride?: string;
 }
 
@@ -123,6 +124,7 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 			defaultModelId: opts.defaultModelId,
 			getApiKey: opts.getApiKey,
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
 		});
 
@@ -163,6 +165,7 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 				"session/setSessionConfigOption",
 				"_bodhi-pi/session/compact",
 				"_bodhi-pi/session/setName",
+				"_bodhi-pi/session/config",
 			]);
 			if (NEEDS_REHYDRATE.has(body.method)) {
 				const sid = (params as { sessionId?: unknown }).sessionId;

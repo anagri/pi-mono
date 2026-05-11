@@ -14,6 +14,7 @@ export interface WireAgentOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	/** When set, all users share this dir as cwd (CLI `--workspace <dir>`). */
 	workspaceOverride?: string;
 }
@@ -119,6 +120,7 @@ export async function wireAgentForConnection(opts: WireAgentOptions): Promise<Ag
 			scriptExecutor,
 			eventHandlers: eventForwardingHandlers(conn),
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 		});
 		const inner = innerFactory(conn);

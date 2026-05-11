@@ -18,6 +18,7 @@ export interface BuildServerOptions {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	/** Single-tenant override: every connection uses this dir as cwd. */
 	workspaceOverride?: string;
 }
@@ -76,6 +77,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			defaultModelId: opts.defaultModelId,
 			getApiKey: opts.getApiKey,
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
 		});
 		new AgentSideConnection(factory, acpStream);

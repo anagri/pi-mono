@@ -166,6 +166,32 @@ test("/delete with no id prints usage and does not throw", async () => {
 	writeSpy.mockRestore();
 });
 
+test("/config surfaces cwd, AGENTS.md paths, compaction overrides, and appendSystemPrompt", async () => {
+	// Seed AGENTS.md + settings.json in the cwd, then ask /config for the resolved state.
+	await fsNode.writeFile(path.join(tmpDir, "AGENTS.md"), "agents-fixture-content", "utf-8");
+	const bodhiDir = path.join(tmpDir, ".bodhi-pi");
+	await fsNode.mkdir(bodhiDir, { recursive: true });
+	await fsNode.writeFile(
+		path.join(bodhiDir, "settings.json"),
+		JSON.stringify({ compaction: { reserveTokens: 42424 }, appendSystemPrompt: "CFG-PROJECT-APPEND" }),
+		"utf-8",
+	);
+
+	const { clientConn, state, agent } = await setup();
+	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+	await handleCommand("/config", makeCtx(clientConn, state, agent));
+
+	const out = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+	expect(out).toContain(`cwd: ${tmpDir}`);
+	expect(out).toContain("compaction.reserveTokens: 42424");
+	expect(out).toContain("appendSystemPrompt: CFG-PROJECT-APPEND");
+	expect(out).toContain("project settings present: true");
+	expect(out).toContain(path.join(tmpDir, "AGENTS.md"));
+
+	writeSpy.mockRestore();
+});
+
 test("/help lists /close and /delete in the local-commands block", async () => {
 	const { clientConn, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);

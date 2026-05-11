@@ -51,6 +51,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /name <text>       set the session display name",
 				"  /session           show session stats (counts + leaf id)",
 				"  /export            copy the session JSONL to clipboard",
+				"  /config            show resolved per-session config (compaction, append, AGENTS.md paths)",
 			];
 			if (ctx.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -368,6 +369,32 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				} catch {
 					ctx.addSystemMessage(`exported (${result.format}, ${result.content.length} bytes)\n${result.content}`);
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/config": {
+			if (!ctx.sessionId) {
+				ctx.addSystemMessage("error: no active session");
+				return true;
+			}
+			try {
+				const result = await ctx.client.getSessionConfig({ sessionId: ctx.sessionId });
+				const lines = [
+					`cwd: ${result.cwd}`,
+					`default model: ${result.defaultModelId}`,
+					`current model: ${result.currentModelId}`,
+					`compaction.enabled: ${result.compaction.enabled}`,
+					`compaction.reserveTokens: ${result.compaction.reserveTokens}`,
+					`compaction.keepRecentTokens: ${result.compaction.keepRecentTokens}`,
+					`appendSystemPrompt: ${result.appendSystemPrompt ?? "(none)"}`,
+					`project settings present: ${result.projectSettingsPresent}`,
+					`context files: ${result.contextFilePaths.length === 0 ? "(none)" : ""}`,
+					...result.contextFilePaths.map((p) => `  - ${p}`),
+				];
+				ctx.addSystemMessage(lines.join("\n"));
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

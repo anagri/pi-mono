@@ -30,3 +30,6 @@ export const EXT_SESSION_STATS = "_bodhi-pi/session/stats";
 
 /** Serialize the session to JSONL (header line + entry lines on the active branch). */
 export const EXT_SESSION_EXPORT = "_bodhi-pi/session/export";
+
+/** Return the per-session resolved config (compaction, append, contextFilePaths, projectSettingsPresent). */
+export const EXT_SESSION_CONFIG = "_bodhi-pi/session/config";

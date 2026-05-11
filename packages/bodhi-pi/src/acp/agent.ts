@@ -46,6 +46,9 @@ import {
 } from "@earendil-works/pi-ai";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
+import { type ContextFile, loadProjectContextFiles } from "@/core/resource-loader.js";
+import { type BodhiPiProjectSettings, loadProjectSettings } from "@/core/settings.js";
+import { buildSystemPrompt } from "@/core/system-prompt.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
 import type { BodhiPiEventHandlers } from "@/events/types.js";
 import { mergeCommands, mergeTools } from "@/extensions/merge.js";
@@ -68,13 +71,13 @@ import type { SessionStore } from "@/sessions/session-store.js";
 import { loadProjectSkills } from "@/skills/discovery.js";
 import { expandSkillCommand } from "@/skills/invocation.js";
 import type { Skill } from "@/skills/skill.js";
-import { composeSystemPrompt } from "@/skills/system-prompt.js";
-import { createBuiltinTools, toolKindFor } from "@/tools/index.js";
+import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools, toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
 import {
 	EXT_DELETE_SESSION,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
+	EXT_SESSION_CONFIG,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_EXPORT,
 	EXT_SESSION_FORK,
@@ -101,8 +104,10 @@ export interface BodhiPiConfig {
 	getApiKey: (provider: string) => string | undefined;
 	sessionStore: SessionStore;
 	filesystem: Filesystem;
-	/** Not persisted; reread from config on every load/resume. */
+	/** Replaces the built-in template entirely. Not persisted; reread from config on every load/resume. */
 	systemPrompt?: string;
+	/** Appended after the system prompt (built-in or custom). Not persisted; reread on every load/resume. */
+	appendSystemPrompt?: string;
 	/** When provided, the `run_script` built-in tool is registered. Hosts implement per their runtime. */
 	scriptExecutor?: ScriptExecutor;
 	/** Lifecycle event handlers; map keyed by event type, each value an array of async handlers. */
@@ -131,6 +136,12 @@ interface SessionState {
 	leafId: string | null;
 	/** True after one auto-compact retry; reset at the start of each prompt() to allow per-turn recovery. */
 	overflowRecoveryAttempted: boolean;
+	/** Resolved per-session bits surfaced via `_bodhi-pi/session/config`. */
+	compaction: CompactionSettings;
+	appendSystemPrompt: string | null;
+	contextFiles: ContextFile[];
+	projectSettings: BodhiPiProjectSettings;
+	projectSettingsPresent: boolean;
 }
 
 function toAvailableCommand(t: PromptTemplate): AvailableCommand {
@@ -170,7 +181,6 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
 	private readonly events: EventDispatcher;
-	private readonly compactionSettings: CompactionSettings;
 	private extensionRunner?: ExtensionRunner;
 	private extensionRunnerReady?: Promise<void>;
 
@@ -182,7 +192,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// AND extension-registered handlers merged. Extension handlers are added
 		// asynchronously via `ensureExtensionRunner()` on first session use.
 		this.events = new EventDispatcher(config.eventHandlers);
-		this.compactionSettings = { ...DEFAULT_COMPACTION_SETTINGS, ...(config.compaction ?? {}) };
 	}
 
 	/**
@@ -240,6 +249,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					"bodhi-pi": {
 						sessionDelete: true,
 						sessionCompact: true,
+						sessionConfig: true,
 						extensions: { tools: true, commands: true, providers: true, events: true },
 					},
 				},
@@ -429,7 +439,32 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (method === EXT_SESSION_EXPORT) {
 			return await this.handleSessionExport(params);
 		}
+		if (method === EXT_SESSION_CONFIG) {
+			return await this.handleSessionConfig(params);
+		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
+	}
+
+	private async handleSessionConfig(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${EXT_SESSION_CONFIG}: sessionId must be a string`);
+		}
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new RequestError(-32602, `session ${sessionId} is not loaded. Call session/load first.`);
+		}
+		return {
+			sessionId,
+			cwd: session.cwd,
+			defaultModelId: this.config.defaultModelId,
+			currentModelId: session.currentModelId,
+			compaction: { ...session.compaction },
+			appendSystemPrompt: session.appendSystemPrompt,
+			contextFilePaths: session.contextFiles.map((f) => f.path),
+			projectSettingsPresent: session.projectSettingsPresent,
+			projectSettings: session.projectSettings as Record<string, unknown>,
+		};
 	}
 
 	private async handleSessionSetName(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -689,7 +724,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
 
 		const path = walkPath(record.entries, session.leafId);
-		const preparation = prepareCompaction(path, this.compactionSettings);
+		const preparation = prepareCompaction(path, session.compaction);
 		if (!preparation) {
 			throw new RequestError(-32603, "nothing to compact (session is empty or already compacted at the leaf)");
 		}
@@ -878,7 +913,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		sessionId: string,
 		session: SessionState,
 	): Promise<{ messages: AgentMessage[] } | undefined> {
-		const settings = this.compactionSettings;
+		const settings = session.compaction;
 		if (!settings.enabled) return undefined;
 		const record = await this.config.sessionStore.load(sessionId);
 		if (!record) return undefined;
@@ -945,7 +980,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.load(sessionId);
 		if (!record) return false;
 		const path = walkPath(record.entries, session.leafId);
-		const preparation = prepareCompaction(path, this.compactionSettings);
+		const preparation = prepareCompaction(path, session.compaction);
 		if (!preparation) return false;
 		const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
 		if (!apiKey) return false;
@@ -1188,12 +1223,31 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		const projectCommands = await loadProjectCommands(this.config.filesystem, cwd);
 		const skills = await loadProjectSkills(this.config.filesystem, cwd);
+		const contextFiles = await loadProjectContextFiles(this.config.filesystem, cwd);
+		const projectSettingsResult = await loadProjectSettings(this.config.filesystem, cwd);
 		// Merge extension tools/commands. Builtins + project commands win on collision.
 		const tools = this.extensionRunner ? mergeTools(builtinTools, this.extensionRunner.getTools()) : builtinTools;
 		const commands = this.extensionRunner
 			? mergeCommands(projectCommands, this.extensionRunner.getCommands())
 			: projectCommands;
-		const composedSystemPrompt = composeSystemPrompt(this.config.systemPrompt, skills);
+		// Append precedence: BodhiPiConfig.appendSystemPrompt (host-explicit) > project settings.
+		const resolvedAppend =
+			this.config.appendSystemPrompt ?? projectSettingsResult.settings.appendSystemPrompt ?? undefined;
+		const composedSystemPrompt = buildSystemPrompt({
+			...(this.config.systemPrompt !== undefined ? { customPrompt: this.config.systemPrompt } : {}),
+			selectedTools: tools.map((t) => t.name),
+			toolSnippets: BUILTIN_TOOL_SNIPPETS,
+			...(resolvedAppend !== undefined ? { appendSystemPrompt: resolvedAppend } : {}),
+			cwd,
+			contextFiles,
+			skills,
+		});
+		// Precedence: built-in defaults < project settings < host-explicit BodhiPiConfig.compaction.
+		const effectiveCompaction: CompactionSettings = {
+			...DEFAULT_COMPACTION_SETTINGS,
+			...(projectSettingsResult.settings.compaction ?? {}),
+			...(this.config.compaction ?? {}),
+		};
 		const events = this.events;
 		const extRunner = this.extensionRunner;
 		const hostGetApiKey = this.config.getApiKey;
@@ -1266,6 +1320,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			cancelled: false,
 			leafId,
 			overflowRecoveryAttempted: false,
+			compaction: effectiveCompaction,
+			appendSystemPrompt: resolvedAppend ?? null,
+			contextFiles,
+			projectSettings: projectSettingsResult.settings,
+			projectSettingsPresent: projectSettingsResult.present,
 		});
 	}
 

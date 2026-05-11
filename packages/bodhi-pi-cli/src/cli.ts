@@ -19,6 +19,7 @@ const agent = createCliAgent({
 	defaultModelId: cfg.defaultModelId,
 	getApiKey: cfg.getApiKey,
 	...(cfg.systemPrompt !== undefined ? { systemPrompt: cfg.systemPrompt } : {}),
+	...(cfg.appendSystemPrompt !== undefined ? { appendSystemPrompt: cfg.appendSystemPrompt } : {}),
 	...(cfg.eventHandlers ? { eventHandlers: cfg.eventHandlers } : {}),
 	...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 });

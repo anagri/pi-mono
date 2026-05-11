@@ -520,7 +520,7 @@ test("BodhiPiConfig.systemPrompt threads into the pi-agent-core context", async 
 	await clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
 
 	expect(seen).toHaveLength(1);
-	expect(seen[0]).toBe(SENTINEL);
+	expect(seen[0]).toContain(SENTINEL);
 });
 
 test("systemPrompt is reapplied on loadSession (config-time, not session state)", async () => {
@@ -567,7 +567,11 @@ test("systemPrompt is reapplied on loadSession (config-time, not session state)"
 	await reader.clientConn.loadSession({ sessionId, cwd: "/", mcpServers: [] });
 	await reader.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
 
-	expect(seen).toEqual([PROMPT_A, PROMPT_B]);
+	expect(seen).toHaveLength(2);
+	expect(seen[0]).toContain(PROMPT_A);
+	expect(seen[1]).toContain(PROMPT_B);
+	// systemPrompt is config-time only: the second call's prompt must NOT carry PROMPT_A.
+	expect(seen[1]).not.toContain(PROMPT_A);
 });
 
 test("listSessions omits nextCursor when there's no next page", async () => {

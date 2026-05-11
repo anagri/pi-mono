@@ -99,6 +99,7 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 			defaultModelId,
 			apiKeys,
 			systemPrompt,
+			appendSystemPrompt,
 			workspace: workspaceData,
 			sandboxPort,
 		} = ev.data;
@@ -127,6 +128,7 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 				sessionStore,
 				scriptExecutor,
 				...(systemPrompt !== undefined ? { systemPrompt } : {}),
+				...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
 				eventHandlers: eventForwardingHandlers(),
 				...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 			});

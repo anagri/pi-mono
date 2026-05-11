@@ -24,6 +24,7 @@ export interface RuntimeOptions {
 	defaultModelId: string;
 	apiKeys: Record<string, string>;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	workspace: WorkspaceProvider;
 	onNotification: (notif: SessionNotification) => void;
 	/**
@@ -60,6 +61,7 @@ export async function startAgentRuntime(opts: RuntimeOptions): Promise<AgentRunt
 		// data record. Worker reconstructs a provider via `workspaceProviderFromData`.
 		workspace: opts.workspace.toData(),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 		...(opts.sandboxPort !== undefined ? { sandboxPort: opts.sandboxPort } : {}),
 	};
 	const transfer: Transferable[] = [channel.port2];

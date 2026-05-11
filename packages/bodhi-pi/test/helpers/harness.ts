@@ -26,6 +26,7 @@ export interface TestHarnessOptions {
 	sessionStore?: SessionStore;
 	filesystem?: Filesystem;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	scriptExecutor?: ScriptExecutor;
 	eventHandlers?: BodhiPiEventHandlers;
 	extensionFactories?: RegisteredExtension[];
@@ -53,6 +54,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			sessionStore,
 			filesystem,
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(opts.scriptExecutor ? { scriptExecutor: opts.scriptExecutor } : {}),
 			...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
 			...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),

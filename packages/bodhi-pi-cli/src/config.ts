@@ -11,6 +11,7 @@ export interface ResolvedConfig {
 	defaultModelId: string;
 	getApiKey: (provider: string) => string | undefined;
 	systemPrompt?: string;
+	appendSystemPrompt?: string;
 	dbPath: string;
 	cwd: string;
 	loadExtensions: boolean;
@@ -88,6 +89,13 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 		systemPrompt = process.env.BODHI_SYSTEM_PROMPT;
 	}
 
+	let appendSystemPrompt: string | undefined;
+	if (typeof args["append-system-prompt"] === "string") {
+		appendSystemPrompt = args["append-system-prompt"];
+	} else if (process.env.BODHI_APPEND_SYSTEM_PROMPT) {
+		appendSystemPrompt = process.env.BODHI_APPEND_SYSTEM_PROMPT;
+	}
+
 	const dbPath =
 		typeof args.db === "string" ? path.resolve(args.db.replace(/^~/, os.homedir())) : defaultDbPath("bodhi-pi-cli");
 
@@ -111,6 +119,7 @@ export function resolveConfig(argv: string[]): ResolvedConfig {
 		defaultModelId,
 		getApiKey,
 		systemPrompt,
+		appendSystemPrompt,
 		dbPath,
 		cwd,
 		loadExtensions,
@@ -170,8 +179,9 @@ Usage: bodhi-pi-cli [options]
 
 Options:
   --model <id>                   Model to use (default: first model with an API key)
-  --system-prompt <text>         System prompt for the agent
+  --system-prompt <text>         System prompt for the agent (replaces built-in)
   --system-prompt-file <path>    Read system prompt from file
+  --append-system-prompt <text>  Append text to the system prompt (keeps tool descriptions)
   --db <path>                    SQLite DB path (default: ~/.bodhi-pi-cli/sessions.db)
   --cwd <path>                   Working directory for FS tools (default: process.cwd())
   --no-extensions                Skip auto-loading <cwd>/.bodhi-pi/extensions/*.{js,mjs,cjs}
@@ -181,9 +191,10 @@ Options:
 
 Environment:
   ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, etc.
-  BODHI_MODEL          Default model id
-  BODHI_SYSTEM_PROMPT  System prompt text
-  BODHI_DEBUG_EVENTS=1 Same as --debug-events
+  BODHI_MODEL                  Default model id
+  BODHI_SYSTEM_PROMPT          System prompt text (replaces built-in)
+  BODHI_APPEND_SYSTEM_PROMPT   Appended to system prompt (keeps tool descriptions)
+  BODHI_DEBUG_EVENTS=1         Same as --debug-events
 
 REPL commands:
   /help             List commands

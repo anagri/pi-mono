@@ -10,6 +10,7 @@ const EXT_SESSION_NAVIGATE = "_bodhi-pi/session/navigate";
 const EXT_SESSION_SET_NAME = "_bodhi-pi/session/setName";
 const EXT_SESSION_STATS = "_bodhi-pi/session/stats";
 const EXT_SESSION_EXPORT = "_bodhi-pi/session/export";
+const EXT_SESSION_CONFIG = "_bodhi-pi/session/config";
 
 export interface UiCommandContext {
 	conn: ClientSideConnection;
@@ -75,6 +76,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /name <text>       set the session display name",
 				"  /session           show session stats (counts + leaf id)",
 				"  /export            copy the session JSONL to clipboard",
+				"  /config            show resolved per-session config (compaction, append, AGENTS.md paths)",
 			];
 			if (ctx.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -383,6 +385,38 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				} catch {
 					ctx.addSystemMessage(`exported (${result.format}, ${result.content.length} bytes)\n${result.content}`);
 				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/config": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SESSION_CONFIG, {
+					sessionId: ctx.sessionId,
+				})) as {
+					cwd: string;
+					defaultModelId: string;
+					currentModelId: string;
+					compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
+					appendSystemPrompt: string | null;
+					contextFilePaths: string[];
+					projectSettingsPresent: boolean;
+				};
+				const lines = [
+					`cwd: ${result.cwd}`,
+					`default model: ${result.defaultModelId}`,
+					`current model: ${result.currentModelId}`,
+					`compaction.enabled: ${result.compaction.enabled}`,
+					`compaction.reserveTokens: ${result.compaction.reserveTokens}`,
+					`compaction.keepRecentTokens: ${result.compaction.keepRecentTokens}`,
+					`appendSystemPrompt: ${result.appendSystemPrompt ?? "(none)"}`,
+					`project settings present: ${result.projectSettingsPresent}`,
+					`context files: ${result.contextFilePaths.length === 0 ? "(none)" : ""}`,
+					...result.contextFilePaths.map((p) => `  - ${p}`),
+				];
+				ctx.addSystemMessage(lines.join("\n"));
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}
