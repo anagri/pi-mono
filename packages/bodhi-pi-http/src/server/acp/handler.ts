@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { type WireAgentResult, wireAgentForRequest } from "../agent/wire-agent.js";
 import { authenticateRequest, reject401 } from "../auth/middleware.js";
 import { type Db, upsertUser } from "../sessions/sqlite-session-store.js";

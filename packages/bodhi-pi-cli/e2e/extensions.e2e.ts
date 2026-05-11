@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createNodeExtensionLoader } from "@bodhiapp/bodhi-pi-node";
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
 import { loadFixture } from "@test/helpers/seed-workspace.js";

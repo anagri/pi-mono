@@ -9,7 +9,7 @@ import {
 	type Stream,
 } from "@agentclientprotocol/sdk";
 import type { createBodhiPiAgent, SessionStore } from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import chalk from "chalk";
 import { handleCommand, isCommand, type ReplState } from "./commands.js";
 import { createRenderer } from "./render.js";

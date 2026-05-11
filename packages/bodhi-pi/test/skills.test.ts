@@ -6,7 +6,7 @@ import {
 	type Model,
 	registerFauxProvider,
 	type TextContent,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";

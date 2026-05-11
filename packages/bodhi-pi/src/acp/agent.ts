@@ -25,16 +25,16 @@ import {
 	type SetSessionConfigOptionRequest,
 	type SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
-import {
-	type AfterToolCallContext,
-	type AfterToolCallResult,
-	Agent,
-	type AgentMessage,
-	type AgentTool,
-	type BeforeToolCallContext,
-	type BeforeToolCallResult,
-	type Agent as PiAgent,
-} from "@mariozechner/pi-agent-core";
+import type {
+	AfterToolCallContext,
+	AfterToolCallResult,
+	AgentMessage,
+	AgentTool,
+	BeforeToolCallContext,
+	BeforeToolCallResult,
+	Agent as PiAgent,
+} from "@earendil-works/pi-agent-core";
+import { Agent } from "@earendil-works/pi-agent-core/dist/agent.js";
 import {
 	type Api,
 	type AssistantMessage,
@@ -42,7 +42,7 @@ import {
 	type Model,
 	type StopReason as PiStopReason,
 	type ProviderResponse,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
 import { EventDispatcher } from "@/events/dispatcher.js";

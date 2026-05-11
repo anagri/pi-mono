@@ -1,5 +1,5 @@
 import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { dispatchNotification } from "../runtime/render";
 import { type AgentRuntime, startAgentRuntime } from "../runtime/runtime";

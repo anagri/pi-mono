@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type Database from "better-sqlite3";
 import { createAcpHandler } from "./acp/handler.js";
 import { type Db, openDb } from "./sessions/sqlite-session-store.js";

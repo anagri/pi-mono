@@ -1,5 +1,5 @@
-import type { AgentMessage, AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { AssistantMessageEvent, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AgentMessage, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
 
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "cancelled" | "refusal";
 

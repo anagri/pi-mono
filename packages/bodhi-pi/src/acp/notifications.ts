@@ -1,5 +1,5 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
 
 export function isToolResultMessage(msg: AgentMessage): msg is ToolResultMessage {
 	return msg.role === "toolResult";

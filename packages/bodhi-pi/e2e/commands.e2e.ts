@@ -1,4 +1,4 @@
-import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
+import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { requireEnv } from "@test/helpers/env.js";
 import { createTestHarness } from "@test/helpers/harness.js";

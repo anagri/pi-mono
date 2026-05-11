@@ -1,4 +1,4 @@
-import type { AssistantMessage, Usage, UserMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Usage, UserMessage } from "@earendil-works/pi-ai";
 import { expect, test } from "vitest";
 
 function zeroUsage(totalTokens = 0): Usage {
@@ -66,7 +66,9 @@ test("buildSessionContext follows the chain even when entries array contains an 
 	const branchAssistant = makeAssistantMessage("a-branch", "u-branch", "branch reply");
 	const ctx = buildSessionContext(makeRecord([u1, a1, branchUser, branchAssistant], "a1"));
 	const texts = ctx.messages.flatMap((m) =>
-		Array.isArray(m.content) ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : [])) : [],
+		"content" in m && Array.isArray(m.content)
+			? m.content.flatMap((c: { type: string; text?: string }) => (c.type === "text" && c.text ? [c.text] : []))
+			: [],
 	);
 	expect(texts).toContain("hello");
 	expect(texts).toContain("main reply");
@@ -91,7 +93,9 @@ test("compaction entry replaces pre-checkpoint history with a synthesized summar
 	const u3 = makeUserMessage("u3", "c1", "third");
 	const ctx = buildSessionContext(makeRecord([u1, a1, u2, a2, compaction, u3], "u3"));
 	const texts = ctx.messages.flatMap((m) =>
-		Array.isArray(m.content) ? m.content.flatMap((c) => (c.type === "text" ? [c.text] : [])) : [],
+		"content" in m && Array.isArray(m.content)
+			? m.content.flatMap((c: { type: string; text?: string }) => (c.type === "text" && c.text ? [c.text] : []))
+			: [],
 	);
 	expect(texts.some((t) => t.includes("<context-summary"))).toBe(true);
 	expect(texts.some((t) => t.includes("first two turns covered topic X"))).toBe(true);

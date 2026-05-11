@@ -32,7 +32,7 @@ npm --workspace @bodhiapp/bodhi-pi run test:e2e    # e2e against real LLMs
 | Integration | `vitest.config.ts` | `test/**/*.test.ts` | stub (aimock / faux) |
 | e2e | `vitest.e2e.config.ts` | `e2e/**/*.e2e.ts` | real |
 
-`vitest.config.ts` source-aliases `@mariozechner/pi-ai` and `@mariozechner/pi-agent-core` to workspace `src/index.ts`.
+`vitest.config.ts` source-aliases `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` to workspace `src/index.ts`.
 
 `vitest.e2e.config.ts` does **NOT** use `mergeConfig` — vitest's array-merge for `test.include` is unstable. Composes explicitly.
 

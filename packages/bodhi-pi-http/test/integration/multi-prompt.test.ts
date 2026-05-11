@@ -1,4 +1,4 @@
-import { type Context, fauxAssistantMessage } from "@mariozechner/pi-ai";
+import { type Context, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { encodeToken } from "../../src/server/auth/token.js";
 import { ssePrompt } from "../helpers/sse-client.js";

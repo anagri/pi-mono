@@ -11,7 +11,7 @@ import {
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 } from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ChatState } from "../store/chatStore";
 
 /**

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type FauxProviderRegistration, registerFauxProvider } from "@mariozechner/pi-ai";
+import { type FauxProviderRegistration, registerFauxProvider } from "@earendil-works/pi-ai";
 import { buildServer, type ServerHandle } from "../../src/server/server.js";
 
 export interface TestServer {

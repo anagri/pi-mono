@@ -15,7 +15,7 @@
  * NOTE: this is a *minimal* Model<Api> shape sufficient for routing. It
  * does NOT include cost/usage metadata — the model dropdown will still work
  * but cost displays may be missing. For production hosts, import the real
- * Model definition from @mariozechner/pi-ai instead.
+ * Model definition from @earendil-works/pi-ai instead.
  */
 export default function (pi) {
 	pi.registerProvider("ext-anthropic", {

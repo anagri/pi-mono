@@ -3,7 +3,7 @@ import {
 	type FauxProviderRegistration,
 	fauxAssistantMessage,
 	registerFauxProvider,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { EXT_SESSION_TREE } from "@/acp/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";

@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { BranchSummaryEntry, CompactionEntry, CustomMessageEntry, SessionEntry } from "./entries.js";
 import type { SessionRecord } from "./session-store.js";
 

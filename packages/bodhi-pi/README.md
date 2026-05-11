@@ -1,6 +1,6 @@
 # @bodhiapp/bodhi-pi
 
-Embeddable, host-mediated, ACP-speaking coding agent. Sibling to `@mariozechner/pi-coding-agent`. Depends on `@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`.
+Embeddable, host-mediated, ACP-speaking coding agent. Sibling to `@earendil-works/pi-coding-agent`. Depends on `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core`.
 
 > Status: pre-alpha. Public API and behaviour will change rapidly.
 
@@ -21,7 +21,7 @@ import {
 	createInMemoryFilesystem,
 	createInMemorySessionStore,
 } from "@bodhiapp/bodhi-pi";
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 
 const factory = createBodhiPiAgent({
 	models: [getModel("anthropic", "claude-haiku-4-5")],

@@ -1,5 +1,5 @@
 import { LLMock } from "@copilotkit/aimock";
-import { type FauxProviderRegistration, getModel } from "@mariozechner/pi-ai";
+import { type FauxProviderRegistration, getModel } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { EXT_SESSION_CLONE, EXT_SESSION_ENTRIES, EXT_SESSION_FORK } from "@/acp/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";

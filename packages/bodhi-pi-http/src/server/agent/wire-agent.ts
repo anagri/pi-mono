@@ -1,7 +1,7 @@
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { createNodeExtensionLoader, createNodeFilesystem, createNodeScriptExecutor } from "@bodhiapp/bodhi-pi-node";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
 import { createSqliteSessionStore, type Db } from "../sessions/sqlite-session-store.js";

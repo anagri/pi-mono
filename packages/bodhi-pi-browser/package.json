@@ -25,7 +25,7 @@
 	"dependencies": {
 		"@agentclientprotocol/sdk": "^0.21.0",
 		"@bodhiapp/bodhi-pi": "^0.0.1",
-		"@mariozechner/pi-ai": "*",
+		"@earendil-works/pi-ai": "*",
 		"@zenfs/core": "^2.5.0",
 		"@zenfs/dom": "^1.2.0",
 		"dexie": "^4.0.11",

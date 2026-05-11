@@ -1,5 +1,5 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { Api, Model, TextContent } from "@mariozechner/pi-ai";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { Api, Model, TextContent } from "@earendil-works/pi-ai";
 import type { Static, TSchema } from "typebox";
 import type {
 	BeforeAgentStartEventResult,

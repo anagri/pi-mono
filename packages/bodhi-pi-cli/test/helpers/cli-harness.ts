@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
 import type { BodhiPiEventHandlers, RegisteredExtension } from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "@/agent.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
 

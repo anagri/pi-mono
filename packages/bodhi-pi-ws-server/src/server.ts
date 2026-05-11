@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type Database from "better-sqlite3";
 import { type WebSocket, WebSocketServer } from "ws";
 import { wireAgentForConnection } from "./agent/wire-agent.js";

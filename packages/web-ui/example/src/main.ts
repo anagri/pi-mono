@@ -349,7 +349,7 @@ const renderApp = () => {
 								agent.steer(
 									createSystemNotification(
 										"This is a custom message! It appears in the UI but is never sent to the LLM.",
-									),
+									) as unknown as AgentMessage,
 								);
 							}
 						},

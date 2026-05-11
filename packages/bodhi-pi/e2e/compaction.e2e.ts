@@ -1,4 +1,4 @@
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { requireEnv } from "@test/helpers/env.js";
 import { createTestHarness } from "@test/helpers/harness.js";

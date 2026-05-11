@@ -40,8 +40,8 @@ test:
         fi
     }
 
-    run "@mariozechner/pi-ai  — build (dep)"               npm --workspace @mariozechner/pi-ai run build
-    run "@mariozechner/pi-agent-core  — build (dep)"       npm --workspace @mariozechner/pi-agent-core run build
+    run "@earendil-works/pi-ai  — build (dep)"             npm --workspace @earendil-works/pi-ai run build
+    run "@earendil-works/pi-agent-core  — build (dep)"     npm --workspace @earendil-works/pi-agent-core run build
 
     run "@bodhiapp/bodhi-pi  — build"                      npm --workspace @bodhiapp/bodhi-pi run build
     run "@bodhiapp/bodhi-pi  — test (unit + integration)"  npm --workspace @bodhiapp/bodhi-pi run test

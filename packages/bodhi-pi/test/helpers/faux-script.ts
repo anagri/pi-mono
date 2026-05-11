@@ -1,4 +1,4 @@
-import { type FauxProviderRegistration, fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
+import { type FauxProviderRegistration, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 
 /**
  * Script a faux provider to emit one tool call followed by a "done" message.

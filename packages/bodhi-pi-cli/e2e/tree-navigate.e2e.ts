@@ -1,5 +1,5 @@
 import { EXT_SESSION_ENTRIES, EXT_SESSION_NAVIGATE, EXT_SESSION_TREE } from "@bodhiapp/bodhi-pi";
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
 import { afterEach, beforeEach, expect, test } from "vitest";

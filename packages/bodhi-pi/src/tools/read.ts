@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 import { resolvePath, type ToolDeps } from "./index.js";
 import { READ_MAX_BYTES, READ_MAX_LINES } from "./limits.js";

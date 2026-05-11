@@ -71,7 +71,7 @@ export const dynamicTools: ExtensionFactory = (pi) => {
  */
 export function makeRegisterProviderFactory(opts: {
 	registrationName: string;
-	model: import("@mariozechner/pi-ai").Model<import("@mariozechner/pi-ai").Api>;
+	model: import("@earendil-works/pi-ai").Model<import("@earendil-works/pi-ai").Api>;
 	apiKey?: string;
 }): ExtensionFactory {
 	return (pi) => {

@@ -1,6 +1,6 @@
 import type { Client, SessionNotification } from "@agentclientprotocol/sdk";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import { fauxAssistantMessage } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { encodeToken } from "../src/auth/token.js";

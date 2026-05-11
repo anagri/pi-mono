@@ -1,4 +1,4 @@
-import { type FauxProviderRegistration, fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
+import { type FauxProviderRegistration, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 
 export function scriptToolThenDone(
 	faux: FauxProviderRegistration,

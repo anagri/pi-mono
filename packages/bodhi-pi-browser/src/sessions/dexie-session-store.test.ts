@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { resetDb as reset } from "./_test-helpers/reset-db.js";
 import { createDexieSessionStore } from "./dexie-session-store.js";

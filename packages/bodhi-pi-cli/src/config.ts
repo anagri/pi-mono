@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
 import { defaultDbPath } from "@bodhiapp/bodhi-pi-node";
-import type { Api, Model } from "@mariozechner/pi-ai";
-import { getEnvApiKey, getModels, getProviders } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { getEnvApiKey, getModels, getProviders } from "@earendil-works/pi-ai";
 
 export interface ResolvedConfig {
 	models: Model<Api>[];

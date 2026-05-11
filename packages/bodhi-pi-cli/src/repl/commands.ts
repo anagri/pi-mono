@@ -12,7 +12,7 @@ import {
 	EXT_SESSION_TREE,
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { Renderer } from "./render.js";
 
 export interface ReplState {

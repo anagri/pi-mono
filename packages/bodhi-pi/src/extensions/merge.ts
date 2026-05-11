@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
 
 /** Merge extension tools into the builtin set. Builtins win on name collision. */

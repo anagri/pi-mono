@@ -1,4 +1,4 @@
-import { type Api, getModel, type Model } from "@mariozechner/pi-ai";
+import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 
 const PROVIDER_KEY_ENV: Record<string, string> = {
 	openai: "OPENAI_API_KEY",

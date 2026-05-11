@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { createEditTool } from "./edit.js";

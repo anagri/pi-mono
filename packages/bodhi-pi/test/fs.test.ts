@@ -5,7 +5,7 @@ import {
 	fauxToolCall,
 	type Model,
 	registerFauxProvider,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";

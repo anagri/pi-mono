@@ -7,7 +7,7 @@ import {
 	fauxAssistantMessage,
 	type Model,
 	registerFauxProvider,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "./helpers/cli-harness.js";

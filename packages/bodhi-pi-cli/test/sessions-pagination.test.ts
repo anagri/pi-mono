@@ -2,7 +2,7 @@ import fsNode from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
-import { type Api, type FauxProviderRegistration, type Model, registerFauxProvider } from "@mariozechner/pi-ai";
+import { type Api, type FauxProviderRegistration, type Model, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createCliAgent } from "@/agent.js";
 import { handleCommand, type ReplState } from "@/repl/commands.js";

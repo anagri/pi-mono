@@ -1,5 +1,5 @@
 import type { AgentEndEvent, AgentStartEvent, BodhiPiEvent, MessageUpdateEvent } from "@bodhiapp/bodhi-pi";
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
 import { recorder } from "@test/helpers/event-recorder.js";

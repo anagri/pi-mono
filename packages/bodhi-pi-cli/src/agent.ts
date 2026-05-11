@@ -7,7 +7,7 @@ import {
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import { createNodeFilesystem, createNodeScriptExecutor, createSqliteSessionStore } from "@bodhiapp/bodhi-pi-node";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 
 export interface CliAgentOptions {
 	cwd: string;

@@ -5,7 +5,7 @@ import {
 	ndJsonStream,
 	type SessionNotification,
 } from "@agentclientprotocol/sdk";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { parseWireFrame, useEventStore } from "../store/eventStore";
 import { createMessagePortStream } from "../transport/message-port-stream";
 import type { WorkspaceProvider } from "../workspace/provider";

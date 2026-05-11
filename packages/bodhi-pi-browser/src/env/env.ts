@@ -1,5 +1,5 @@
-import type { Api, Model } from "@mariozechner/pi-ai";
-import { getModel } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 
 /**
  * Resolved env for a browser host. The host injects a `getEnvVar` so each host
