@@ -1,35 +1,33 @@
 import type { ClientSideConnection } from "@agentclientprotocol/sdk";
-import { AUTH_PREFIX, EXT_KV_SET, EXT_SESSION_SETTINGS_SET, MODEL_CONFIG_ID } from "@/index.js";
+import { AUTH_PREFIX, EXT_KV_SET, MODEL_CONFIG_ID } from "@/index.js";
 
 export interface SeedAuthOptions {
 	clientConn: ClientSideConnection;
 	sessionId: string;
 	provider: string;
 	apiKey: string;
-	/** Model id to mark as default (written to project settings) and to activate. */
+	/** Model id to switch the session's current model to. */
 	modelId: string;
 }
 
 /**
- * Blackbox 3-step setup for a real-LLM e2e:
- *   1. `/login <provider> <api-key>`  →  `_bodhi-pi/kv/set auth/<provider>`
- *   2. `/settings set defaultModel <id> --project`  →  project settings file
- *   3. `/model <id>`  →  `setSessionConfigOption("model", <id>)`
+ * Blackbox 2-step setup for a real-LLM e2e:
+ *   1. `/login <provider> <api-key>`  →  `_bodhi-pi/kv/set` with `sessionId` —
+ *      writes the kvStore entry AND returns fresh `configOptions`.
+ *   2. `/model <id>` → `setSessionConfigOption("model", <id>)` — switches the
+ *      session's current model.
  *
- * All three steps go over ACP — no whitebox seam. Use in `beforeAll`/`beforeEach`
- * after `clientConn.newSession(...)` returns the session id.
+ * Both steps return `configOptions` so hosts auto-refresh their picker; tests
+ * don't need to poll `_bodhi-pi/session/config`. Drop a separate
+ * `_bodhi-pi/session/settings/set defaultModel ...` call unless the test
+ * specifically wants to persist the default for FUTURE sessions on this cwd.
  */
 export async function seedAuth(opts: SeedAuthOptions): Promise<void> {
 	await opts.clientConn.extMethod(EXT_KV_SET, {
+		sessionId: opts.sessionId,
 		key: `${AUTH_PREFIX}${opts.provider}`,
 		value: opts.apiKey,
 		secret: true,
-	});
-	await opts.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
-		sessionId: opts.sessionId,
-		key: "defaultModel",
-		value: opts.modelId,
-		scope: "project",
 	});
 	await opts.clientConn.setSessionConfigOption({
 		sessionId: opts.sessionId,

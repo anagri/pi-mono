@@ -646,10 +646,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 			})() as BodhiPiProjectSettings;
 		}
 
+		// Keys that affect the model picker — include fresh configOptions in the response.
+		const affectsPicker = path[0] === "defaultModel" || path[0] === "defaultThinkingLevel";
+		const configOptions = affectsPicker ? await this.buildAllConfigOptions(params.sessionId as string) : undefined;
+
 		return {
 			key,
 			scope,
 			effective: getAt(this.effectiveSettings(session) as Record<string, unknown>, path) ?? null,
+			...(configOptions !== undefined
+				? { configOptions: configOptions as unknown as Record<string, unknown>[] }
+				: {}),
 		};
 	}
 
@@ -689,10 +696,16 @@ class BodhiPiAcpAgent implements AcpAgent {
 			session.sessionOverrides = root as BodhiPiProjectSettings;
 		}
 
+		const affectsPicker = path[0] === "defaultModel" || path[0] === "defaultThinkingLevel";
+		const configOptions = affectsPicker ? await this.buildAllConfigOptions(params.sessionId as string) : undefined;
+
 		return {
 			key,
 			scope,
 			effective: getAt(this.effectiveSettings(session) as Record<string, unknown>, path) ?? null,
+			...(configOptions !== undefined
+				? { configOptions: configOptions as unknown as Record<string, unknown>[] }
+				: {}),
 		};
 	}
 
@@ -737,6 +750,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 		const secret = params.secret === true;
 		await kv.set(key, value, { secret });
+		// Auth keys reshape the dynamic model registry. When the caller passes a
+		// sessionId, include the fresh `configOptions` for that session in the
+		// response so the host can update its picker in one round-trip.
+		const sessionId = params.sessionId;
+		if (key.startsWith(AUTH_PREFIX) && typeof sessionId === "string" && this.sessions.has(sessionId)) {
+			const configOptions = await this.buildAllConfigOptions(sessionId);
+			return { key, secret, configOptions: configOptions as unknown as Record<string, unknown>[] };
+		}
 		return { key, secret };
 	}
 
@@ -774,6 +795,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			throw new RequestError(-32602, `${EXT_KV_REMOVE}: key must be a non-empty string`);
 		}
 		await kv.remove(key);
+		const sessionId = params.sessionId;
+		if (key.startsWith(AUTH_PREFIX) && typeof sessionId === "string" && this.sessions.has(sessionId)) {
+			const configOptions = await this.buildAllConfigOptions(sessionId);
+			return { key, configOptions: configOptions as unknown as Record<string, unknown>[] };
+		}
 		return { key };
 	}
 

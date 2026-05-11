@@ -97,6 +97,58 @@ test("kv/remove clears the entry; subsequent get returns value: null", async () 
 	expect(got.value).toBeNull();
 });
 
+test("kv/set with sessionId returns fresh configOptions on auth/* writes", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const result = (await harness.clientConn.extMethod(EXT_KV_SET, {
+		sessionId,
+		key: `${AUTH_PREFIX}${model.provider}`,
+		value: "sk-XYZ",
+		secret: true,
+	})) as { configOptions?: Array<{ id: string; currentValue: string }> };
+
+	expect(result.configOptions).toBeDefined();
+	expect(result.configOptions?.[0]?.id).toBe("model");
+	expect(result.configOptions?.[0]?.currentValue).toBe(model.id);
+});
+
+test("kv/set non-auth key omits configOptions", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const result = (await harness.clientConn.extMethod(EXT_KV_SET, {
+		sessionId,
+		key: "unrelated/key",
+		value: "v",
+	})) as { configOptions?: unknown };
+	expect(result.configOptions).toBeUndefined();
+});
+
+test("kv/remove with sessionId returns fresh configOptions on auth/* removes", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	await harness.clientConn.extMethod(EXT_KV_SET, {
+		key: `${AUTH_PREFIX}${model.provider}`,
+		value: "sk-XYZ",
+		secret: true,
+	});
+	const result = (await harness.clientConn.extMethod(EXT_KV_REMOVE, {
+		sessionId,
+		key: `${AUTH_PREFIX}${model.provider}`,
+	})) as { configOptions?: Array<{ id: string }> };
+
+	expect(result.configOptions).toBeDefined();
+	expect(result.configOptions?.[0]?.id).toBe("model");
+});
+
 test("kv handlers throw -32601 when kvStore is not configured", async () => {
 	const model = newFaux();
 	// Build a bespoke harness without kvStore — bypass `createTestHarness` default.

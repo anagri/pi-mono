@@ -224,6 +224,14 @@ export function RuntimeProvider({
 					setStatus,
 					clear,
 					cwd: workspace.rootPath,
+					refreshConfigOptions: (options) => {
+						const next = modelsFromConfigOptions(options);
+						setModels(next.models);
+						if (next.defaultModelId) {
+							setDefaultModelId(next.defaultModelId);
+							setCurrentModelId(next.defaultModelId);
+						}
+					},
 				});
 				if (handled) return;
 			}

@@ -216,3 +216,34 @@ test("string values JSON.parse when possible; fall back to raw string", async ()
 	const written2 = JSON.parse(await filesystem.readTextFile("/proj/.bodhi-pi/settings.json"));
 	expect(written2.appendSystemPrompt).toBe("hello-world");
 });
+
+test("settings/set defaultModel returns fresh configOptions (auto-refresh)", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const result = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
+		sessionId,
+		key: "defaultModel",
+		value: model.id,
+		scope: "project",
+	})) as { configOptions?: Array<{ id: string }> };
+	expect(result.configOptions).toBeDefined();
+	expect(result.configOptions?.[0]?.id).toBe("model");
+});
+
+test("settings/set non-model key omits configOptions", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const result = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
+		sessionId,
+		key: "appendSystemPrompt",
+		value: "ignored",
+		scope: "session",
+	})) as { configOptions?: unknown };
+	expect(result.configOptions).toBeUndefined();
+});

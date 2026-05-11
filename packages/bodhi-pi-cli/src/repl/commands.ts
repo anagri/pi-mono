@@ -1,4 +1,4 @@
-import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
 	AUTH_PREFIX,
 	EXT_DELETE_SESSION,
@@ -43,6 +43,38 @@ export interface CommandContext {
 
 export function isCommand(line: string): boolean {
 	return line.startsWith("/");
+}
+
+/**
+ * Update `state.models`/`currentModelId` from a fresh `configOptions[]` payload
+ * returned by `setSessionConfigOption`, `/login`, `/logout`, or
+ * `/settings set defaultModel*`. Non-destructive — silently no-ops if no `model`
+ * option is present.
+ */
+function refreshStateFromConfigOptions(state: ReplState, options: readonly SessionConfigOption[] | undefined): void {
+	if (!options) return;
+	const modelOption = options.find((o) => o.id === "model");
+	if (!modelOption || modelOption.type !== "select") return;
+	const flat: Array<{ value: string; name?: string }> = [];
+	for (const item of modelOption.options ?? []) {
+		if ("value" in item) flat.push({ value: item.value, ...(item.name ? { name: item.name } : {}) });
+	}
+	state.models = flat.map(
+		(o): Model<Api> =>
+			({
+				id: o.value,
+				name: o.name ?? o.value,
+				provider: "unknown",
+				api: "unknown",
+				baseUrl: "",
+				reasoning: false,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128000,
+				maxTokens: 16384,
+			}) as unknown as Model<Api>,
+	);
+	state.currentModelId = (modelOption.currentValue as string) ?? state.currentModelId;
 }
 
 /** Extract `--global|--project|--session` from a token list, returning the scope (or undefined) and remaining args. */
@@ -219,9 +251,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 					configId: "model",
 					value: modelId,
 				});
-				const newId = result.configOptions[0]?.currentValue ?? modelId;
-				ctx.state.currentModelId = newId;
-				process.stdout.write(`model switched to: ${newId}\n`);
+				refreshStateFromConfigOptions(ctx.state, result.configOptions);
+				process.stdout.write(`model switched to: ${ctx.state.currentModelId}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}
@@ -472,7 +503,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						key,
 						value,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown };
+					})) as { scope: string; effective: unknown; configOptions?: SessionConfigOption[] };
+					refreshStateFromConfigOptions(ctx.state, result.configOptions);
 					process.stdout.write(
 						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
 					);
@@ -487,7 +519,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown };
+					})) as { scope: string; effective: unknown; configOptions?: SessionConfigOption[] };
+					refreshStateFromConfigOptions(ctx.state, result.configOptions);
 					process.stdout.write(
 						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
 					);
@@ -508,11 +541,13 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				await ctx.clientConn.extMethod(EXT_KV_SET, {
+				const result = (await ctx.clientConn.extMethod(EXT_KV_SET, {
+					sessionId: ctx.state.sessionId,
 					key: `${AUTH_PREFIX}${provider}`,
 					value: apiKey,
 					secret: true,
-				});
+				})) as { configOptions?: SessionConfigOption[] };
+				refreshStateFromConfigOptions(ctx.state, result.configOptions);
 				process.stdout.write(`stored auth for ${provider}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
@@ -527,7 +562,11 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				await ctx.clientConn.extMethod(EXT_KV_REMOVE, { key: `${AUTH_PREFIX}${provider}` });
+				const result = (await ctx.clientConn.extMethod(EXT_KV_REMOVE, {
+					sessionId: ctx.state.sessionId,
+					key: `${AUTH_PREFIX}${provider}`,
+				})) as { configOptions?: SessionConfigOption[] };
+				refreshStateFromConfigOptions(ctx.state, result.configOptions);
 				process.stdout.write(`removed auth for ${provider}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
