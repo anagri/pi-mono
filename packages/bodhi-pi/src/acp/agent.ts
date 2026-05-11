@@ -28,6 +28,7 @@ import {
 import type {
 	AfterToolCallContext,
 	AfterToolCallResult,
+	AgentLoopTurnUpdate,
 	AgentMessage,
 	AgentTool,
 	BeforeToolCallContext,
@@ -856,21 +857,42 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	private async checkAutoCompact(sessionId: string, session: SessionState): Promise<void> {
+		await this.runProactiveCompaction(sessionId, session);
+	}
+
+	private async maybeProactiveCompact(sessionId: string): Promise<AgentLoopTurnUpdate | undefined> {
+		const session = this.sessions.get(sessionId);
+		if (!session || session.cancelled) return undefined;
+		const ctx = await this.runProactiveCompaction(sessionId, session);
+		if (!ctx) return undefined;
+		return {
+			context: {
+				systemPrompt: session.piAgent.state.systemPrompt,
+				messages: ctx.messages,
+				tools: session.piAgent.state.tools,
+			},
+		};
+	}
+
+	private async runProactiveCompaction(
+		sessionId: string,
+		session: SessionState,
+	): Promise<{ messages: AgentMessage[] } | undefined> {
 		const settings = this.compactionSettings;
-		if (!settings.enabled) return;
+		if (!settings.enabled) return undefined;
 		const record = await this.config.sessionStore.load(sessionId);
-		if (!record) return;
+		if (!record) return undefined;
 		const path = walkPath(record.entries, session.leafId);
 		const usage = getLastAssistantUsage(path);
-		if (!usage) return;
+		if (!usage) return undefined;
 		const contextTokens = calculateContextTokens(usage);
 		const contextWindow = (session.piAgent.state.model as Model<Api> & { contextWindow?: number }).contextWindow ?? 0;
-		if (contextWindow <= 0) return;
-		if (contextTokens <= contextWindow - settings.reserveTokens) return;
+		if (contextWindow <= 0) return undefined;
+		if (contextTokens <= contextWindow - settings.reserveTokens) return undefined;
 		const preparation = prepareCompaction(path, settings);
-		if (!preparation) return;
+		if (!preparation) return undefined;
 		const apiKey = await this.resolveApiKeyForCompaction(session.piAgent.state.model.provider);
-		if (!apiKey) return;
+		if (!apiKey) return undefined;
 		try {
 			const result = await runCompaction(preparation, session.piAgent.state.model, apiKey);
 			const compactionEntry: CompactionEntry = {
@@ -885,12 +907,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 			};
 			await this.appendEntry(sessionId, session, compactionEntry);
 			const refreshed = await this.config.sessionStore.load(sessionId);
-			if (refreshed) {
-				const ctx = buildSessionContext(refreshed, session.leafId);
-				session.piAgent.state.messages = ctx.messages;
-			}
+			if (!refreshed) return undefined;
+			const rebuilt = buildSessionContext(refreshed, session.leafId);
+			session.piAgent.state.messages = rebuilt.messages;
+			return { messages: rebuilt.messages };
 		} catch {
 			// Auto-compact errors are non-fatal — leave the session uncompacted.
+			return undefined;
 		}
 	}
 
@@ -1228,6 +1251,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 					status: response.status,
 					headers: response.headers,
 				});
+			},
+			prepareNextTurn: async (): Promise<AgentLoopTurnUpdate | undefined> => {
+				return await this.maybeProactiveCompact(sessionId);
 			},
 		});
 		this.sessions.set(sessionId, {

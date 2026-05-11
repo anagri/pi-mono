@@ -13,7 +13,7 @@ Legend: ✅ shipped · ⏭ deferred · ❌ excluded by design.
 | Feature | ACP method | All hosts | Notes |
 |---|---|---|---|
 | Manual context compaction | `_bodhi-pi/session/compact` | ✅ | Faux-mocked LLM in core; real `gpt-4o-mini` per host (Phase A). |
-| Auto-compaction (token threshold) | (post-`agent_end` hook in core) | ✅ core only | Triggers when last assistant `Usage.totalTokens` > `contextWindow - reserveTokens`. Settings: `enabled`, `reserveTokens` (default 16384), `keepRecentTokens` (default 20000). Faux-provider integration tests in `bodhi-pi/test/auto-compact.test.ts`; per-host e2e is intentionally skipped (rigging real-LLM context windows is flaky). |
+| Auto-compaction (token threshold) | (mid-loop `prepareNextTurn` + post-`agent_end` fallback) | ✅ core only | Triggers when last assistant `Usage.totalTokens` > `contextWindow - reserveTokens`. Wired into `AgentLoopConfig.prepareNextTurn` so compaction can land between turns within one `agent.loop()` call; post-prompt `checkAutoCompact` retained as the single-turn fallback. Settings: `enabled`, `reserveTokens` (default 16384), `keepRecentTokens` (default 20000). Tests: `bodhi-pi/test/auto-compact.test.ts`, `bodhi-pi/test/prepare-next-turn-wiring.test.ts`. Per-host e2e intentionally skipped (rigging real-LLM context windows is flaky). |
 | Provider-overflow recovery | (`prompt()` error path) | ✅ core only | Catches context-overflow errors via `isContextOverflow` from pi-ai (covers Anthropic / OpenAI / Google / xAI / Groq / Bedrock / Mistral / OpenRouter / llama.cpp / LM Studio / Kimi / z.ai silent-overflow / Xiaomi length-truncation), runs auto-compact, retries the same prompt once. Re-overflow on retry propagates. Tests: `bodhi-pi/test/overflow-recovery.test.ts`. |
 | Branch creation by user-message rewind (`/fork`) | `_bodhi-pi/session/fork` | ✅ | Returns `{ newSessionId, selectedText? }`. Position `"before"` excludes the target message; `"at"` includes it (alias used by `/clone`). |
 | Full-chain duplication (`/clone`) | `_bodhi-pi/session/clone` | ✅ | New session id with the same entries copied through `forkRecord`. |
@@ -63,3 +63,31 @@ first-class ACP methods, so each ships as an `extMethod` under the
 "Stable ACP over `unstable_*`" rule. Capability is advertised via
 `agentCapabilities._meta["bodhi-pi"]` in the `initialize` response so
 clients can negotiate.
+
+## Upstream alignment — 2026-05-11
+
+Post-`@earendil-works/*` rebase audit. Rationale + per-module decisions
+in `ai-docs/research/upstream-sync-2026-05-11.md` ("Appendix — Adoption
+decisions"). Default stance: keep parallel impls, reuse harness as reference.
+
+| Harness module (`@earendil-works/pi-agent-core/harness/*`) | Decision |
+|---|---|
+| `session/*` | Keep parallel — revisit next sync |
+| `compaction/compaction.ts` | Keep parallel — reuse as reference |
+| `compaction/branch-summarization.ts` | Keep parallel |
+| `messages.ts` (+ `CustomAgentMessages` augmentation) | Keep parallel; cast workaround retained |
+| `prompt-templates.ts` | Keep parallel |
+| `skills.ts` | Keep parallel |
+| `system-prompt.ts` | Keep parallel — note for Group 2 |
+| `execution-env.ts` + `env/nodejs.ts` | Keep parallel — permanent split |
+| `utils/shell-output.ts` | Adopt later (Phase H, bash tool) |
+| `utils/truncate.ts` | Keep parallel — semantic spot-check |
+
+Shipped this phase:
+
+- `AgentLoopConfig.prepareNextTurn` wired into `_buildSessionState` for
+  mid-loop proactive compaction; post-prompt `checkAutoCompact` retained
+  as fallback. See appendix for the timing nuance.
+- `AgentMessage` widening decision deferred (one `as unknown as
+  AgentMessage` cast + `"content" in m` narrowing retained).
+- Upstream module-augmentation bug deferred to next sync.

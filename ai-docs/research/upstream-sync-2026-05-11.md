@@ -308,3 +308,110 @@ e9414b05 fix
 364ac0f3 fix: test (openRouterImageGeneration)
 c3c10737 feat: image content
 ```
+
+---
+
+# Appendix — Adoption decisions (Phase 0, 2026-05-11)
+
+Outcome of the post-rebase audit (`ai-docs/prompts/group-0-upstream-alignment.md`,
+plan: `ai-docs/plans/20260511-upstream-alignment-post-rebase-scalable-pelican.md`).
+
+**Default stance:** keep bodhi-pi's parallel impl, reuse harness as reference.
+The harness `session/*` storage layout churned 7× during the bigrefactor
+window; pinning today guarantees another rebase headache next week. bodhi-pi's
+DAG/parentId model, cursor pagination, cross-branch detection, and per-host
+stores (SQLite/Dexie/in-memory) are also feature-richer than harness today,
+so a wholesale adoption would be a regression in capability before it ever
+becomes a maintenance win.
+
+## Harness module adoption table
+
+| Harness module | bodhi-pi parallel | Decision | Rationale |
+|---|---|---|---|
+| `harness/session/{session,repo/*,storage/*}` | `bodhi-pi/src/sessions/{session-store,in-memory-session-store}.ts` + `bodhi-pi-node/sqlite-session-store.ts` + `bodhi-pi-browser/dexie-session-store.ts` | Keep parallel — revisit next sync | bodhi-pi has DAG/parentId, cursor pagination, fork-with-chain-walk; harness layout churned 7×. |
+| `harness/compaction/compaction.ts` | `bodhi-pi/src/sessions/compaction.ts` | Keep parallel — reuse as reference | Heavy API overlap (~300 LOC potential win) but `compact()` calls into the agent for summarisation; adoption requires migrating orchestration too. |
+| `harness/compaction/branch-summarization.ts` | `bodhi-pi/src/sessions/branch-summary.ts` | Keep parallel | `detectCrossBranch` is bodhi-pi-specific; pure helpers are otherwise isomorphic. |
+| `harness/messages.ts` (incl. `CustomAgentMessages` augmentation) | inlined `convertToLlm`-equivalent in `acp/agent.ts` + `sessions/build-context.ts` | Keep parallel; record cast workaround | The augmentation is the load-bearing piece — see "AgentMessage widening" below. |
+| `harness/prompt-templates.ts` | `bodhi-pi/src/commands/{prompt-templates,discovery}.ts` | Keep parallel | bodhi-pi's `$1`/`$@`/`${@:N:L}` convention is established; revisit on next sync. |
+| `harness/skills.ts` | `bodhi-pi/src/skills/*` | Keep parallel | `allowed-tools` runtime enforcement is a deferred `PARITY.md` row; revisit when that lands. |
+| `harness/system-prompt.ts` | `bodhi-pi/src/skills/system-prompt.ts:composeSystemPrompt` | Keep parallel — note for Group 2 | Group 2 (Phase G) needs a coding-agent-flavoured prompt; harness's prompt is generic. |
+| `harness/execution-env.ts` + `env/nodejs.ts` | `bodhi-pi/src/filesystem/filesystem.ts` + `script-executor/script-executor.ts` | Keep parallel — permanent split | bodhi-pi splits FS / shell / sessions across three injected interfaces by design (browser CSP, sandboxing). |
+| `harness/utils/shell-output.ts` | none yet | Adopt later (Phase H) | No bash tool today; when it lands, reuse harness semantics. |
+| `harness/utils/truncate.ts` | `bodhi-pi/src/tools/_accumulate.ts` (`accumulateBounded`, `truncationFooter`) | Keep parallel — semantic spot-check | Both bound output by bytes/lines; confirm `byteLength` vs JS-string-length matches the `read.ts` exception pattern. No code change this phase. |
+
+## prepareNextTurn adoption (shipped)
+
+`AgentLoopConfig.prepareNextTurn` is wired into bodhi-pi's `_buildSessionState`
+via `BodhiPiAcpAgent.maybeProactiveCompact`. Fires after every successful
+`turn_end` with `signal` only (no `PrepareNextTurnContext` at the
+`Agent`-class wrapper; the callback reads `session.piAgent.state` and the
+session store directly).
+
+The callback runs `runProactiveCompaction(sessionId, session)`: load record,
+walk path, get last assistant usage, gate by `shouldCompact()` against
+`reserveTokens` headroom, call `prepareCompaction` + `runCompaction`,
+append a `CompactionEntry`, rebuild context, and return the new
+`AgentContext` so the loop swaps state for the next provider request.
+
+- Reactive `tryOverflowRecovery` retained as a fallback — handles cases
+  where the proactive estimator under-counts and the provider returns a
+  hard overflow error.
+- Post-prompt `checkAutoCompact` retained as a fallback — handles single-
+  turn prompts where the loop exits before `prepareNextTurn` would have
+  fired (no tool calls, no follow-ups). It is now a thin wrapper over the
+  same `runProactiveCompaction` helper, so the logic is shared.
+- Wiring-shape test: `packages/bodhi-pi/test/prepare-next-turn-wiring.test.ts`.
+  Asserts a compaction lands BETWEEN turns within a single `prompt()`
+  cycle — discriminates from the post-loop `checkAutoCompact` path.
+
+## AgentMessage widening — decision: defer
+
+bodhi-pi's contract is `AgentMessage = Message` (user / assistant /
+toolResult only). Upstream's `harness/messages.ts:56` widens this through
+a `CustomAgentMessages` module augmentation that adds `bashExecution`,
+`branchSummary`, and `compactionSummary` roles — none of which bodhi-pi
+emits.
+
+Workaround in place from the rebase patch:
+
+- One `as unknown as AgentMessage` cast at the custom-message call site.
+- `"content" in m && Array.isArray(m.content)` narrowing in
+  `packages/bodhi-pi/test/sessions/build-context.test.ts` (lines 69 + 96).
+
+Why defer the opt-out: declaring the harness roles as `never` in bodhi-pi's
+own `CustomAgentMessages` augmentation is non-trivial because TS module
+augmentation only merges declarations targeting the same canonical module
+specifier (see the upstream bug note below). Until that bug is fixed
+upstream, attempting the opt-out would just re-expose the same problem
+from a different angle. Revisit on next sync.
+
+## Upstream module-augmentation bug — decision: defer filing
+
+Reproducer (already present):
+
+- `packages/agent/src/harness/messages.ts:56` augments
+  `"../types.js"` (relative).
+- `packages/web-ui/example/src/custom-messages.ts:21` augments
+  `"@earendil-works/pi-agent-core"` (package name).
+- TS treats these as different canonical modules → augmentations don't
+  merge. Third-party `CustomAgentMessages` augmentations are silently
+  dropped.
+
+Why defer: the area is still churning upstream (the harness was added in
+the same window). Filing now risks the issue being closed as "fixed by
+unrelated refactor" before we can verify. We'll capture this in the next
+sync's research doc; if the augmentation still uses the relative specifier,
+file then with a small reproducer + a one-line patch (switch to the
+package-name specifier inside the package's own augmentations).
+
+## Items intentionally not handled this phase
+
+- Fireworks compat docs (`sendSessionAffinityHeaders` +
+  `supportsCacheControlOnTools: false`) — no user has asked.
+- Together provider — consumer-side opt-in, no bodhi-pi code change.
+- New pi-ai images API (output generation) — Group 7 is image *input* only.
+- Restoring `tsconfig.base.json` `paths` — node_modules symlink resolution
+  works fine post-rename.
+
+---
+
