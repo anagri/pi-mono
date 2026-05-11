@@ -23,3 +23,9 @@ export async function seedProjectSettings(fs: Filesystem, cwd: string, content: 
 	await fs.mkdir(dir, { recursive: true });
 	await fs.writeTextFile(`${dir}/settings.json`, content);
 }
+
+export async function seedGlobalSettings(fs: Filesystem, homeDir: string, content: string): Promise<void> {
+	const dir = `${homeDir === "/" ? "" : homeDir}/.bodhi-pi`;
+	await fs.mkdir(dir, { recursive: true });
+	await fs.writeTextFile(`${dir}/settings.json`, content);
+}

@@ -1,6 +1,10 @@
 import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
+	AUTH_PREFIX,
 	EXT_DELETE_SESSION,
+	EXT_KV_LIST,
+	EXT_KV_REMOVE,
+	EXT_KV_SET,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_CONFIG,
@@ -9,6 +13,10 @@ import {
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
 	EXT_SESSION_SET_NAME,
+	EXT_SESSION_SETTINGS_GET,
+	EXT_SESSION_SETTINGS_LIST,
+	EXT_SESSION_SETTINGS_SET,
+	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 } from "@bodhiapp/bodhi-pi";
@@ -50,6 +58,19 @@ export function isCommand(line: string): boolean {
 	return line.startsWith("/");
 }
 
+function extractScopeFlag(tokens: string[]): { scope?: "global" | "project" | "session"; rest: string[] } {
+	const rest: string[] = [];
+	let scope: "global" | "project" | "session" | undefined;
+	for (const t of tokens) {
+		if (t === "--global") scope = "global";
+		else if (t === "--project") scope = "project";
+		else if (t === "--session") scope = "session";
+		else if (t === "--effective") scope = undefined;
+		else rest.push(t);
+	}
+	return { ...(scope !== undefined ? { scope } : {}), rest };
+}
+
 /**
  * Returns true if the slash command was handled locally; false if it should be
  * forwarded to the agent as a normal prompt (which is the case for any
@@ -80,6 +101,13 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /session           show session stats (counts + leaf id)",
 				"  /export            copy the session JSONL to clipboard",
 				"  /config            show resolved per-session config (compaction, append, AGENTS.md paths)",
+				"  /settings list     [--global|--project|--session|--effective]",
+				"  /settings get <key>     [--global|--project|--session]",
+				"  /settings set <key> <value>  [--global|--project|--session]   (default --session)",
+				"  /settings unset <key>   [--global|--project|--session]",
+				"  /login <provider> <api-key>   store an API key (secret)",
+				"  /logout <provider>            remove a stored API key",
+				"  /logins                       list providers with stored auth (masked)",
 			];
 			if (ctx.state.availableCommands.length > 0) {
 				lines.push("", "agent slash commands:");
@@ -401,6 +429,134 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					...result.contextFilePaths.map((p) => `  - ${p}`),
 				];
 				ctx.addSystemMessage(lines.join("\n"));
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/settings": {
+			const sub = parts[1];
+			if (!sub) {
+				ctx.addSystemMessage("usage: /settings list|get|set|unset ...");
+				return true;
+			}
+			const tail = parts.slice(2);
+			try {
+				if (sub === "list") {
+					const { scope } = extractScopeFlag(tail);
+					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+						sessionId: ctx.state.sessionId,
+						...(scope ? { scope } : {}),
+					})) as { scope: string; settings: Record<string, unknown> };
+					const entries = Object.entries(result.settings ?? {});
+					const lines = [`scope: ${result.scope}`];
+					if (entries.length === 0) lines.push("  (empty)");
+					for (const [k, v] of entries) lines.push(`  ${k} = ${JSON.stringify(v)}`);
+					ctx.addSystemMessage(lines.join("\n"));
+				} else if (sub === "get") {
+					const { scope, rest } = extractScopeFlag(tail);
+					const key = rest[0];
+					if (!key) {
+						ctx.addSystemMessage("usage: /settings get <key> [--scope]");
+						return true;
+					}
+					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_GET, {
+						sessionId: ctx.state.sessionId,
+						key,
+						...(scope ? { scope } : {}),
+					})) as { key: string; effective: unknown; source: string };
+					ctx.addSystemMessage(`${result.key} = ${JSON.stringify(result.effective)}  (source: ${result.source})`);
+				} else if (sub === "set") {
+					const { scope, rest } = extractScopeFlag(tail);
+					const key = rest[0];
+					const value = rest.slice(1).join(" ");
+					if (!key || rest.length < 2) {
+						ctx.addSystemMessage("usage: /settings set <key> <value> [--scope]");
+						return true;
+					}
+					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_SET, {
+						sessionId: ctx.state.sessionId,
+						key,
+						value,
+						...(scope ? { scope } : {}),
+					})) as { scope: string; effective: unknown };
+					ctx.addSystemMessage(
+						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}`,
+					);
+				} else if (sub === "unset") {
+					const { scope, rest } = extractScopeFlag(tail);
+					const key = rest[0];
+					if (!key) {
+						ctx.addSystemMessage("usage: /settings unset <key> [--scope]");
+						return true;
+					}
+					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_UNSET, {
+						sessionId: ctx.state.sessionId,
+						key,
+						...(scope ? { scope } : {}),
+					})) as { scope: string; effective: unknown };
+					ctx.addSystemMessage(
+						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}`,
+					);
+				} else {
+					ctx.addSystemMessage(`unknown /settings subcommand: ${sub}`);
+				}
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/login": {
+			const provider = parts[1];
+			const apiKey = parts.slice(2).join(" ").trim();
+			if (!provider || !apiKey) {
+				ctx.addSystemMessage("usage: /login <provider> <api-key>");
+				return true;
+			}
+			try {
+				await ctx.conn.extMethod(EXT_KV_SET, {
+					key: `${AUTH_PREFIX}${provider}`,
+					value: apiKey,
+					secret: true,
+				});
+				ctx.addSystemMessage(`stored auth for ${provider}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/logout": {
+			const provider = parts[1];
+			if (!provider) {
+				ctx.addSystemMessage("usage: /logout <provider>");
+				return true;
+			}
+			try {
+				await ctx.conn.extMethod(EXT_KV_REMOVE, { key: `${AUTH_PREFIX}${provider}` });
+				ctx.addSystemMessage(`removed auth for ${provider}`);
+			} catch (err) {
+				ctx.addSystemMessage(`error: ${String(err)}`);
+			}
+			return true;
+		}
+
+		case "/logins": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_KV_LIST, { prefix: AUTH_PREFIX })) as {
+					entries: Array<{ key: string; value: string; secret: boolean }>;
+				};
+				if (result.entries.length === 0) {
+					ctx.addSystemMessage("(no stored auth)");
+				} else {
+					const lines = result.entries.map((e) => {
+						const provider = e.key.startsWith(AUTH_PREFIX) ? e.key.slice(AUTH_PREFIX.length) : e.key;
+						return `  ${provider}: ${e.value}`;
+					});
+					ctx.addSystemMessage(["stored auth:", ...lines].join("\n"));
+				}
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}

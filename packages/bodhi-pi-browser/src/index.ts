@@ -20,6 +20,7 @@ export {
 } from "./filesystem/fsa-handle-store.js";
 export { createZenfsFilesystem } from "./filesystem/zenfs-filesystem.js";
 export { type MountResult, mountFsaHandle, unmountAt } from "./filesystem/zenfs-mount.js";
+export { createDexieKvStore, type DexieKvStoreOptions } from "./kv/dexie-kv-store.js";
 // Runtime — agent worker bootstrap + main-thread runtime + ACP wiring
 export { type BootstrapAgentWorkerOptions, bootstrapAgentWorker } from "./runtime/bootstrap-worker.js";
 export { dispatchNotification, type RenderActions } from "./runtime/render.js";

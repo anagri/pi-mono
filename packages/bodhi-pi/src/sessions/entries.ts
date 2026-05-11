@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 
 /**
  * `parentId` forms the conversation DAG. Optional during the Phase A1 migration
@@ -20,6 +21,11 @@ export interface ModelChangeEntry extends BaseEntry {
 	type: "model_change";
 	provider: string;
 	modelId: string;
+}
+
+export interface ThinkingChangeEntry extends BaseEntry {
+	type: "thinking_change";
+	level: ModelThinkingLevel;
 }
 
 export interface CompactionDetails {
@@ -83,6 +89,7 @@ export interface CustomMessageEntry extends BaseEntry {
 export type SessionEntry =
 	| MessageEntry
 	| ModelChangeEntry
+	| ThinkingChangeEntry
 	| CompactionEntry
 	| BranchSummaryEntry
 	| SessionInfoEntry

@@ -39,15 +39,30 @@ import { Agent } from "@earendil-works/pi-agent-core/dist/agent.js";
 import {
 	type Api,
 	type AssistantMessage,
+	clampThinkingLevel,
+	getSupportedThinkingLevels,
 	isContextOverflow,
 	type Model,
+	type ModelThinkingLevel,
 	type StopReason as PiStopReason,
 	type ProviderResponse,
 } from "@earendil-works/pi-ai";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
 import { type ContextFile, loadProjectContextFiles } from "@/core/resource-loader.js";
-import { type BodhiPiProjectSettings, loadProjectSettings } from "@/core/settings.js";
+import { type BodhiPiProjectSettings, loadProjectSettings, type ProviderOptionsEntry } from "@/core/settings.js";
+import { loadGlobalSettings } from "@/core/settings-global.js";
+import { mergeSettings } from "@/core/settings-merge.js";
+import {
+	getAt,
+	parseDottedKey,
+	parseSettingValue,
+	type SettingsScope,
+	unsetGlobalSetting,
+	unsetProjectSetting,
+	writeGlobalSetting,
+	writeProjectSetting,
+} from "@/core/settings-writer.js";
 import { buildSystemPrompt } from "@/core/system-prompt.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
 import type { BodhiPiEventHandlers } from "@/events/types.js";
@@ -55,6 +70,7 @@ import { mergeCommands, mergeTools } from "@/extensions/merge.js";
 import { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
+import { AUTH_PREFIX, type KvStore, type KvStoreEntry } from "@/kv/kv-store.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { detectCrossBranch, runBranchSummary } from "@/sessions/branch-summary.js";
 import { buildSessionContext, walkPath } from "@/sessions/build-context.js";
@@ -75,6 +91,10 @@ import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools, toolKindFor } from "@/tools/
 import { BODHI_PI_VERSION } from "@/version.js";
 import {
 	EXT_DELETE_SESSION,
+	EXT_KV_GET,
+	EXT_KV_LIST,
+	EXT_KV_REMOVE,
+	EXT_KV_SET,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_CONFIG,
@@ -83,9 +103,14 @@ import {
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
 	EXT_SESSION_SET_NAME,
+	EXT_SESSION_SETTINGS_GET,
+	EXT_SESSION_SETTINGS_LIST,
+	EXT_SESSION_SETTINGS_SET,
+	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
+	THINKING_CONFIG_ID,
 } from "./constants.js";
 import {
 	agentToolContentForAcp,
@@ -120,11 +145,21 @@ export interface BodhiPiConfig {
 	extensionFactories?: RegisteredExtension[];
 	/** Compaction thresholds. Defaults to `DEFAULT_COMPACTION_SETTINGS`. */
 	compaction?: Partial<CompactionSettings>;
+	/** Home dir for the global settings layer (`~/.bodhi-pi/settings.json`); Node-only. */
+	homeDir?: string;
+	/** Optional unjailed FS used for the global settings file. Defaults to `filesystem` when unset. */
+	globalFilesystem?: Filesystem;
+	/** Host-injected KV store; auth keys live under `auth/<provider>`. */
+	kvStore?: KvStore;
+	/** Host-explicit default thinking level; beats global/project settings. */
+	defaultThinkingLevel?: ModelThinkingLevel;
 }
 
 interface SessionState {
 	piAgent: PiAgent;
 	currentModelId: string;
+	thinkingLevel: ModelThinkingLevel;
+	pendingThinkingLevelChange: boolean;
 	cwd: string;
 	tools: AgentTool[];
 	/** Discovered once at session hydration; refresh requires `session/close` + `session/load`. */
@@ -142,6 +177,32 @@ interface SessionState {
 	contextFiles: ContextFile[];
 	projectSettings: BodhiPiProjectSettings;
 	projectSettingsPresent: boolean;
+	/** Global settings layer snapshot (Node hosts only); `null` when `BodhiPiConfig.homeDir` was omitted. */
+	globalSettings: BodhiPiProjectSettings | null;
+	globalSettingsPresent: boolean;
+	globalSettingsParseError?: string;
+	projectSettingsParseError?: string;
+	sessionOverrides: BodhiPiProjectSettings;
+	retryOptions: ResolvedRetryOptions;
+}
+
+interface ResolvedRetryOptions {
+	maxRetries?: number;
+	timeoutMs?: number;
+	maxRetryDelayMs?: number;
+}
+
+function resolveProviderStreamOptions(provider: string, merged: BodhiPiProjectSettings): ResolvedRetryOptions {
+	const perProvider: ProviderOptionsEntry | undefined = merged.providerOptions?.[provider];
+	const defaults = merged.retry;
+	const out: ResolvedRetryOptions = {};
+	const maxRetries = perProvider?.maxRetries ?? defaults?.maxRetries;
+	const timeoutMs = perProvider?.timeoutMs;
+	const maxRetryDelayMs = perProvider?.maxRetryDelayMs ?? defaults?.maxDelayMs;
+	if (maxRetries !== undefined) out.maxRetries = maxRetries;
+	if (timeoutMs !== undefined) out.timeoutMs = timeoutMs;
+	if (maxRetryDelayMs !== undefined) out.maxRetryDelayMs = maxRetryDelayMs;
+	return out;
 }
 
 function toAvailableCommand(t: PromptTemplate): AvailableCommand {
@@ -276,7 +337,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		return {
 			sessionId: record.id,
-			configOptions: [this.buildModelConfigOption(this.config.defaultModelId)],
+			configOptions: this.buildAllConfigOptions(record.id),
 		};
 	}
 
@@ -356,14 +417,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 			reason: "load",
 		});
 		return {
-			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
+			configOptions: this.buildAllConfigOptions(params.sessionId),
 		};
 	}
 
 	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
 		await this.ensureExtensionRunner();
 		// Per ACP spec: rehydrate without replaying history.
-		const restored = await this.rehydrateSession(params.sessionId, params.cwd);
+		await this.rehydrateSession(params.sessionId, params.cwd);
 		await this.advertiseSlashable(params.sessionId);
 		await this.events.emitSessionStart({
 			type: "session_start",
@@ -372,7 +433,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			reason: "resume",
 		});
 		return {
-			configOptions: [this.buildModelConfigOption(restored.currentModelId)],
+			configOptions: this.buildAllConfigOptions(params.sessionId),
 		};
 	}
 
@@ -442,7 +503,280 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (method === EXT_SESSION_CONFIG) {
 			return await this.handleSessionConfig(params);
 		}
+		if (method === EXT_SESSION_SETTINGS_GET) {
+			return await this.handleSettingsGet(params);
+		}
+		if (method === EXT_SESSION_SETTINGS_SET) {
+			return await this.handleSettingsSet(params);
+		}
+		if (method === EXT_SESSION_SETTINGS_UNSET) {
+			return await this.handleSettingsUnset(params);
+		}
+		if (method === EXT_SESSION_SETTINGS_LIST) {
+			return await this.handleSettingsList(params);
+		}
+		if (method === EXT_KV_SET) {
+			return await this.handleKvSet(params);
+		}
+		if (method === EXT_KV_GET) {
+			return await this.handleKvGet(params);
+		}
+		if (method === EXT_KV_LIST) {
+			return await this.handleKvList(params);
+		}
+		if (method === EXT_KV_REMOVE) {
+			return await this.handleKvRemove(params);
+		}
 		throw new RequestError(-32601, `Method not found: ${method}`);
+	}
+
+	private requireSession(method: string, params: Record<string, unknown>): SessionState {
+		const sessionId = params.sessionId;
+		if (typeof sessionId !== "string") {
+			throw new RequestError(-32602, `${method}: sessionId must be a string`);
+		}
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new RequestError(-32602, `session ${sessionId} is not loaded. Call session/load first.`);
+		}
+		return session;
+	}
+
+	private parseScope(method: string, raw: unknown, defaultScope: SettingsScope): SettingsScope {
+		if (raw === undefined) return defaultScope;
+		if (raw === "global" || raw === "project" || raw === "session") return raw;
+		throw new RequestError(-32602, `${method}: scope must be one of "global"|"project"|"session"`);
+	}
+
+	private assertGlobalSupported(method: string): string {
+		const homeDir = this.config.homeDir;
+		if (!homeDir) {
+			throw new RequestError(
+				-32602,
+				`${method}: --global scope not supported on this runtime; use --project or --session`,
+			);
+		}
+		return homeDir;
+	}
+
+	private effectiveSettings(session: SessionState): BodhiPiProjectSettings {
+		return mergeSettings(
+			mergeSettings(session.globalSettings ?? {}, session.projectSettings),
+			session.sessionOverrides,
+		);
+	}
+
+	private sourceForKey(session: SessionState, dotted: string): SettingsScope | "default" {
+		const path = parseDottedKey(dotted);
+		if (path.length === 0) return "default";
+		if (getAt(session.sessionOverrides as Record<string, unknown>, path) !== undefined) return "session";
+		if (getAt(session.projectSettings as Record<string, unknown>, path) !== undefined) return "project";
+		if (getAt((session.globalSettings ?? {}) as Record<string, unknown>, path) !== undefined) return "global";
+		return "default";
+	}
+
+	private async handleSettingsGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const session = this.requireSession(EXT_SESSION_SETTINGS_GET, params);
+		const key = params.key;
+		if (typeof key !== "string" || key.length === 0) {
+			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_GET}: key must be a non-empty string`);
+		}
+		const scope = this.parseScope(EXT_SESSION_SETTINGS_GET, params.scope, "session");
+		const path = parseDottedKey(key);
+		let source: Record<string, unknown> = {};
+		const resolvedScope: SettingsScope | "default" | "effective" = scope;
+		if (scope === "global") {
+			this.assertGlobalSupported(EXT_SESSION_SETTINGS_GET);
+			source = (session.globalSettings ?? {}) as Record<string, unknown>;
+		} else if (scope === "project") {
+			source = session.projectSettings as Record<string, unknown>;
+		} else {
+			source = session.sessionOverrides as Record<string, unknown>;
+		}
+		const value = getAt(source, path);
+		const effectiveValue = getAt(this.effectiveSettings(session) as Record<string, unknown>, path);
+		const effectiveSource = this.sourceForKey(session, key);
+		return {
+			key,
+			scope: resolvedScope,
+			value: value ?? null,
+			effective: effectiveValue ?? null,
+			source: effectiveSource,
+		};
+	}
+
+	private async handleSettingsSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const session = this.requireSession(EXT_SESSION_SETTINGS_SET, params);
+		const key = params.key;
+		if (typeof key !== "string" || key.length === 0) {
+			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_SET}: key must be a non-empty string`);
+		}
+		if (!("value" in params)) {
+			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_SET}: value is required`);
+		}
+		const value = typeof params.value === "string" ? parseSettingValue(params.value) : params.value;
+		const scope = this.parseScope(EXT_SESSION_SETTINGS_SET, params.scope, "session");
+		const path = parseDottedKey(key);
+
+		if (scope === "global") {
+			const homeDir = this.assertGlobalSupported(EXT_SESSION_SETTINGS_SET);
+			const fs = this.config.globalFilesystem ?? this.config.filesystem;
+			const updated = await writeGlobalSetting(fs, homeDir, key, value);
+			session.globalSettings = updated;
+		} else if (scope === "project") {
+			const updated = await writeProjectSetting(this.config.filesystem, session.cwd, key, value);
+			session.projectSettings = updated;
+			session.projectSettingsPresent = true;
+		} else {
+			// Session scope: mutate in-memory overrides only.
+			const next = { ...(session.sessionOverrides as Record<string, unknown>) };
+			session.sessionOverrides = (function applySet() {
+				const root = { ...next };
+				let cur = root;
+				for (let i = 0; i < path.length - 1; i++) {
+					const seg = path[i];
+					const existing = cur[seg];
+					const fresh =
+						existing && typeof existing === "object" && !Array.isArray(existing)
+							? { ...(existing as Record<string, unknown>) }
+							: {};
+					cur[seg] = fresh;
+					cur = fresh as Record<string, unknown>;
+				}
+				if (path.length > 0) cur[path[path.length - 1]] = value;
+				return root;
+			})() as BodhiPiProjectSettings;
+		}
+
+		return {
+			key,
+			scope,
+			effective: getAt(this.effectiveSettings(session) as Record<string, unknown>, path) ?? null,
+		};
+	}
+
+	private async handleSettingsUnset(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const session = this.requireSession(EXT_SESSION_SETTINGS_UNSET, params);
+		const key = params.key;
+		if (typeof key !== "string" || key.length === 0) {
+			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_UNSET}: key must be a non-empty string`);
+		}
+		const scope = this.parseScope(EXT_SESSION_SETTINGS_UNSET, params.scope, "session");
+		const path = parseDottedKey(key);
+
+		if (scope === "global") {
+			const homeDir = this.assertGlobalSupported(EXT_SESSION_SETTINGS_UNSET);
+			const fs = this.config.globalFilesystem ?? this.config.filesystem;
+			const updated = await unsetGlobalSetting(fs, homeDir, key);
+			session.globalSettings = updated;
+		} else if (scope === "project") {
+			const updated = await unsetProjectSetting(this.config.filesystem, session.cwd, key);
+			session.projectSettings = updated;
+		} else {
+			// Session scope: delete from in-memory overrides.
+			const root = { ...(session.sessionOverrides as Record<string, unknown>) };
+			let cur = root;
+			let ok = true;
+			for (let i = 0; i < path.length - 1; i++) {
+				const next = cur[path[i]];
+				if (!next || typeof next !== "object" || Array.isArray(next)) {
+					ok = false;
+					break;
+				}
+				const fresh = { ...(next as Record<string, unknown>) };
+				cur[path[i]] = fresh;
+				cur = fresh;
+			}
+			if (ok && path.length > 0) delete cur[path[path.length - 1]];
+			session.sessionOverrides = root as BodhiPiProjectSettings;
+		}
+
+		return {
+			key,
+			scope,
+			effective: getAt(this.effectiveSettings(session) as Record<string, unknown>, path) ?? null,
+		};
+	}
+
+	private async handleSettingsList(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const session = this.requireSession(EXT_SESSION_SETTINGS_LIST, params);
+		const raw = params.scope;
+		const scope: SettingsScope | "effective" =
+			raw === undefined || raw === "effective"
+				? "effective"
+				: this.parseScope(EXT_SESSION_SETTINGS_LIST, raw, "session");
+		if (scope === "global") this.assertGlobalSupported(EXT_SESSION_SETTINGS_LIST);
+		const settings =
+			scope === "global"
+				? (session.globalSettings ?? {})
+				: scope === "project"
+					? session.projectSettings
+					: scope === "session"
+						? session.sessionOverrides
+						: this.effectiveSettings(session);
+		return {
+			scope,
+			settings: settings as Record<string, unknown>,
+		};
+	}
+
+	private requireKvStore(method: string): KvStore {
+		if (!this.config.kvStore) {
+			throw new RequestError(-32601, `${method}: kvStore not configured on this host`);
+		}
+		return this.config.kvStore;
+	}
+
+	private async handleKvSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.requireKvStore(EXT_KV_SET);
+		const key = params.key;
+		const value = params.value;
+		if (typeof key !== "string" || key.length === 0) {
+			throw new RequestError(-32602, `${EXT_KV_SET}: key must be a non-empty string`);
+		}
+		if (typeof value !== "string") {
+			throw new RequestError(-32602, `${EXT_KV_SET}: value must be a string`);
+		}
+		const secret = params.secret === true;
+		await kv.set(key, value, { secret });
+		return { key, secret };
+	}
+
+	private maskEntry(entry: KvStoreEntry): { value: string; secret: boolean } {
+		return { value: entry.secret ? "***" : entry.value, secret: entry.secret };
+	}
+
+	private async handleKvGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.requireKvStore(EXT_KV_GET);
+		const key = params.key;
+		if (typeof key !== "string" || key.length === 0) {
+			throw new RequestError(-32602, `${EXT_KV_GET}: key must be a non-empty string`);
+		}
+		const entry = await kv.getWithMeta(key);
+		if (!entry) return { key, value: null, secret: false };
+		return { key, ...this.maskEntry(entry) };
+	}
+
+	private async handleKvList(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.requireKvStore(EXT_KV_LIST);
+		const prefix = params.prefix;
+		if (prefix !== undefined && typeof prefix !== "string") {
+			throw new RequestError(-32602, `${EXT_KV_LIST}: prefix must be a string`);
+		}
+		const entries = await kv.listWithMeta(prefix);
+		return {
+			entries: entries.map((e) => ({ key: e.key, ...this.maskEntry(e) })),
+		};
+	}
+
+	private async handleKvRemove(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.requireKvStore(EXT_KV_REMOVE);
+		const key = params.key;
+		if (typeof key !== "string" || key.length === 0) {
+			throw new RequestError(-32602, `${EXT_KV_REMOVE}: key must be a non-empty string`);
+		}
+		await kv.remove(key);
+		return { key };
 	}
 
 	private async handleSessionConfig(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -454,16 +788,37 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!session) {
 			throw new RequestError(-32602, `session ${sessionId} is not loaded. Call session/load first.`);
 		}
+		const effective = mergeSettings(
+			mergeSettings(session.globalSettings ?? {}, session.projectSettings),
+			session.sessionOverrides,
+		);
 		return {
 			sessionId,
 			cwd: session.cwd,
 			defaultModelId: this.config.defaultModelId,
 			currentModelId: session.currentModelId,
+			thinkingLevel: session.thinkingLevel,
+			retryOptions: { ...session.retryOptions },
 			compaction: { ...session.compaction },
 			appendSystemPrompt: session.appendSystemPrompt,
 			contextFilePaths: session.contextFiles.map((f) => f.path),
 			projectSettingsPresent: session.projectSettingsPresent,
 			projectSettings: session.projectSettings as Record<string, unknown>,
+			globalSettingsPresent: session.globalSettingsPresent,
+			globalSettings: (session.globalSettings ?? null) as Record<string, unknown> | null,
+			sessionOverrides: session.sessionOverrides as Record<string, unknown>,
+			layers: {
+				global: (session.globalSettings ?? null) as Record<string, unknown> | null,
+				project: session.projectSettings as Record<string, unknown>,
+				sessionOverrides: session.sessionOverrides as Record<string, unknown>,
+				effective: effective as Record<string, unknown>,
+			},
+			...(session.globalSettingsParseError !== undefined
+				? { globalSettingsParseError: session.globalSettingsParseError }
+				: {}),
+			...(session.projectSettingsParseError !== undefined
+				? { projectSettingsParseError: session.projectSettingsParseError }
+				: {}),
 		};
 	}
 
@@ -763,11 +1118,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 		};
 	}
 
-	private async resolveApiKeyForCompaction(provider: string): Promise<string | undefined> {
+	private async resolveProviderApiKey(provider: string): Promise<string | undefined> {
+		const kvKey = await this.config.kvStore?.get(AUTH_PREFIX + provider);
+		if (kvKey !== undefined) return kvKey;
 		const hostKey = this.config.getApiKey(provider);
 		if (hostKey !== undefined) return hostKey;
 		const ext = await this.extensionRunner?.resolveProviderKey(provider);
 		return ext ?? undefined;
+	}
+
+	private async resolveApiKeyForCompaction(provider: string): Promise<string | undefined> {
+		return this.resolveProviderApiKey(provider);
 	}
 
 	async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
@@ -775,19 +1136,32 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!session) {
 			throw new RequestError(-32602, `unknown session: ${params.sessionId}`);
 		}
-		if (params.configId !== MODEL_CONFIG_ID) {
+		if (params.configId === MODEL_CONFIG_ID) {
+			await this.setSessionModel(params.sessionId, session, params.value);
+		} else if (params.configId === THINKING_CONFIG_ID) {
+			await this.setSessionThinkingLevel(params.sessionId, session, params.value);
+		} else {
 			throw new RequestError(-32602, `unknown configId: ${params.configId}`);
 		}
-		if (typeof params.value !== "string") {
-			throw new RequestError(-32602, `model config requires string value, got ${typeof params.value}`);
+		return { configOptions: this.buildAllConfigOptions(params.sessionId) };
+	}
+
+	private async setSessionModel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
+		if (typeof value !== "string") {
+			throw new RequestError(-32602, `model config requires string value, got ${typeof value}`);
 		}
-		const newModel = this.findModel(params.value);
+		const newModel = this.findModel(value);
 		const previousModelId = session.currentModelId;
-		// pi-ai's streamSimple reads state.model per turn, so mutating here
-		// routes the next prompt to the new model.
+		// pi-ai's streamSimple reads state.model per turn, so mutating here routes the next prompt to the new model.
 		session.piAgent.state.model = newModel;
-		session.currentModelId = params.value;
-		await this.appendEntry(params.sessionId, session, {
+		session.currentModelId = value;
+		const clamped = clampThinkingLevel(newModel, session.thinkingLevel);
+		if (clamped !== session.thinkingLevel) {
+			session.thinkingLevel = clamped;
+			session.piAgent.state.thinkingLevel = clamped as never;
+			session.pendingThinkingLevelChange = true;
+		}
+		await this.appendEntry(sessionId, session, {
 			type: "model_change",
 			id: randomUUID(),
 			parentId: session.leafId,
@@ -797,13 +1171,37 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		await this.events.emitModelSelect({
 			type: "model_select",
-			sessionId: params.sessionId,
+			sessionId,
 			fromModelId: previousModelId,
-			toModelId: params.value,
+			toModelId: value,
 		});
-		return {
-			configOptions: [this.buildModelConfigOption(params.value)],
-		};
+	}
+
+	private async setSessionThinkingLevel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
+		if (typeof value !== "string") {
+			throw new RequestError(-32602, `thinking config requires string value, got ${typeof value}`);
+		}
+		const supported = getSupportedThinkingLevels(session.piAgent.state.model);
+		if (!supported.includes(value as ModelThinkingLevel)) {
+			throw new RequestError(
+				-32602,
+				`unsupported thinking level "${value}" for model ${session.piAgent.state.model.id}; supported: ${supported.join(", ")}`,
+			);
+		}
+		const level = value as ModelThinkingLevel;
+		if (level === session.thinkingLevel) return;
+		session.thinkingLevel = level;
+		// Mutate pi-agent state so subsequent prompt() invocations see the new level
+		// (prepareNextTurn only handles mid-loop swaps within a single agentLoop call).
+		session.piAgent.state.thinkingLevel = level as never;
+		session.pendingThinkingLevelChange = true;
+		await this.appendEntry(sessionId, session, {
+			type: "thinking_change",
+			id: randomUUID(),
+			parentId: session.leafId,
+			timestamp: Date.now(),
+			level,
+		});
 	}
 
 	async prompt(params: PromptRequest): Promise<PromptResponse> {
@@ -1196,6 +1594,30 @@ class BodhiPiAcpAgent implements AcpAgent {
 		};
 	}
 
+	private buildThinkingConfigOption(session: SessionState): SessionConfigOption | undefined {
+		const model = session.piAgent.state.model;
+		const supported = getSupportedThinkingLevels(model);
+		// Models that only support "off" — non-reasoning — don't advertise the option at all.
+		if (supported.length <= 1) return undefined;
+		return {
+			id: THINKING_CONFIG_ID,
+			name: "Thinking",
+			category: "model",
+			type: "select",
+			currentValue: session.thinkingLevel,
+			options: supported.map((level) => ({ value: level, name: level })),
+		};
+	}
+
+	private buildAllConfigOptions(sessionId: string): SessionConfigOption[] {
+		const session = this.sessions.get(sessionId);
+		if (!session) return [];
+		const options: SessionConfigOption[] = [this.buildModelConfigOption(session.currentModelId)];
+		const thinking = this.buildThinkingConfigOption(session);
+		if (thinking) options.push(thinking);
+		return options;
+	}
+
 	private async rehydrateSession(
 		sessionId: string,
 		cwd: string,
@@ -1213,7 +1635,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				: record.entries.length > 0
 					? record.entries[record.entries.length - 1].id
 					: null;
-		await this._buildSessionState(sessionId, restoredModel, cwd, ctx.messages, leafId);
+		await this._buildSessionState(sessionId, restoredModel, cwd, ctx.messages, leafId, ctx.currentThinkingLevel);
 		return { entries: record.entries, currentModelId: modelId };
 	}
 
@@ -1225,6 +1647,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		cwd: string,
 		messages: AgentMessage[] = [],
 		leafId: string | null = null,
+		initialThinkingLevel: ModelThinkingLevel | null = null,
 	): Promise<void> {
 		const builtinTools = createBuiltinTools({
 			filesystem: this.config.filesystem,
@@ -1235,14 +1658,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const skills = await loadProjectSkills(this.config.filesystem, cwd);
 		const contextFiles = await loadProjectContextFiles(this.config.filesystem, cwd);
 		const projectSettingsResult = await loadProjectSettings(this.config.filesystem, cwd);
+		const globalSettingsResult = this.config.homeDir
+			? await loadGlobalSettings(this.config.globalFilesystem ?? this.config.filesystem, this.config.homeDir)
+			: undefined;
+		const mergedFileSettings = mergeSettings(globalSettingsResult?.settings ?? {}, projectSettingsResult.settings);
 		// Merge extension tools/commands. Builtins + project commands win on collision.
 		const tools = this.extensionRunner ? mergeTools(builtinTools, this.extensionRunner.getTools()) : builtinTools;
 		const commands = this.extensionRunner
 			? mergeCommands(projectCommands, this.extensionRunner.getCommands())
 			: projectCommands;
-		// Append precedence: BodhiPiConfig.appendSystemPrompt (host-explicit) > project settings.
-		const resolvedAppend =
-			this.config.appendSystemPrompt ?? projectSettingsResult.settings.appendSystemPrompt ?? undefined;
+		// Append precedence: BodhiPiConfig.appendSystemPrompt (host-explicit) > merged file settings.
+		const resolvedAppend = this.config.appendSystemPrompt ?? mergedFileSettings.appendSystemPrompt ?? undefined;
 		const composedSystemPrompt = buildSystemPrompt({
 			...(this.config.systemPrompt !== undefined ? { customPrompt: this.config.systemPrompt } : {}),
 			selectedTools: tools.map((t) => t.name),
@@ -1252,28 +1678,27 @@ class BodhiPiAcpAgent implements AcpAgent {
 			contextFiles,
 			skills,
 		});
-		// Precedence: built-in defaults < project settings < host-explicit BodhiPiConfig.compaction.
 		const effectiveCompaction: CompactionSettings = {
 			...DEFAULT_COMPACTION_SETTINGS,
-			...(projectSettingsResult.settings.compaction ?? {}),
+			...(mergedFileSettings.compaction ?? {}),
 			...(this.config.compaction ?? {}),
 		};
+		const requestedThinking: ModelThinkingLevel =
+			initialThinkingLevel ?? this.config.defaultThinkingLevel ?? mergedFileSettings.defaultThinkingLevel ?? "off";
+		const resolvedThinkingLevel = clampThinkingLevel(model, requestedThinking);
+		const retryOptions = resolveProviderStreamOptions(model.provider, mergedFileSettings);
 		const events = this.events;
-		const extRunner = this.extensionRunner;
-		const hostGetApiKey = this.config.getApiKey;
+		const resolveApiKey = (provider: string) => this.resolveProviderApiKey(provider);
 		const piAgent = new Agent({
+			...retryOptions,
 			initialState: {
 				model,
 				...(messages.length > 0 ? { messages } : {}),
 				tools,
 				...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
+				thinkingLevel: resolvedThinkingLevel as never,
 			},
-			getApiKey: async (provider: string) => {
-				const hostKey = hostGetApiKey(provider);
-				if (hostKey !== undefined) return hostKey;
-				if (extRunner) return await extRunner.resolveProviderKey(provider);
-				return undefined;
-			},
+			getApiKey: resolveApiKey,
 			beforeToolCall: async (ctx: BeforeToolCallContext): Promise<BeforeToolCallResult | undefined> => {
 				const result = await events.emitToolCall({
 					type: "tool_call",
@@ -1317,12 +1742,18 @@ class BodhiPiAcpAgent implements AcpAgent {
 				});
 			},
 			prepareNextTurn: async (): Promise<AgentLoopTurnUpdate | undefined> => {
-				return await this.maybeProactiveCompact(sessionId);
+				const compactUpdate = await this.maybeProactiveCompact(sessionId);
+				const state = this.sessions.get(sessionId);
+				if (!state?.pendingThinkingLevelChange) return compactUpdate;
+				state.pendingThinkingLevelChange = false;
+				return { ...(compactUpdate ?? {}), thinkingLevel: state.thinkingLevel as never };
 			},
 		});
 		this.sessions.set(sessionId, {
 			piAgent,
 			currentModelId: model.id,
+			thinkingLevel: resolvedThinkingLevel,
+			pendingThinkingLevelChange: false,
 			cwd,
 			tools,
 			commands,
@@ -1335,6 +1766,16 @@ class BodhiPiAcpAgent implements AcpAgent {
 			contextFiles,
 			projectSettings: projectSettingsResult.settings,
 			projectSettingsPresent: projectSettingsResult.present,
+			globalSettings: globalSettingsResult ? globalSettingsResult.settings : null,
+			globalSettingsPresent: globalSettingsResult?.present ?? false,
+			...(globalSettingsResult?.parseError !== undefined
+				? { globalSettingsParseError: globalSettingsResult.parseError }
+				: {}),
+			...(projectSettingsResult.parseError !== undefined
+				? { projectSettingsParseError: projectSettingsResult.parseError }
+				: {}),
+			sessionOverrides: {},
+			retryOptions,
 		});
 	}
 

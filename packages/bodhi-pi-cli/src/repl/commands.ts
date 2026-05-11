@@ -1,6 +1,10 @@
 import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
 import {
+	AUTH_PREFIX,
 	EXT_DELETE_SESSION,
+	EXT_KV_LIST,
+	EXT_KV_REMOVE,
+	EXT_KV_SET,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_CONFIG,
@@ -9,6 +13,10 @@ import {
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
 	EXT_SESSION_SET_NAME,
+	EXT_SESSION_SETTINGS_GET,
+	EXT_SESSION_SETTINGS_LIST,
+	EXT_SESSION_SETTINGS_SET,
+	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 	type SessionStore,
@@ -37,6 +45,20 @@ export function isCommand(line: string): boolean {
 	return line.startsWith("/");
 }
 
+/** Extract `--global|--project|--session` from a token list, returning the scope (or undefined) and remaining args. */
+function extractScopeFlag(tokens: string[]): { scope?: "global" | "project" | "session"; rest: string[] } {
+	const rest: string[] = [];
+	let scope: "global" | "project" | "session" | undefined;
+	for (const t of tokens) {
+		if (t === "--global") scope = "global";
+		else if (t === "--project") scope = "project";
+		else if (t === "--session") scope = "session";
+		else if (t === "--effective") scope = undefined;
+		else rest.push(t);
+	}
+	return { ...(scope !== undefined ? { scope } : {}), rest };
+}
+
 /** Returns true if the REPL should exit. */
 export async function handleCommand(line: string, ctx: CommandContext): Promise<boolean> {
 	const parts = line.trim().split(/\s+/);
@@ -62,6 +84,13 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /session           show session stats (counts + leaf id)",
 				"  /export            print the session as JSONL to stdout",
 				"  /config            show resolved per-session config (compaction, append, AGENTS.md paths)",
+				"  /settings list     [--global|--project|--session|--effective]",
+				"  /settings get <key>     [--global|--project|--session]",
+				"  /settings set <key> <value>  [--global|--project|--session]   (default --session)",
+				"  /settings unset <key>   [--global|--project|--session]",
+				"  /login <provider> <api-key>   store an API key (secret)",
+				"  /logout <provider>            remove a stored API key",
+				"  /logins                       list providers with stored auth (masked)",
 				"  /quit              exit",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -391,6 +420,134 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 					...result.contextFilePaths.map((p) => `    - ${p}`),
 				];
 				process.stdout.write(`${lines.join("\n")}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/settings": {
+			const sub = parts[1];
+			if (!sub) {
+				process.stdout.write("usage: /settings list|get|set|unset ...\n");
+				return false;
+			}
+			const tail = parts.slice(2);
+			try {
+				if (sub === "list") {
+					const { scope } = extractScopeFlag(tail);
+					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+						sessionId: ctx.state.sessionId,
+						...(scope ? { scope } : {}),
+					})) as { scope: string; settings: Record<string, unknown> };
+					process.stdout.write(`scope: ${result.scope}\n`);
+					const entries = Object.entries(result.settings ?? {});
+					if (entries.length === 0) process.stdout.write("  (empty)\n");
+					for (const [k, v] of entries) process.stdout.write(`  ${k} = ${JSON.stringify(v)}\n`);
+				} else if (sub === "get") {
+					const { scope, rest } = extractScopeFlag(tail);
+					const key = rest[0];
+					if (!key) {
+						process.stdout.write("usage: /settings get <key> [--scope]\n");
+						return false;
+					}
+					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_GET, {
+						sessionId: ctx.state.sessionId,
+						key,
+						...(scope ? { scope } : {}),
+					})) as { key: string; value: unknown; effective: unknown; source: string };
+					process.stdout.write(
+						`  ${result.key} = ${JSON.stringify(result.effective)}  (source: ${result.source})\n`,
+					);
+				} else if (sub === "set") {
+					const { scope, rest } = extractScopeFlag(tail);
+					const key = rest[0];
+					const value = rest.slice(1).join(" ");
+					if (!key || rest.length < 2) {
+						process.stdout.write("usage: /settings set <key> <value> [--scope]\n");
+						return false;
+					}
+					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
+						sessionId: ctx.state.sessionId,
+						key,
+						value,
+						...(scope ? { scope } : {}),
+					})) as { scope: string; effective: unknown };
+					process.stdout.write(
+						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
+					);
+				} else if (sub === "unset") {
+					const { scope, rest } = extractScopeFlag(tail);
+					const key = rest[0];
+					if (!key) {
+						process.stdout.write("usage: /settings unset <key> [--scope]\n");
+						return false;
+					}
+					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_UNSET, {
+						sessionId: ctx.state.sessionId,
+						key,
+						...(scope ? { scope } : {}),
+					})) as { scope: string; effective: unknown };
+					process.stdout.write(
+						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
+					);
+				} else {
+					process.stdout.write(`unknown /settings subcommand: ${sub}\n`);
+				}
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/login": {
+			const provider = parts[1];
+			const apiKey = parts.slice(2).join(" ").trim();
+			if (!provider || !apiKey) {
+				process.stdout.write("usage: /login <provider> <api-key>\n");
+				return false;
+			}
+			try {
+				await ctx.clientConn.extMethod(EXT_KV_SET, {
+					key: `${AUTH_PREFIX}${provider}`,
+					value: apiKey,
+					secret: true,
+				});
+				process.stdout.write(`stored auth for ${provider}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/logout": {
+			const provider = parts[1];
+			if (!provider) {
+				process.stdout.write("usage: /logout <provider>\n");
+				return false;
+			}
+			try {
+				await ctx.clientConn.extMethod(EXT_KV_REMOVE, { key: `${AUTH_PREFIX}${provider}` });
+				process.stdout.write(`removed auth for ${provider}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/logins": {
+			try {
+				const result = (await ctx.clientConn.extMethod(EXT_KV_LIST, { prefix: AUTH_PREFIX })) as {
+					entries: Array<{ key: string; value: string; secret: boolean }>;
+				};
+				if (result.entries.length === 0) {
+					process.stdout.write("  (no stored auth)\n");
+				} else {
+					for (const e of result.entries) {
+						const provider = e.key.startsWith(AUTH_PREFIX) ? e.key.slice(AUTH_PREFIX.length) : e.key;
+						process.stdout.write(`  ${provider}: ${e.value}\n`);
+					}
+				}
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}

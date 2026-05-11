@@ -4,6 +4,7 @@ import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from
 import { createBrowserExtensionLoader } from "../extensions/browser-extension-loader";
 import { createSandboxedBrowserExtensionLoader } from "../extensions/sandboxed-browser-extension-loader";
 import { createZenfsFilesystem } from "../filesystem/zenfs-filesystem";
+import { createDexieKvStore } from "../kv/dexie-kv-store";
 import { createSandboxBridge } from "../sandbox/sandbox-bridge";
 import { createBrowserScriptExecutor } from "../script-executor/browser-script-executor";
 import { createSandboxedBrowserScriptExecutor } from "../script-executor/sandboxed-browser-script-executor";
@@ -110,6 +111,7 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 
 			const filesystem = createZenfsFilesystem();
 			const sessionStore = createDexieSessionStore({ dbName });
+			const kvStore = createDexieKvStore({ dbName: `${dbName}-kv` });
 
 			const bridge = sandboxPort ? createSandboxBridge(sandboxPort) : undefined;
 			const scriptExecutor = bridge
@@ -126,6 +128,7 @@ export function bootstrapAgentWorker(options: BootstrapAgentWorkerOptions = {}):
 				getApiKey: (provider: string) => apiKeys[provider],
 				filesystem,
 				sessionStore,
+				kvStore,
 				scriptExecutor,
 				...(systemPrompt !== undefined ? { systemPrompt } : {}),
 				...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),

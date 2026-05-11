@@ -253,6 +253,10 @@ export class AcpHttpClient {
 		return this.call("session/setSessionConfigOption", params as unknown as Record<string, unknown>);
 	}
 
+	extMethod<T = unknown>(method: string, params: Record<string, unknown>): Promise<T> {
+		return this.call<T>(method, params);
+	}
+
 	private notificationHandlers = new Set<SessionNotificationHandler>();
 	private lifecycleHandlers = new Set<LifecycleEventHandler>();
 

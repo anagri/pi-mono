@@ -1,6 +1,11 @@
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
-import { createNodeExtensionLoader, createNodeFilesystem, createNodeScriptExecutor } from "@bodhiapp/bodhi-pi-node";
+import {
+	createNodeExtensionLoader,
+	createNodeFilesystem,
+	createNodeKvStore,
+	createNodeScriptExecutor,
+} from "@bodhiapp/bodhi-pi-node";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
@@ -17,6 +22,8 @@ export interface WireAgentOptions {
 	appendSystemPrompt?: string;
 	/** When set, all users share this dir as cwd (CLI `--workspace <dir>`). */
 	workspaceOverride?: string;
+	/** Per-user KV dir; defaults to NodeKvStore's `~/.bodhi-pi/kv` if unset. */
+	kvStoreDir?: string;
 }
 
 export type AgentFactory = (conn: AgentSideConnection) => Agent;
@@ -108,6 +115,7 @@ export async function wireAgentForConnection(opts: WireAgentOptions): Promise<Ag
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
 	const extensionFactories = await createNodeExtensionLoader({ cwd });
 	const scriptExecutor = createNodeScriptExecutor();
+	const kvStore = opts.kvStoreDir ? createNodeKvStore({ dir: opts.kvStoreDir }) : createNodeKvStore();
 
 	return (conn) => {
 		// Inner factory is built here (not above) so eventHandlers can close over conn.
@@ -117,6 +125,7 @@ export async function wireAgentForConnection(opts: WireAgentOptions): Promise<Ag
 			getApiKey: opts.getApiKey,
 			sessionStore,
 			filesystem,
+			kvStore,
 			scriptExecutor,
 			eventHandlers: eventForwardingHandlers(conn),
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),

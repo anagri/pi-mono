@@ -1,12 +1,33 @@
 import path from "node:path";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
 
 export const SETTINGS_PATH = ".bodhi-pi/settings.json";
+/** Path under the user's home where the global layer lives (Node hosts only). */
+export const GLOBAL_SETTINGS_PATH = ".bodhi-pi/settings.json";
+
+/** Per-provider stream options (retry / timeout). Threaded into pi-ai SimpleStreamOptions. */
+export interface ProviderOptionsEntry {
+	maxRetries?: number;
+	timeoutMs?: number;
+	maxRetryDelayMs?: number;
+}
+
+/** Default retry behavior applied when a specific provider isn't called out. */
+export interface RetrySettings {
+	maxRetries?: number;
+	baseDelayMs?: number;
+	maxDelayMs?: number;
+	enabled?: boolean;
+}
 
 export interface BodhiPiProjectSettings {
 	compaction?: Partial<CompactionSettings>;
 	appendSystemPrompt?: string;
+	defaultThinkingLevel?: ModelThinkingLevel;
+	providerOptions?: Record<string, ProviderOptionsEntry>;
+	retry?: RetrySettings;
 	/** Unknown keys are preserved here so /config can surface them for debugging. */
 	[key: string]: unknown;
 }

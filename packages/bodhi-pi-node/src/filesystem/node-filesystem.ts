@@ -9,8 +9,10 @@ export interface NodeFilesystemOptions {
 
 export function createNodeFilesystem(opts: NodeFilesystemOptions): Filesystem {
 	const { rootCwd } = opts;
+	const unjailed = rootCwd === "/";
 	function jail(absolutePath: string): string {
 		const resolved = path.resolve(absolutePath);
+		if (unjailed) return resolved;
 		if (resolved !== rootCwd && !resolved.startsWith(rootCwd + path.sep)) {
 			throw Object.assign(new Error(`EACCES: path escapes root: ${absolutePath}`), { code: "EACCES" });
 		}

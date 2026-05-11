@@ -166,6 +166,10 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 				"_bodhi-pi/session/compact",
 				"_bodhi-pi/session/setName",
 				"_bodhi-pi/session/config",
+				"_bodhi-pi/session/settings/get",
+				"_bodhi-pi/session/settings/set",
+				"_bodhi-pi/session/settings/unset",
+				"_bodhi-pi/session/settings/list",
 			]);
 			if (NEEDS_REHYDRATE.has(body.method)) {
 				const sid = (params as { sessionId?: unknown }).sessionId;

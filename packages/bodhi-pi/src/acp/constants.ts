@@ -1,6 +1,9 @@
 /** ACP `SessionConfigOption.id` for the model selector advertised on `session/new`. */
 export const MODEL_CONFIG_ID = "model";
 
+/** ACP `SessionConfigOption.id` for the reasoning/thinking-level select. Omitted from configOptions when the active model has no thinking support. */
+export const THINKING_CONFIG_ID = "thinking";
+
 /** Custom ACP extension method (per `extensibility.mdx` `_`-prefix rule) for permanently deleting a session. */
 export const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
 
@@ -33,3 +36,21 @@ export const EXT_SESSION_EXPORT = "_bodhi-pi/session/export";
 
 /** Return the per-session resolved config (compaction, append, contextFilePaths, projectSettingsPresent). */
 export const EXT_SESSION_CONFIG = "_bodhi-pi/session/config";
+
+/** Read one settings key at the requested scope (global|project|session|effective). */
+export const EXT_SESSION_SETTINGS_GET = "_bodhi-pi/session/settings/get";
+/** Write one settings key at the requested scope. Default scope is "session". */
+export const EXT_SESSION_SETTINGS_SET = "_bodhi-pi/session/settings/set";
+/** Remove one settings key at the requested scope. */
+export const EXT_SESSION_SETTINGS_UNSET = "_bodhi-pi/session/settings/unset";
+/** List settings entries for the requested scope (default: effective merged view). */
+export const EXT_SESSION_SETTINGS_LIST = "_bodhi-pi/session/settings/list";
+
+/** Write a KV entry. Params: { key, value, secret? }. */
+export const EXT_KV_SET = "_bodhi-pi/kv/set";
+/** Read a KV entry. Secret values are masked to "***" in the response. */
+export const EXT_KV_GET = "_bodhi-pi/kv/get";
+/** List KV entries, optionally prefix-filtered. Secret values masked to "***". */
+export const EXT_KV_LIST = "_bodhi-pi/kv/list";
+/** Remove a KV entry. */
+export const EXT_KV_REMOVE = "_bodhi-pi/kv/remove";

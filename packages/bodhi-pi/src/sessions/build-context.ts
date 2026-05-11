@@ -1,10 +1,12 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { BranchSummaryEntry, CompactionEntry, CustomMessageEntry, SessionEntry } from "./entries.js";
 import type { SessionRecord } from "./session-store.js";
 
 export interface SessionContext {
 	messages: AgentMessage[];
 	currentModelId: string | null;
+	currentThinkingLevel: ModelThinkingLevel | null;
 	name: string | null;
 }
 
@@ -88,7 +90,7 @@ export function buildSessionContext(
 
 	const targetLeaf = leafId !== undefined ? leafId : (record.leafId ?? null);
 	if (targetLeaf === null && entries.length === 0) {
-		return { messages: [], currentModelId: null, name: null };
+		return { messages: [], currentModelId: null, currentThinkingLevel: null, name: null };
 	}
 
 	let path: SessionEntry[];
@@ -106,11 +108,14 @@ export function buildSessionContext(
 	}
 
 	let currentModelId: string | null = null;
+	let currentThinkingLevel: ModelThinkingLevel | null = null;
 	let name: string | null = null;
 	let compaction: CompactionEntry | null = null;
 	for (const entry of path) {
 		if (entry.type === "model_change") {
 			currentModelId = entry.modelId;
+		} else if (entry.type === "thinking_change") {
+			currentThinkingLevel = entry.level;
 		} else if (entry.type === "session_info" && entry.name !== undefined) {
 			name = entry.name;
 		} else if (entry.type === "compaction") {
@@ -145,5 +150,5 @@ export function buildSessionContext(
 		for (const entry of path) appendIfMessage(entry);
 	}
 
-	return { messages, currentModelId, name };
+	return { messages, currentModelId, currentThinkingLevel, name };
 }

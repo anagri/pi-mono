@@ -2,6 +2,10 @@ export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprot
 export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
 export {
 	EXT_DELETE_SESSION,
+	EXT_KV_GET,
+	EXT_KV_LIST,
+	EXT_KV_REMOVE,
+	EXT_KV_SET,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_CONFIG,
@@ -10,10 +14,25 @@ export {
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
 	EXT_SESSION_SET_NAME,
+	EXT_SESSION_SETTINGS_GET,
+	EXT_SESSION_SETTINGS_LIST,
+	EXT_SESSION_SETTINGS_SET,
+	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
+	THINKING_CONFIG_ID,
 } from "./acp/constants.js";
+export {
+	type BodhiPiProjectSettings,
+	GLOBAL_SETTINGS_PATH,
+	loadProjectSettings,
+	type ProviderOptionsEntry,
+	type RetrySettings,
+	SETTINGS_PATH,
+} from "./core/settings.js";
+export { loadGlobalSettings } from "./core/settings-global.js";
+export { mergeSettings } from "./core/settings-merge.js";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,
@@ -56,6 +75,8 @@ export type {
 } from "./extensions/types.js";
 export type { DirEntry, FileStat, Filesystem } from "./filesystem/filesystem.js";
 export { createInMemoryFilesystem } from "./filesystem/in-memory-filesystem.js";
+export { createInMemoryKvStore } from "./kv/in-memory-kv-store.js";
+export { AUTH_PREFIX, type KvStore, type KvStoreEntry, type KvStoreSetOptions } from "./kv/kv-store.js";
 export type {
 	ScriptExecuteParams,
 	ScriptExecuteResult,
