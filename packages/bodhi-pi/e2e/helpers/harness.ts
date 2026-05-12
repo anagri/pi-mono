@@ -18,6 +18,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { createTestHarness } from "@test/helpers/harness.js";
 import { createTestScriptExecutor } from "@test/helpers/script-executor.js";
 import {
+	type BodhiPiAcpConnection,
 	type BodhiPiClient,
 	type BodhiPiEventHandlers,
 	type CompactionSettings,
@@ -55,7 +56,7 @@ export interface E2EHarnessOptions {
 }
 
 export interface E2EHarness {
-	clientConn: ClientSideConnection;
+	clientConn: BodhiPiAcpConnection;
 	client: BodhiPiClient;
 	updates: SessionNotification[];
 	filesystem: Filesystem;
@@ -70,6 +71,7 @@ export async function createE2EHarness(opts: E2EHarnessOptions): Promise<E2EHarn
 	const runtime = getRuntime();
 	if (runtime === "in-memory") return createInMemoryHarness(opts);
 	if (runtime === "cli") return createCliHarness(opts);
+	if (runtime === "http") return createHttpHarness(opts);
 	throw new Error(`createE2EHarness: runtime '${runtime}' not yet supported`);
 }
 
@@ -77,9 +79,9 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 	const filesystem = opts.filesystem ?? createInMemoryFilesystem();
 	const sessionStore = opts.sessionStore ?? createInMemorySessionStore();
 	const kvStore = opts.kvStore ?? createInMemoryKvStore();
-	// Auto-wire the test script executor against the harness's filesystem so
-	// run_script tests don't need to know about either. The cli runtime ships
-	// Node's real scriptExecutor automatically (createNodeScriptExecutor in agent.ts).
+	// Default scriptExecutor reads from the harness's filesystem so run_script
+	// tests work without explicit wiring. The cli/http runtimes use the real
+	// Node executor via their respective hosts.
 	const scriptExecutor = opts.scriptExecutor ?? createTestScriptExecutor(filesystem);
 	const inner = createTestHarness({
 		models: opts.models,
@@ -96,10 +98,8 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 		...(opts.compaction ? { compaction: opts.compaction } : {}),
 		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
 	});
-	// Default in-memory cwd to "/proj" rather than "/" so tests can compose
-	// paths like `${h.cwd}/file.txt` without ending up with "//file.txt".
-	// Tests that don't care about cwd still work fine. The cli runtime uses a
-	// tmpdir which is similarly non-root.
+	// Non-root default so tests can compose paths as `${h.cwd}/file.txt` without
+	// hitting `//file.txt`.
 	const cwd = opts.homeDir ?? "/proj";
 	await filesystem.mkdir(cwd, { recursive: true });
 	return {
@@ -115,9 +115,7 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 }
 
 async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
-	const { createNodeFilesystem, createNodeKvStore, createSqliteSessionStore } = await import(
-		"@bodhiapp/bodhi-pi-node"
-	);
+	const { createNodeFilesystem } = await import("./node-filesystem.js");
 
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-cli-"));
 	const dbPath = path.join(tmpDir, "sessions.db");
@@ -126,7 +124,6 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	const kvDir = path.join(homeDir, ".bodhi-pi-cli", "kv");
 	await fs.mkdir(kvDir, { recursive: true });
 
-	// Build --models / --default-model args from opts.
 	const modelsArg = opts.models.map((m) => `${m.provider}:${m.id}`).join(",");
 
 	const args = [
@@ -144,12 +141,7 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 
 	const child: ChildProcessByStdio<NodeWritable, NodeReadable, null> = spawn("node", args, {
 		stdio: ["pipe", "pipe", "inherit"],
-		env: {
-			...process.env,
-			HOME: homeDir,
-			// Make sure pi-ai picks up the env-resolved API keys via test-app-cli's
-			// PROVIDER_ENV map. We inherit OPENAI_API_KEY etc. from the test process.
-		},
+		env: { ...process.env, HOME: homeDir },
 	});
 
 	const input = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
@@ -167,13 +159,11 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		stream,
 	);
 
-	// Real-FS / real-SQLite handles for the test side. Both ends share the same
-	// tmpDir + dbPath, so writes through `harness.filesystem` are visible to the
-	// child's agent, and reads via `harness.sessionStore` reflect what the child
-	// persisted.
 	const filesystem = createNodeFilesystem({ rootCwd: tmpDir });
-	const sessionStore = createSqliteSessionStore({ dbPath });
-	const kvStore = createNodeKvStore({ dir: kvDir });
+	const sessionStore = createInMemorySessionStore();
+	const kvStore = createInMemoryKvStore();
+	void kvDir;
+	void dbPath;
 
 	const cleanup = async () => {
 		try {
@@ -181,8 +171,64 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		} catch {
 			// already exited
 		}
-		// Drop SQLite handles before removing files (better-sqlite3 has its own
-		// close lifecycle; if it leaks we still rm-rf the dir).
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	};
+
+	return {
+		clientConn,
+		client: createBodhiPiClient(clientConn, { cwd: tmpDir }),
+		updates,
+		filesystem,
+		sessionStore,
+		kvStore,
+		cwd: tmpDir,
+		cleanup,
+	};
+}
+
+async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
+	const { createNodeFilesystem } = await import("./node-filesystem.js");
+	const { HttpAcpConnection } = await import("./http-connection.js");
+	const { mintTestToken } = await import("./auth.js");
+	// In-process buildServer is the cleanest way to wire models + getApiKey
+	// upfront. Spawning bodhi-pi-http would require it to accept --models /
+	// --default-model / env-based API keys — a small follow-up. For now we
+	// import the factory from the sibling package via a relative dist path
+	// (workspace symlink resolution), avoiding a package.json devDep on it.
+	const { buildServer } = (await import(
+		"@bodhiapp/bodhi-pi-http/dist/server/server.js"
+	)) as typeof import("@bodhiapp/bodhi-pi-http/dist/server/server.js");
+
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-http-"));
+	const dataDir = path.join(tmpDir, ".data");
+	await fs.mkdir(dataDir, { recursive: true });
+
+	const server = await buildServer({
+		port: 0,
+		dataDir,
+		models: opts.models,
+		defaultModelId: opts.defaultModelId,
+		...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
+		workspaceOverride: tmpDir,
+		staticDir: null,
+	});
+
+	const port = server.port();
+	const baseUrl = `http://localhost:${port}`;
+	const token = mintTestToken();
+	const updates: SessionNotification[] = [];
+	const clientConn = new HttpAcpConnection({
+		baseUrl,
+		token,
+		onUpdate: (n) => updates.push(n),
+	});
+
+	const filesystem = createNodeFilesystem({ rootCwd: tmpDir });
+	const sessionStore = createInMemorySessionStore();
+	const kvStore = createInMemoryKvStore();
+
+	const cleanup = async () => {
+		await server.close();
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	};
 

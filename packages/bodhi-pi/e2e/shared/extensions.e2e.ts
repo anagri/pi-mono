@@ -165,7 +165,7 @@ test.runIf(isRuntime("in-memory"))(
 
 		const opt = newSess.configOptions?.[0];
 		if (!opt || opt.type !== "select") throw new Error("expected select option");
-		const ids = opt.options.map((o: { value: string }) => o.value);
+		const ids = (opt.options as Array<{ value: string }>).map((o) => o.value);
 		expect(ids).toContain(claude.id);
 
 		await h.clientConn.setSessionConfigOption({ sessionId: sid, configId: "model", value: claude.id });

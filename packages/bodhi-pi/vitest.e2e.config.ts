@@ -49,6 +49,18 @@ export default defineConfig({
 					include: ["e2e/shared/**/*.e2e.ts", "e2e/cli-headless/**/*.e2e.ts"],
 				},
 			},
+			{
+				plugins: base.plugins,
+				resolve: base.resolve,
+				test: {
+					name: "http",
+					globals: true,
+					environment: "node",
+					testTimeout: 60000,
+					setupFiles: ["./e2e/setup/http.ts"],
+					include: ["e2e/shared/**/*.e2e.ts", "e2e/http-playwright/**/*.e2e.ts"],
+				},
+			},
 		],
 	},
 });
