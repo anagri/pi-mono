@@ -409,12 +409,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				promptCapabilities: { image: false, audio: false, embeddedContext: false },
 				mcpCapabilities: { http: false, sse: false },
 				_meta: {
-					"bodhi-pi": {
-						sessionDelete: true,
-						sessionCompact: true,
-						sessionConfig: true,
-						extensions: { tools: true, commands: true, providers: true, events: true },
-					},
+					"bodhi-pi": { version: BODHI_PI_VERSION },
 				},
 			},
 			authMethods: [],

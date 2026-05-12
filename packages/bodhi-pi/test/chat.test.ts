@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createInMemorySessionStore } from "@/index.js";
+import { BODHI_PI_VERSION } from "@/version.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { asSelectOption } from "./helpers/acp-narrow.js";
 import { createTestHarness } from "./helpers/harness.js";
@@ -352,8 +353,8 @@ test("permanent delete via _bodhi-pi/session/delete", async () => {
 		sessionStore: store,
 	});
 	const initResult = await clientConn.initialize(stdInitParams);
-	expect(initResult.agentCapabilities?._meta).toMatchObject({
-		"bodhi-pi": { sessionDelete: true },
+	expect(initResult.agentCapabilities?._meta).toEqual({
+		"bodhi-pi": { version: BODHI_PI_VERSION },
 	});
 
 	const { sessionId } = await clientConn.newSession({ cwd, mcpServers: [] });
@@ -381,6 +382,23 @@ test("initialize advertises agentInfo with bodhi-pi name + version", async () =>
 
 	const initResult = await clientConn.initialize(stdInitParams);
 	expect(initResult.agentInfo).toEqual({ name: "bodhi-pi", version: expect.any(String) });
+});
+
+test("initialize advertises capabilities._meta['bodhi-pi'] as a single version stamp", async () => {
+	const mock = await startMock();
+	mock.onMessage(/.*/, { content: "ack" });
+
+	const baseModel = getModel("openai", "gpt-5-mini");
+	const { clientConn } = createTestHarness({
+		models: [{ ...baseModel, baseUrl: `${mock.url}/v1` }],
+		defaultModelId: baseModel.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+
+	const initResult = await clientConn.initialize(stdInitParams);
+	expect(initResult.agentCapabilities?._meta).toEqual({
+		"bodhi-pi": { version: BODHI_PI_VERSION },
+	});
 });
 
 test("listSessions.updatedAt bumps on each prompt", async () => {

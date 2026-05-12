@@ -48,6 +48,14 @@
   unchanged. (Batch 2 of the 2026-05-11 tech-debt review.)
 
 ### Changed (BREAKING)
+- `agentCapabilities._meta["bodhi-pi"]` collapses to a single
+  `{ version: BODHI_PI_VERSION }` stamp. Hosts that probed individual
+  per-method flags (`sessionDelete`, `sessionCompact`, `sessionConfig`,
+  `extensions.{tools,commands,providers,events}`) must instead consult
+  this CHANGELOG for the version's method list. Drops mid-state false
+  advertising — all 17 `_bodhi-pi/*` ext methods registered in
+  `extHandlers` are present at the advertised version. (Batch 4 / F.1
+  of the 2026-05-11 tech-debt review.)
 - No hardcoded `gpt-4o-mini` fallback. `pickDefaultModelId()` now
   returns `string | null` and only resolves to a concrete id when at
   least one provider has auth-resolvable credentials AND a configured
