@@ -199,8 +199,14 @@ interface SessionRuntime {
 interface SessionState {
 	cwd: string;
 	tools: AgentTool[];
-	/** Discovered once at session hydration; refresh requires `session/close` + `session/load`. */
+	/**
+	 * Effective commands list = `mergeCommands(projectCommands, extension-runner commands)`.
+	 * Re-derived from `projectCommands` + the runner's current registry on every
+	 * `refreshSlashable()` so runtime `pi.registerCommand(...)` mutations propagate.
+	 */
 	commands: PromptTemplate[];
+	/** Project-discovered commands frozen at session hydration; combined with extension commands at refresh time. */
+	projectCommands: PromptTemplate[];
 	skills: Skill[];
 	appendSystemPrompt: string | null;
 	contextFiles: ContextFile[];
@@ -378,6 +384,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					conn: this.conn,
 					sessionStore: this.config.sessionStore,
 					extensions: factories,
+					requestSlashableRefresh: (sessionId) => this.refreshSlashable(sessionId),
 				});
 				this.extensionRunner = runner;
 				// Merge extension event handlers into the dispatcher's existing handler map.
@@ -2004,6 +2011,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			cwd,
 			tools,
 			commands,
+			projectCommands,
 			skills,
 			appendSystemPrompt: resolvedAppend ?? null,
 			contextFiles,
@@ -2048,5 +2056,29 @@ class BodhiPiAcpAgent implements AcpAgent {
 				availableCommands,
 			},
 		});
+	}
+
+	/**
+	 * Re-merge each session's `commands` from its frozen `projectCommands` plus
+	 * the extension runner's *current* registry, then re-advertise. Invoked by
+	 * the runner whenever a `registerCommand` (or its unregister) fires after
+	 * boot, and by the explicit `pi.requestSlashableRefresh(sessionId)` API.
+	 *
+	 * When `sessionId` is omitted, refresh every loaded session — implicit
+	 * `registerCommand` is global, so all sessions need to see the new entry.
+	 * When `sessionId` is provided but unknown, this is a no-op (graceful for
+	 * extensions that hold stale ids).
+	 */
+	private async refreshSlashable(sessionId?: string): Promise<void> {
+		const runner = this.extensionRunner;
+		const targets = sessionId !== undefined ? [sessionId] : Array.from(this.sessions.keys());
+		for (const id of targets) {
+			const session = this.sessions.get(id);
+			if (!session) continue;
+			session.commands = runner
+				? mergeCommands(session.projectCommands, runner.getCommands())
+				: session.projectCommands;
+			await this.advertiseSlashable(id);
+		}
 	}
 }

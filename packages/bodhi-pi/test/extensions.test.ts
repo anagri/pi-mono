@@ -305,6 +305,166 @@ test("inter-extension events bus delivers messages between extensions", async ()
 	expect(received).toEqual({ hello: "world" });
 });
 
+/**
+ * The implicit refresh closure in `ExtensionRunner.registerCommand` is
+ * fire-and-forget (`void self.requestSlashableRefresh?.()`) so that the
+ * synchronous `registerCommand(...) => () => void` shape is preserved. Tests
+ * that observe the resulting `available_commands_update` notification need to
+ * let the floating promise settle. One macrotask tick is enough — the chain
+ * is in-process and goes through a single awaited `sessionUpdate`.
+ */
+function flushImplicitRefresh(): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function commandsUpdates(updates: ReturnType<typeof createTestHarness>["updates"]) {
+	return updates.filter((u) => u.update.sessionUpdate === "available_commands_update");
+}
+
+test("E.4 implicit hook: registerCommand from session_start fires available_commands_update on every loaded session", async () => {
+	const faux = newProvider();
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	const factory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.on("session_start", () => {
+			pi.registerCommand("dynamic-foo", {
+				description: "dynamically registered",
+				template: "expanded-$1",
+			});
+		});
+	};
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		extensionFactories: [{ name: "late-register", factory }],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	await flushImplicitRefresh();
+
+	const advs = commandsUpdates(harness.updates);
+	expect(advs.length).toBeGreaterThanOrEqual(2);
+	const last = advs.at(-1);
+	if (last?.update.sessionUpdate !== "available_commands_update") {
+		throw new Error("expected available_commands_update");
+	}
+	const names = last.update.availableCommands.map((c) => c.name);
+	expect(names).toContain("dynamic-foo");
+});
+
+test("E.4 implicit hook resolves the registered slash command after registration (session.commands re-merge consistency)", async () => {
+	const faux = newProvider();
+	let observedUserText: string | undefined;
+	faux.setResponses([
+		(ctx) => {
+			const lastUser = [...ctx.messages].reverse().find((m) => m.role === "user");
+			if (lastUser && Array.isArray(lastUser.content)) {
+				const t = lastUser.content.find((b) => b.type === "text");
+				observedUserText = t?.text;
+			}
+			return fauxAssistantMessage("ok");
+		},
+	]);
+	const factory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.on("session_start", () => {
+			pi.registerCommand("dynamic-foo", {
+				description: "dynamically registered",
+				template: "EXPANDED:$1",
+			});
+		});
+	};
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		extensionFactories: [{ name: "late-register", factory }],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	await flushImplicitRefresh();
+
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "/dynamic-foo bar-arg" }] });
+
+	expect(observedUserText).toBeDefined();
+	expect(observedUserText).toContain("EXPANDED:bar-arg");
+});
+
+test("E.4 implicit hook: registerCommand's unregister fires available_commands_update without the entry", async () => {
+	const faux = newProvider();
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	const factory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.on("session_start", () => {
+			const unregister = pi.registerCommand("ephemeral", {
+				description: "short-lived",
+				template: "body",
+			});
+			unregister();
+		});
+	};
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		extensionFactories: [{ name: "ephemeral", factory }],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	await flushImplicitRefresh();
+
+	const advs = commandsUpdates(harness.updates);
+	expect(advs.length).toBeGreaterThanOrEqual(3);
+	const last = advs.at(-1);
+	if (last?.update.sessionUpdate !== "available_commands_update") {
+		throw new Error("expected available_commands_update");
+	}
+	const lastNames = last.update.availableCommands.map((c) => c.name);
+	expect(lastNames).not.toContain("ephemeral");
+});
+
+test("E.4 explicit hook: pi.requestSlashableRefresh(sessionId) re-emits available_commands_update", async () => {
+	const faux = newProvider();
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	let capturedSessionId = "";
+	const factory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.on("session_start", async (e) => {
+			capturedSessionId = e.sessionId;
+			await pi.requestSlashableRefresh(e.sessionId);
+		});
+	};
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		extensionFactories: [{ name: "explicit-refresh", factory }],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const advs = commandsUpdates(harness.updates);
+	expect(advs.length).toBeGreaterThanOrEqual(2);
+	expect(capturedSessionId).toBe(sessionId);
+});
+
+test("E.4 explicit hook: requestSlashableRefresh with unknown sessionId is a no-op (doesn't throw)", async () => {
+	const faux = newProvider();
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	let threw = false;
+	const factory: import("@/index.js").ExtensionFactory = (pi) => {
+		pi.on("session_start", async () => {
+			try {
+				await pi.requestSlashableRefresh("nonexistent-session-id");
+			} catch {
+				threw = true;
+			}
+		});
+	};
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		extensionFactories: [{ name: "unknown-refresh", factory }],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	expect(threw).toBe(false);
+});
+
 test("builtin tools win on name collision (extension can't shadow `read`)", async () => {
 	const faux = newProvider();
 	faux.setResponses([fauxAssistantMessage("ok")]);

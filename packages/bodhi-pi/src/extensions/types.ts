@@ -86,6 +86,14 @@ export interface ExtensionAPI {
 	events: ExtensionEventBus;
 	appendEntry(sessionId: string, entry: ExtensionEntryPayload): Promise<void>;
 	sendMessage(sessionId: string, content: TextContent | TextContent[] | string): Promise<void>;
+	/**
+	 * Re-emit the slash-command advertisement (`available_commands_update`) for
+	 * the given session. `registerCommand` already triggers this implicitly for
+	 * every loaded session — use this method only when you've mutated the command
+	 * registry through a path that doesn't go through `registerCommand` directly
+	 * (rare; mostly templating-driven extensions).
+	 */
+	requestSlashableRefresh(sessionId: string): Promise<void>;
 }
 
 /** Inter-extension pub/sub. Channels are arbitrary opaque strings. */

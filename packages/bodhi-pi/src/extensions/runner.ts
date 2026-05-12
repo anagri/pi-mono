@@ -40,6 +40,14 @@ export interface ExtensionFactoryError {
  *     working tree outranks plugin contributions.
  *   - **Providers**: first registered wins (see {@link buildApiFor}).
  */
+/**
+ * Optional callback the agent supplies so the runner can ask the host to
+ * re-emit `available_commands_update` for a session (or all loaded sessions
+ * when `sessionId` is omitted) after the slash-command registry mutates. See
+ * `BodhiPiAgent.refreshSlashable` for the corresponding implementation.
+ */
+export type RequestSlashableRefresh = (sessionId?: string) => Promise<void>;
+
 export class ExtensionRunner {
 	private readonly tools: AgentTool[] = [];
 	private readonly commands: PromptTemplate[] = [];
@@ -49,18 +57,29 @@ export class ExtensionRunner {
 	private readonly conn: AgentSideConnection;
 	private readonly sessionStore: SessionStore;
 	private readonly errors: ExtensionFactoryError[] = [];
+	private readonly requestSlashableRefresh?: RequestSlashableRefresh;
 
-	private constructor(opts: { conn: AgentSideConnection; sessionStore: SessionStore }) {
+	private constructor(opts: {
+		conn: AgentSideConnection;
+		sessionStore: SessionStore;
+		requestSlashableRefresh?: RequestSlashableRefresh;
+	}) {
 		this.conn = opts.conn;
 		this.sessionStore = opts.sessionStore;
+		this.requestSlashableRefresh = opts.requestSlashableRefresh;
 	}
 
 	static async build(opts: {
 		conn: AgentSideConnection;
 		sessionStore: SessionStore;
 		extensions: RegisteredExtension[];
+		requestSlashableRefresh?: RequestSlashableRefresh;
 	}): Promise<ExtensionRunner> {
-		const runner = new ExtensionRunner({ conn: opts.conn, sessionStore: opts.sessionStore });
+		const runner = new ExtensionRunner({
+			conn: opts.conn,
+			sessionStore: opts.sessionStore,
+			requestSlashableRefresh: opts.requestSlashableRefresh,
+		});
 		for (const ext of opts.extensions) {
 			const api = runner.buildApiFor(ext.name);
 			try {
@@ -104,9 +123,13 @@ export class ExtensionRunner {
 					...(def.argumentHint !== undefined ? { argumentHint: def.argumentHint } : {}),
 				};
 				self.commands.push(tmpl);
+				// Fire-and-forget — the refresh fans out to every loaded session.
+				// Failures are surfaced via the agent's notification path, not here.
+				void self.requestSlashableRefresh?.();
 				return () => {
 					const idx = self.commands.indexOf(tmpl);
 					if (idx >= 0) self.commands.splice(idx, 1);
+					void self.requestSlashableRefresh?.();
 				};
 			},
 			registerProvider(name: string, config: ProviderConfig): () => void {
@@ -139,6 +162,9 @@ export class ExtensionRunner {
 						content: { type: "text", text },
 					},
 				});
+			},
+			async requestSlashableRefresh(sessionId: string): Promise<void> {
+				await self.requestSlashableRefresh?.(sessionId);
 			},
 		};
 	}

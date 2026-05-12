@@ -93,6 +93,18 @@
   types — none exist in the matrix today (PoC stance).
 
 ### Added
+- Extensions can register slash commands at runtime. When `pi.registerCommand(name, def)`
+  is called after session boot (e.g., from a `session_start` handler or any
+  later moment), bodhi-pi now fires `sessionUpdate: "available_commands_update"`
+  on every loaded session so hosts see the new entry without restarting. The
+  unregister closure returned by `registerCommand` symmetrically re-emits when
+  invoked. A new explicit escape hatch `pi.requestSlashableRefresh(sessionId)`
+  is also exposed on `ExtensionAPI` for extensions whose registry mutations
+  don't go through `registerCommand` directly (rare; mostly templating-driven
+  extensions). The agent re-merges each session's `commands` from its frozen
+  `projectCommands` plus the runner's current registry before re-advertising,
+  so the slash-command resolver and the wire advertisement stay in lockstep.
+  (Batch 4 / E.4 of the 2026-05-11 tech-debt review.)
 - Eight new lifecycle events: `auth_change`, `settings_change`,
   `compaction_start`, `compaction_end`, `branch_summary_created`,
   `session_navigate`, `session_fork`, `session_clone`. Extensions
