@@ -4,14 +4,7 @@ test.describe("project slash commands (real LLM)", () => {
 	test.use({ scenario: ["commands-echo", "commands-say-tuesday"] });
 
 	test("/<known> arg expands $1 and reaches the model", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
-
-		// Project commands surface in /help once a session exists.
-		await app.send("/new");
-		await expect(app.systemMessages().last()).toContainText("new session");
+		await app.setup("gpt-4o-mini");
 
 		await app.send("/help");
 		const help = app.systemMessages().last();
@@ -30,10 +23,7 @@ test.describe("project slash commands (real LLM)", () => {
 
 test.describe("unknown slash command falls through (real LLM)", () => {
 	test("/<unknown> passes through verbatim to the agent", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini");
 
 		await app.send("/totally-not-a-command Reply with the single word: gravy");
 		await app.expectChatStatus("idle");

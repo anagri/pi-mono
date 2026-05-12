@@ -4,10 +4,7 @@ test.describe("M9 project extensions (redact-secrets)", () => {
 	test.use({ scenario: "extensions-redact-secrets" });
 
 	test("extension hooks tool_result; assistant cannot leak the original secret", async ({ app }) => {
-		await app.goto();
-		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 		await app.send("Read the file leak.txt and tell me what's there verbatim.");
 		await app.expectChatStatus("streaming");

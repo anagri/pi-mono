@@ -18,6 +18,7 @@
 - Do not preserve backward compatibility unless the user explicitly asks for it
 - Never hardcode key checks with, eg. `matchesKey(keyData, "ctrl+x")`. All keybindings must be configurable. Add default to matching object (`DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS`)
 - NEVER modify `packages/ai/src/models.generated.ts` directly. Update `packages/ai/scripts/generate-models.ts` instead.
+- Do NOT add comments that just narrate what the code does. Avoid obvious, redundant comments like "// Import the module", "// Define the function", "// Increment the counter", "// Return the result", or "// Handle the error". Comments should only explain non-obvious intent, trade-offs, or constraints that the code itself cannot convey. NEVER explain the change you are making in code comments — that belongs in the commit message or PR description, not in the source.
 
 ## Commands
 

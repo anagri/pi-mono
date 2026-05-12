@@ -10,20 +10,22 @@ fix-now actionable.
 
 ---
 
-## Progress (last updated 2026-05-11)
+## Progress (last updated 2026-05-12)
 
 | Batch | Status | Notes |
 |---|---|---|
-| **A** Stable-ACP notifications | ✅ shipped | `config_option_update` + `session_info_update` wired via internal subscribers; clean break on the four ext responses. Plan: `ai-docs/plans/smooth-purring-patterson.md`. |
-| **B** `agent.ts` decomposition | ⏭ deferred | User excluded for the first ship; reconsider after C/D land. Touches the same handlers as A; queue late so refactors don't churn each other. |
-| **C** `compaction.ts` ↔ `branch-summary.ts` dedup | 🔜 **next** | Kickoff: `ai-docs/reviews/kickoff-batch-2-sessions-dedup.md`. |
-| **D** `sessions/build-context.ts` cleanup | 🔜 bundled with C | `walkPath` reuse + 3-wrapper consolidation; same module group, ships with C. |
-| **E** Event system: generalize emitter, fill gaps | ✅ shipped (with A) | 8 new events (`auth_change`, `settings_change`, `compaction_start`/`end`, `branch_summary_created`, `session_navigate`, `session_fork`/`clone`); generic `emit<E>`; `safeRun` JSDoc. **E.4** (`advertiseSlashable` refresh hook) deferred. |
-| **F** ACP extension-method catalog hygiene | ⏭ deferred | Needs design discussion (collapse capability advertisement vs enumerate; F.2 is host-breaking). |
+| **A** Stable-ACP notifications | ✅ shipped | `config_option_update` + `session_info_update` wired via internal subscribers; clean break on the four ext responses. Plan: `ai-docs/plans/smooth-purring-patterson.md`. **A.3** marked **obsolete (kept `dist/` import)** — see `packages/bodhi-pi/CLAUDE.md` "pi-agent-core import policy" + Decision log entry 2026-05-12. |
+| **B** `agent.ts` decomposition + `gpt-4o-mini` removal | ✅ shipped | B.1 dispatcher Map; B.2 saturated `requireSession`/`requireSessionRecord`/`validateSessionId`/`optionalSessionId`; B.3/B.4 `setAt`/`effectiveSettings` reuse; B.5/B.6 `runAndPersistCompaction` + `makeCompactionEntry`; B.7 `finishTurn` closure; B.8 `_buildSessionState` split into `loadProjectArtifacts` + `composeSystemPrompt` + `createPiAgent`; B.9 `SessionState` → `SettingsState` + `SessionRuntime`; **B.10 BREAKING** — no hardcoded `gpt-4o-mini`, `currentModelId` becomes `string \| null`, `prompt()` rejects with branched hint, `ModelSelectEvent.fromModelId` widens to `string \| null`. All eight downstream hosts updated to render the empty-model state. Kickoff: `ai-docs/reviews/kickoff-batch-3-agent-decomposition.md`. |
+| **C** `compaction.ts` ↔ `branch-summary.ts` dedup | ✅ shipped | (implemented in batch 2 — `sessions/_shared.ts` extraction + `runSummarizationLLM` wrapper) |
+| **D** `sessions/build-context.ts` cleanup | ✅ shipped | (implemented in batch 2 — `walkPath` reuse in `buildSessionContext` + `createInMemorySessionStore.forkRecord` + `wrapAsUserMessage` consolidation) |
+| **E** Event system: generalize emitter, fill gaps | ✅ shipped (with A) | 8 new events (`auth_change`, `settings_change`, `compaction_start`/`end`, `branch_summary_created`, `session_navigate`, `session_fork`/`clone`); generic `emit<E>`; `safeRun` JSDoc. **E.4** (`advertiseSlashable` refresh hook) deferred — folded into batch 4 below. |
+| **F** ACP extension-method catalog hygiene | 🔜 **next (with E.4)** | F.1 capability advertisement (collapse to single `version` flag) + F.2 `EXT_SESSION_CONFIG` slimdown; bundled with E.4 since both touch ext surface. Kickoff: `ai-docs/reviews/kickoff-batch-4-acp-hygiene-and-slashable-refresh.md`. |
 | **G** Dead code (`LabelEntry`) | ✅ shipped (with A) | Removed from union, exports, downstream imports. |
 | **H** Tests + e2e gaps | ⏭ deferred | H.1/H.2/H.3; the settings/kv e2e in H.3 are now unblocked since the notification API shipped in A. |
 
-**First-ship verification:** 531 unit tests across 6 packages green; biome clean; tsgo clean (modulo pre-existing `BootstrapResult` errors in `bodhi-pi-web` / `bodhi-pi-chrome-ext` unrelated to this work). Implementation plan: `ai-docs/plans/smooth-purring-patterson.md`.
+**Batch 3 verification:** All `bodhi-pi` unit + integration + e2e green (338 + faux integration + real-LLM e2e); 8 downstream hosts (`bodhi-pi-node`, `bodhi-pi-browser`, `bodhi-pi-cli`, `bodhi-pi-web`, `bodhi-pi-chrome-ext`, `bodhi-pi-ws-server`, `bodhi-pi-ws-frontend`, `bodhi-pi-http`) build clean and pass full Playwright suites under `just test`; `npm run check` (biome + tsgo across every package) clean. Two flaky-on-parallel cases re-passed standalone.
+
+**First-ship verification (batch 1):** 531 unit tests across 6 packages green; biome clean; tsgo clean (modulo pre-existing `BootstrapResult` errors in `bodhi-pi-web` / `bodhi-pi-chrome-ext` unrelated to this work). Implementation plan: `ai-docs/plans/smooth-purring-patterson.md`.
 
 ---
 
@@ -33,12 +35,11 @@ Batches ship one at a time, in the order below. Each row is a self-contained shi
 
 | # | Batch(es) | Status | Kickoff |
 |---|---|---|---|
-| 1 | A + E + G.1 + A.3 (stable-ACP notifications, event-system overhaul, dead-code, dist import) | ✅ shipped | `ai-docs/plans/smooth-purring-patterson.md` |
-| 2 | C + D (`sessions/` dedup) | 🔜 **next** | `ai-docs/reviews/kickoff-batch-2-sessions-dedup.md` |
-| 3 | B (`agent.ts` decomposition: dispatcher table, `requireSession` everywhere, `finishTurn` helper, `_buildSessionState` split) | ⏭ pending | TBD |
-| 4 | F (capability advertisement + `EXT_SESSION_CONFIG` slimdown) | ⏭ pending | TBD; needs design discussion (collapse to `version` flag vs enumerate; F.2 is host-breaking) |
-| 5 | E.4 (`advertiseSlashable` refresh hook) | ⏭ pending | TBD; small, can fold into another batch when convenient |
-| 6 | H (test helper extraction + e2e gap fills, including settings/kv now unblocked by batch 1) | ⏭ pending | TBD |
+| 1 | A + E + G.1 (stable-ACP notifications, event-system overhaul, dead-code) | ✅ shipped | `ai-docs/plans/smooth-purring-patterson.md` |
+| 2 | C + D (`sessions/` dedup) + bonus: `walkPath` reuse in `in-memory-session-store.forkRecord`, `joinTextBlocks` helper, `runSummarizationLLM` wrapper | ✅ shipped | `ai-docs/reviews/kickoff-batch-2-sessions-dedup.md` |
+| 3 | B (`agent.ts` decomposition: dispatcher table, saturated `requireSession`, `finishTurn` helper, `_buildSessionState` split, `SessionState` split) + **B.10 BREAKING** removal of hardcoded `gpt-4o-mini` fallback | ✅ shipped | `ai-docs/reviews/kickoff-batch-3-agent-decomposition.md` |
+| 4 | F (capability advertisement + `EXT_SESSION_CONFIG` slimdown) + E.4 (`advertiseSlashable` refresh hook) | 🔜 **next** | `ai-docs/reviews/kickoff-batch-4-acp-hygiene-and-slashable-refresh.md` |
+| 5 | H (test helper extraction + e2e gap fills, including settings/kv now unblocked by batch 1) | ⏭ pending | TBD |
 
 The next kickoff is drafted only after the previous batch ships. The order above is a recommendation, not a contract — each batch's "go" decision is made when its turn arrives, with the option to re-order based on what surfaced.
 
@@ -47,6 +48,16 @@ The next kickoff is drafted only after the previous batch ships. The order above
 - **Clean break on `configOptions` response field** (batch 1, locked 2026-05-11): no dual-write. All hosts updated in the same series. Picked over dual-write for cleaner code, single source of truth, and no deprecation cycle.
 - **Internal subscriber pattern for picker refresh** (batch 1, locked 2026-05-11): the agent registers its own subscriber on `auth_change`/`settings_change`/`model_select` and dispatches `config_option_update`. Same hook surface available to extensions. Demonstrates the pattern; collapses the four ad-hoc `affectsPicker` blocks into one subscriber.
 - **Sequential batches, no parallel worktrees** (locked 2026-05-11): one batch at a time. Trades speed for simpler reasoning about where work stopped and what changed.
+- **A.3 reversal — keep `Agent` import from `@earendil-works/pi-agent-core/dist/agent.js`** (batch 2, locked 2026-05-12): the upstream barrel transitively re-exports `harness/env/nodejs.ts` + `harness/session/storage/jsonl.ts` + `harness/session/storage/memory.ts` + `harness/utils/shell-output.ts`, all of which import `node:fs`/`node:path`/`node:os`/`node:crypto` at module top level. Bundlers can't reliably tree-shake those when shipping to browser hosts (`bodhi-pi-browser`, `bodhi-pi-web`, `bodhi-pi-chrome-ext`). Direct deep import keeps the runtime graph minimal. Documented as policy in `packages/bodhi-pi/CLAUDE.md` ("pi-agent-core import policy") so future agents don't "fix" it.
+- **Single shared module `sessions/_shared.ts`, flat layout** (batch 2, locked 2026-05-12): bodhi-pi keeps the existing flat `sessions/` layout instead of mirroring upstream's `compaction/` subfolder — minimizes diff and avoids file-move noise. Module-private (not in `src/index.ts`); matches the existing `walkPath` precedent.
+- **Extract `runSummarizationLLM` even though upstream doesn't** (batch 2, locked 2026-05-12): upstream coding-agent's three call sites have heterogeneous post-call shapes (`{aborted}|{error}|{summary,readFiles,modifiedFiles}` etc.) that can't share a wrapper. bodhi-pi's three call sites have homogeneous shapes (throw on `stopReason==="error"`, `joinTextBlocks` on success). Net ~18 LOC reduction + a single testable surface for "how do we call the LLM for summarization."
+- **`serializeConversation` is parameter-free** (batch 2, locked 2026-05-12): always includes thinking blocks, always truncates tool results at 2000 chars (upstream behavior). Removes `branch-summary.ts`'s pre-existing `.slice(0, 800)` + skip-thinking divergence. Verified the `/Outcome/` regex in `branch-summary.test.ts` matches the prompt body, not the conversation, so the test stays green.
+- **System prompts and prompt bodies stay where they are** (batch 2, locked 2026-05-12): each module owns its own prompts. Touching them changes LLM output and would break test mocks.
+- **`extMethod` dispatch becomes a `Map`, not a switch** (batch 3, locked 2026-05-12): private readonly `extHandlers: Map<string, ExtHandler>` populated in the constructor. Adds two LOC over a switch but keeps every handler discoverable as a sibling method (no hidden ordering, no `default:` fall-through). Symmetric with the slash-command dispatcher in the REPL.
+- **Saturate, don't unify, the session-validation helpers** (batch 3, locked 2026-05-12): split into four — `requireSession` (in-memory `SessionState`), `requireSessionRecord` (storage-only lookup), `validateSessionId` (typed-string narrowing), `optionalSessionId` (id-or-undefined). One unified helper would force every caller to handle "loaded but not in-memory" cases that don't apply. Same `unknown session` / `not loaded` strings as before.
+- **`SessionState` splits into `SettingsState` + `SessionRuntime`** (batch 3, locked 2026-05-12): no `RuntimeOnly` / `Persisted` axis, no `Pick<>`-derived sub-types. The two halves have genuinely independent lifecycles — settings is replaceable on every `_buildSessionState`, runtime survives. Composing into the outer `SessionState` keeps existing call sites working with one extra `.settings.` / `.runtime.` step.
+- **No hardcoded `gpt-4o-mini` fallback (B.10)** (batch 3, locked 2026-05-12, BREAKING): `pickDefaultModelId` returns `string | null`; `currentModelId` is allowed to be `null`; `prompt()` rejects with a branched hint (empty-models → "configure provider auth", populated → "pick one with /model"). Picked over keeping the placeholder because the placeholder created silent 404s against OpenAI when no auth was wired, masking the real "no auth configured" condition. All eight downstream hosts surface the same hint at boot via a system message.
+- **Folded F + E.4 into batch 4** (batch 4 plan, locked 2026-05-12): F is two findings on the ext-method surface (capability advertisement, `EXT_SESSION_CONFIG` slimdown) and E.4 is one finding on the same surface (slashable refresh hook). Shipping together avoids two churn cycles for downstream hosts that subscribe to `available_commands_update` and `agentCapabilities._meta`.
 
 ---
 
@@ -66,9 +77,8 @@ The ACP SDK ships `sessionUpdate: "config_option_update"` (`/tmp/acp-sdk-inspect
 - `packages/bodhi-pi/src/acp/agent.ts:849-870`
 - Fix: after `appendEntry`, emit `sessionUpdate: "session_info_update"` with `{ title: name, updatedAt: new Date(now).toISOString() }`.
 
-**A.3** Direct dist import of `pi-agent-core` bypasses the package's public exports.
+**A.3** ~~Direct dist import of `pi-agent-core` bypasses the package's public exports.~~ **OBSOLETE (batch 2, 2026-05-12)** — the deep import is intentional and must stay. See `packages/bodhi-pi/CLAUDE.md` "pi-agent-core import policy" for the full rationale (upstream barrel pulls in Node-only modules transitively; bundlers can't reliably tree-shake them; browser hosts break). Decision log entry dated 2026-05-12.
 - `packages/bodhi-pi/src/acp/agent.ts:38` `import { Agent } from "@earendil-works/pi-agent-core/dist/agent.js";`
-- Fix: re-export `Agent` from `pi-agent-core`'s top-level barrel and import `from "@earendil-works/pi-agent-core"`. Direct dist paths break under `exports`-strict bundlers and make consumers fragile to internal layout changes.
 
 ---
 

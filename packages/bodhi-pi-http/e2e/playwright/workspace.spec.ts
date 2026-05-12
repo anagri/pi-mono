@@ -4,10 +4,7 @@ test.describe("seeded workspace via --workspace (real LLM)", () => {
 	test.use({ scenario: "workspace-readme" });
 
 	test("agent reads a file seeded into the spawned server's workspace", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini");
 
 		await app.send("Use the read tool to read readme.txt. Reply with the file's content verbatim and nothing else.");
 		await app.expectChatStatus("idle");

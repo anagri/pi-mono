@@ -4,12 +4,7 @@ test.describe("M8 scripted skill (run_script)", () => {
 	test.use({ scenario: "skills-days-since-birthday" });
 
 	test("/skill:days-since-birthday invokes run_script and returns the integer", async ({ app }) => {
-		await app.goto();
-		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-		await app.clickConnect();
-		await app.expectStatus("connected");
-
-		await app.send("/new");
+		await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 		// Skill instructs the agent to call run_script with the date argument.
 		// Baseline date in script.js is 2026-05-08; pick a fixed input date so we

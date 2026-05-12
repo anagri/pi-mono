@@ -1,9 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test("/fork before a user message creates a new session whose /entries excludes that turn", async ({ chat }) => {
-	await chat.goto();
-	await chat.waitForState("idle");
-	await chat.login("openai", process.env.OPENAI_API_KEY!);
+	await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 
 	let forkAtId = "";
 
@@ -38,9 +36,7 @@ test("/fork before a user message creates a new session whose /entries excludes 
 });
 
 test("/clone produces a new session id", async ({ chat }) => {
-	await chat.goto();
-	await chat.waitForState("idle");
-	await chat.login("openai", process.env.OPENAI_API_KEY!);
+	await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 
 	let originalId = "";
 

@@ -172,7 +172,8 @@ export interface ToolResultEventResult {
 export interface ModelSelectEvent {
 	type: "model_select";
 	sessionId: string;
-	fromModelId: string;
+	/** `null` on the first model selection in a session that booted without an auth-resolvable model. */
+	fromModelId: string | null;
 	toModelId: string;
 }
 

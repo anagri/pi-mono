@@ -4,12 +4,7 @@ test.describe("markdown skills (real LLM)", () => {
 	test.use({ scenario: "skills-say-hello" });
 
 	test("/skill:say-hello triggers the skill prompt and the model echoes", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
-
-		await app.send("/new");
+		await app.setup("gpt-4o-mini");
 
 		await app.send("/help");
 		await expect(app.systemMessages().last()).toContainText("say-hello");

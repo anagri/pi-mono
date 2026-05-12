@@ -5,9 +5,7 @@ test.describe("M15 tool-call replay across /resume", () => {
 
 	test("write tool_call replays as a completed card after /resume", async ({ chat }) => {
 		await test.step("boot to idle", async () => {
-			await chat.goto();
-			await chat.waitForState("idle");
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		});
 
 		await test.step("session A: write a file (creates a tool_call entry)", async () => {

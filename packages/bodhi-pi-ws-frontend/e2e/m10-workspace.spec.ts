@@ -4,10 +4,7 @@ test.describe("M10 seeded workspace", () => {
 	test.use({ scenario: "workspace-readme" });
 
 	test("agent reads readme.txt seeded into the workspace", async ({ app }) => {
-		await app.goto();
-		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 		await app.send("Use the read tool to read readme.txt. Reply with the file's content verbatim and nothing else.");
 		await app.expectChatStatus("streaming");

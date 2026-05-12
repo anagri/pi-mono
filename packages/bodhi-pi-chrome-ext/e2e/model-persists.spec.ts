@@ -4,16 +4,12 @@ test.describe("M16 model_change persists across /resume", () => {
 	test.use({ workspaceSeed: { name: "demo", files: {} } });
 
 	test("status bar reflects the prior model after /new + /resume", async ({ chat }) => {
-		await test.step("boot defaults to gpt-4o-mini", async () => {
-			await chat.goto();
-			await chat.waitForState("idle");
-			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await test.step("boot, login, select gpt-4o-mini", async () => {
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		});
 
 		await test.step("/model gpt-4o + one turn so model_change is persisted", async () => {
-			await chat.send("/model gpt-4o");
-			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o");
+			await chat.model("gpt-4o");
 			await chat.send("Reply with the single word: alpha");
 			await chat.waitForState("streaming");
 			await chat.waitForState("idle");
@@ -32,10 +28,10 @@ test.describe("M16 model_change persists across /resume", () => {
 			sessionA = match![1];
 		});
 
-		await test.step("/new resets to default", async () => {
+		await test.step("/new starts a fresh session not pinned to gpt-4o", async () => {
 			await chat.send("/new");
 			await chat.waitForState("idle");
-			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
+			await expect(chat.statusBar).not.toHaveAttribute("data-current-model", "gpt-4o");
 		});
 
 		await test.step("/resume A restores gpt-4o", async () => {

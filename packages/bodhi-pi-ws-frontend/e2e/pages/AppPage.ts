@@ -75,6 +75,32 @@ export class AppPage {
 		await expect(this.status).toHaveAttribute("data-status", status);
 	}
 
+	async connect(opts?: { email?: string; id?: number; sendToken?: boolean; serverUrl?: string }) {
+		await this.goto();
+		await this.setSettings(opts);
+		await this.clickConnect();
+		await this.expectStatus("connected");
+	}
+
+	async model(modelId: string) {
+		await this.send(`/model ${modelId}`);
+		await expect(
+			this.page.getByTestId("system-message").filter({ hasText: "model switched to" }).last(),
+		).toBeVisible();
+		await expect(this.status).toHaveAttribute("data-current-model", modelId);
+	}
+
+	async newSession() {
+		await this.send("/new");
+		await expect(this.page.getByTestId("system-message").filter({ hasText: "new session" }).last()).toBeVisible();
+	}
+
+	async setup(modelId: string, opts?: { email?: string; id?: number; sendToken?: boolean; serverUrl?: string }) {
+		await this.connect(opts);
+		await this.newSession();
+		await this.model(modelId);
+	}
+
 	async expectAgentName(name: string) {
 		await expect(this.status).toHaveAttribute("data-agent-name", name);
 	}

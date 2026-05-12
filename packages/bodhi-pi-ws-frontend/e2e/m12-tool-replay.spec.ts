@@ -1,10 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test("M12 tool-call cards from a prior session re-render as completed on /resume", async ({ app }) => {
-	await app.goto();
-	await app.setSettings({ email: "replay@example.com", id: 330, sendToken: true });
-	await app.clickConnect();
-	await app.expectStatus("connected");
+	await app.setup("gpt-4o-mini", { email: "replay@example.com", id: 330, sendToken: true });
 
 	await app.send("Use the write tool to create a file note.txt with the contents 'replay-marker'.");
 	await app.expectChatStatus("idle");

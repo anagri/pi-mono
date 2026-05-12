@@ -2,8 +2,7 @@ import { expect, test } from "./fixtures";
 
 test("/name + /session + /export through the chat UI", async ({ chat, context }) => {
 	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-	await chat.goto();
-	await chat.waitForState("idle");
+	await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 
 	await test.step("seed a turn", async () => {
 		await chat.send("Reply only with: hello");

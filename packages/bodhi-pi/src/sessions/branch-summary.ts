@@ -1,6 +1,12 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
-import { completeSimple } from "@earendil-works/pi-ai";
+import {
+	computeFileLists,
+	extractFileOpsFromMessage,
+	newFileOps,
+	runSummarizationLLM,
+	serializeConversation,
+} from "./_shared.js";
 import type { CompactionDetails, SessionEntry } from "./entries.js";
 
 /**
@@ -44,59 +50,6 @@ export function detectCrossBranch(
 	return { abandonedTail, commonAncestorId };
 }
 
-interface FileOps {
-	read: Set<string>;
-	written: Set<string>;
-	edited: Set<string>;
-}
-
-function extractFileOps(message: AgentMessage, ops: FileOps): void {
-	if (message.role !== "assistant") return;
-	for (const block of message.content) {
-		if (block.type !== "toolCall") continue;
-		const args = (block.arguments as Record<string, unknown> | undefined) ?? undefined;
-		if (!args || typeof args.path !== "string") continue;
-		if (block.name === "read") ops.read.add(args.path);
-		else if (block.name === "write") ops.written.add(args.path);
-		else if (block.name === "edit") ops.edited.add(args.path);
-	}
-}
-
-function serializeConversation(messages: Message[]): string {
-	const parts: string[] = [];
-	for (const msg of messages) {
-		if (msg.role === "user") {
-			const c =
-				typeof msg.content === "string"
-					? msg.content
-					: msg.content
-							.filter((b): b is { type: "text"; text: string } => b.type === "text")
-							.map((b) => b.text)
-							.join("");
-			if (c) parts.push(`[User]: ${c}`);
-		} else if (msg.role === "assistant") {
-			const text: string[] = [];
-			const toolCalls: string[] = [];
-			for (const b of msg.content) {
-				if (b.type === "text") text.push(b.text);
-				else if (b.type === "toolCall") {
-					const args = b.arguments as Record<string, unknown>;
-					toolCalls.push(`${b.name}(${JSON.stringify(args)})`);
-				}
-			}
-			if (text.length > 0) parts.push(`[Assistant]: ${text.join("\n")}`);
-			if (toolCalls.length > 0) parts.push(`[Assistant tool calls]: ${toolCalls.join("; ")}`);
-		} else if (msg.role === "toolResult") {
-			const c = msg.content
-				.filter((b): b is { type: "text"; text: string } => b.type === "text")
-				.map((b) => b.text)
-				.join("");
-			if (c) parts.push(`[Tool result]: ${c.slice(0, 800)}`);
-		}
-	}
-	return parts.join("\n\n");
-}
-
 const BRANCH_SUMMARY_SYSTEM_PROMPT = `You summarize an abandoned conversation branch. The user navigated away from this tail to a different branch; produce a tight checkpoint of what was tried and what was learned, so the new branch can reference it if needed.
 
 Format:
@@ -128,36 +81,24 @@ export async function runBranchSummary(
 	signal?: AbortSignal,
 ): Promise<BranchSummaryResult> {
 	const messages: AgentMessage[] = [];
-	const fileOps: FileOps = { read: new Set(), written: new Set(), edited: new Set() };
+	const fileOps = newFileOps();
 	for (const entry of abandonedTail) {
 		if (entry.type === "message") {
 			messages.push(entry.message);
-			extractFileOps(entry.message, fileOps);
+			extractFileOpsFromMessage(entry.message, fileOps);
 		}
 	}
 	if (messages.length === 0) return { summary: "" };
 
 	const conversationText = serializeConversation(messages as Message[]);
 	const promptText = `<abandoned-branch>\n${conversationText}\n</abandoned-branch>\n\n${BRANCH_SUMMARY_SYSTEM_PROMPT}`;
-	const summarizationMessages: Message[] = [
-		{ role: "user", content: [{ type: "text", text: promptText }], timestamp: Date.now() },
-	];
-	const response = await completeSimple(
-		model,
-		{ systemPrompt: BRANCH_SUMMARY_SYSTEM_PROMPT, messages: summarizationMessages },
-		{ maxTokens: 4000, ...(signal ? { signal } : {}), apiKey },
-	);
-	if (response.stopReason === "error") {
-		throw new Error(`branch summary failed: ${response.errorMessage ?? "unknown error"}`);
-	}
-	const summary = response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
+	const summary = await runSummarizationLLM(model, BRANCH_SUMMARY_SYSTEM_PROMPT, promptText, {
+		apiKey,
+		maxTokens: 4000,
+		...(signal ? { signal } : {}),
+		errorPrefix: "branch summary failed",
+	});
 
-	const modified = new Set<string>([...fileOps.edited, ...fileOps.written]);
-	const readFiles = [...fileOps.read].filter((f) => !modified.has(f)).sort();
-	const modifiedFiles = [...modified].sort();
-	const details: CompactionDetails = { readFiles, modifiedFiles };
+	const details: CompactionDetails = computeFileLists(fileOps);
 	return { summary, details };
 }

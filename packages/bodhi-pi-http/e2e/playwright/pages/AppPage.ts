@@ -76,6 +76,25 @@ export class AppPage {
 		await this.page.getByTestId("disconnect").click();
 	}
 
+	async connect(opts?: { email?: string; id?: number; sendToken?: boolean }) {
+		await this.goto();
+		await this.setSettings(opts);
+		await this.clickConnect();
+		await this.expectStatus("connected");
+		await expect(this.status).not.toHaveAttribute("data-session-id", "");
+	}
+
+	async model(modelId: string) {
+		await this.send(`/model ${modelId}`);
+		await expect(this.systemMessages().filter({ hasText: "model switched to" }).last()).toBeVisible();
+		await expect(this.status).toHaveAttribute("data-current-model", modelId);
+	}
+
+	async setup(modelId: string, opts?: { email?: string; id?: number; sendToken?: boolean }) {
+		await this.connect(opts);
+		await this.model(modelId);
+	}
+
 	async expectStatus(status: "idle" | "connecting" | "connected" | "disconnected" | "unauthorized" | "error") {
 		await expect(this.status).toHaveAttribute("data-status", status);
 	}

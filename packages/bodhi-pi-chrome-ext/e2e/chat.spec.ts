@@ -1,14 +1,15 @@
 import { expect, test } from "./fixtures";
 
 test("M3 agent round trip with gpt-4o-mini", async ({ chat }) => {
-	await test.step("boot lands on idle state", async () => {
+	await test.step("boot lands on idle with no default model", async () => {
 		await chat.goto();
 		await chat.waitForState("idle");
-		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await expect(chat.statusBar).toHaveAttribute("data-current-model", "");
 	});
 
-	await test.step("seed openai auth", async () => {
+	await test.step("seed openai auth and select gpt-4o-mini", async () => {
 		await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await chat.model("gpt-4o-mini");
 	});
 
 	await test.step("send a prompt", async () => {

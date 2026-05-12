@@ -22,6 +22,10 @@ describe("real-LLM chat round-trip via HTTP+SSE", () => {
 			method: "session/new",
 			params: { cwd: rs.dataDir, mcpServers: [] },
 		});
+		await rpc(rs.url, tok, {
+			method: "session/setSessionConfigOption",
+			params: { sessionId: created.result.sessionId, configId: "model", value: "gpt-4o-mini" },
+		});
 
 		const result = await ssePrompt(rs.url, tok, {
 			method: "session/prompt",
@@ -57,6 +61,10 @@ describe("real-LLM chat round-trip via HTTP+SSE", () => {
 			params: { cwd: rs.dataDir, mcpServers: [] },
 		});
 		const sessionId = created.result.sessionId;
+		await rpc(rs.url, tok, {
+			method: "session/setSessionConfigOption",
+			params: { sessionId, configId: "model", value: "gpt-4o-mini" },
+		});
 
 		await ssePrompt(rs.url, tok, {
 			method: "session/prompt",

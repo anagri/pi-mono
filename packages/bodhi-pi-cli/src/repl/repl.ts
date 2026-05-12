@@ -111,7 +111,15 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	});
 
 	process.stdout.write(`${chalk.bold(`bodhi-pi-cli`)}  cwd: ${opts.cwd}\n`);
-	process.stdout.write(`session: ${state.sessionId.slice(0, 8)}…  type /help for commands\n\n`);
+	process.stdout.write(`session: ${state.sessionId.slice(0, 8)}…  type /help for commands\n`);
+	if (!state.currentModelId) {
+		const hint =
+			derivedModels.length > 0
+				? `pick one with /model <id>  (${derivedModels.map((m) => m.id).join(", ")})`
+				: "configure provider auth with /login <provider> <api-key>";
+		process.stdout.write(chalk.yellow(`[no model selected] ${hint}\n`));
+	}
+	process.stdout.write("\n");
 
 	for (;;) {
 		let line: string;

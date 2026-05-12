@@ -36,7 +36,8 @@ export interface LifecycleEventRecord {
 	toolName?: string;
 	userPrompt?: string;
 	stopReason?: string;
-	fromModelId?: string;
+	/** `null` when the previous model was unset; distinct from `undefined` (= field N/A). */
+	fromModelId?: string | null;
 	toModelId?: string;
 }
 

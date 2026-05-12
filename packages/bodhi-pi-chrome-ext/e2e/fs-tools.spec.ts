@@ -7,9 +7,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 
 		test("agent writes a file then reads it back", async ({ chat }) => {
 			await test.step("boot", async () => {
-				await chat.goto();
-				await chat.waitForState("idle");
-				await chat.login("openai", process.env.OPENAI_API_KEY!);
+				await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 			});
 
 			await test.step("send write+read prompt", async () => {
@@ -46,9 +44,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 
 		test("agent edits a file and verifies via read", async ({ chat }) => {
 			await test.step("boot", async () => {
-				await chat.goto();
-				await chat.waitForState("idle");
-				await chat.login("openai", process.env.OPENAI_API_KEY!);
+				await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 			});
 
 			await test.step("send edit+read prompt", async () => {
@@ -85,9 +81,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 
 		test("agent lists three seeded files", async ({ chat }) => {
 			await test.step("boot", async () => {
-				await chat.goto();
-				await chat.waitForState("idle");
-				await chat.login("openai", process.env.OPENAI_API_KEY!);
+				await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 			});
 
 			await test.step("send ls prompt", async () => {
@@ -122,9 +116,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 
 		test("agent finds .md files under /mnt/demo", async ({ chat }) => {
 			await test.step("boot", async () => {
-				await chat.goto();
-				await chat.waitForState("idle");
-				await chat.login("openai", process.env.OPENAI_API_KEY!);
+				await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 			});
 
 			await test.step("send find prompt", async () => {
@@ -156,9 +148,7 @@ test.describe("M8 FS tools surface tool-call cards", () => {
 
 		test("agent greps for a codeword", async ({ chat }) => {
 			await test.step("boot", async () => {
-				await chat.goto();
-				await chat.waitForState("idle");
-				await chat.login("openai", process.env.OPENAI_API_KEY!);
+				await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 			});
 
 			await test.step("send grep prompt", async () => {

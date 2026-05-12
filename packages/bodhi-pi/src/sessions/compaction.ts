@@ -1,6 +1,14 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Message, Model, Usage } from "@earendil-works/pi-ai";
-import { completeSimple } from "@earendil-works/pi-ai";
+import {
+	computeFileLists,
+	extractFileOpsFromMessage,
+	type FileOps,
+	formatFileOperations,
+	newFileOps,
+	runSummarizationLLM,
+	serializeConversation,
+} from "./_shared.js";
 import type { CompactionDetails, CompactionEntry, SessionEntry } from "./entries.js";
 
 export interface CompactionSettings {
@@ -20,56 +28,6 @@ export interface CompactionResult {
 	firstKeptEntryId: string;
 	tokensBefore: number;
 	details?: CompactionDetails;
-}
-
-interface FileOps {
-	read: Set<string>;
-	written: Set<string>;
-	edited: Set<string>;
-}
-
-function newFileOps(): FileOps {
-	return { read: new Set(), written: new Set(), edited: new Set() };
-}
-
-function extractFileOpsFromMessage(message: AgentMessage, ops: FileOps): void {
-	if (message.role !== "assistant") return;
-	for (const block of message.content) {
-		if (block.type !== "toolCall") continue;
-		const args = (block.arguments as Record<string, unknown> | undefined) ?? undefined;
-		if (!args) continue;
-		const path = typeof args.path === "string" ? args.path : undefined;
-		if (!path) continue;
-		switch (block.name) {
-			case "read":
-				ops.read.add(path);
-				break;
-			case "write":
-				ops.written.add(path);
-				break;
-			case "edit":
-				ops.edited.add(path);
-				break;
-		}
-	}
-}
-
-function computeFileLists(ops: FileOps): CompactionDetails {
-	const modified = new Set<string>([...ops.edited, ...ops.written]);
-	const readFiles = [...ops.read].filter((f) => !modified.has(f)).sort();
-	const modifiedFiles = [...modified].sort();
-	return { readFiles, modifiedFiles };
-}
-
-function formatFileOperations(details: CompactionDetails): string {
-	const sections: string[] = [];
-	if (details.readFiles.length > 0) {
-		sections.push(`<read-files>\n${details.readFiles.join("\n")}\n</read-files>`);
-	}
-	if (details.modifiedFiles.length > 0) {
-		sections.push(`<modified-files>\n${details.modifiedFiles.join("\n")}\n</modified-files>`);
-	}
-	return sections.length === 0 ? "" : `\n\n${sections.join("\n\n")}`;
 }
 
 export function calculateContextTokens(usage: Usage): number {
@@ -320,54 +278,6 @@ export function prepareCompaction(
 	};
 }
 
-const TOOL_RESULT_MAX_CHARS = 2000;
-
-function truncateForSummary(text: string, max: number): string {
-	if (text.length <= max) return text;
-	return `${text.slice(0, max)}\n\n[... ${text.length - max} more characters truncated]`;
-}
-
-function serializeConversation(messages: Message[]): string {
-	const parts: string[] = [];
-	for (const msg of messages) {
-		if (msg.role === "user") {
-			const c =
-				typeof msg.content === "string"
-					? msg.content
-					: msg.content
-							.filter((b): b is { type: "text"; text: string } => b.type === "text")
-							.map((b) => b.text)
-							.join("");
-			if (c) parts.push(`[User]: ${c}`);
-		} else if (msg.role === "assistant") {
-			const text: string[] = [];
-			const thinking: string[] = [];
-			const toolCalls: string[] = [];
-			for (const b of msg.content) {
-				if (b.type === "text") text.push(b.text);
-				else if (b.type === "thinking") thinking.push(b.thinking);
-				else if (b.type === "toolCall") {
-					const args = b.arguments as Record<string, unknown>;
-					const argsStr = Object.entries(args)
-						.map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-						.join(", ");
-					toolCalls.push(`${b.name}(${argsStr})`);
-				}
-			}
-			if (thinking.length > 0) parts.push(`[Assistant thinking]: ${thinking.join("\n")}`);
-			if (text.length > 0) parts.push(`[Assistant]: ${text.join("\n")}`);
-			if (toolCalls.length > 0) parts.push(`[Assistant tool calls]: ${toolCalls.join("; ")}`);
-		} else if (msg.role === "toolResult") {
-			const content = msg.content
-				.filter((b): b is { type: "text"; text: string } => b.type === "text")
-				.map((b) => b.text)
-				.join("");
-			if (content) parts.push(`[Tool result]: ${truncateForSummary(content, TOOL_RESULT_MAX_CHARS)}`);
-		}
-	}
-	return parts.join("\n\n");
-}
-
 const SUMMARIZATION_SYSTEM_PROMPT = `You are a context summarization assistant. Your task is to read a conversation between a user and an AI coding assistant, then produce a structured summary following the exact format specified.
 
 Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.`;
@@ -441,36 +351,18 @@ async function generateSummary(
 	previousSummary?: string,
 	signal?: AbortSignal,
 ): Promise<string> {
-	const maxTokens = Math.floor(0.8 * reserveTokens);
 	let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
 	if (customInstructions) basePrompt = `${basePrompt}\n\nAdditional focus: ${customInstructions}`;
-
 	const conversationText = serializeConversation(currentMessages as Message[]);
 	let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
 	if (previousSummary) promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
 	promptText += basePrompt;
-
-	const summarizationMessages: Message[] = [
-		{
-			role: "user",
-			content: [{ type: "text", text: promptText }],
-			timestamp: Date.now(),
-		},
-	];
-
-	const response = await completeSimple(
-		model,
-		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-		{ maxTokens, ...(signal ? { signal } : {}), apiKey },
-	);
-
-	if (response.stopReason === "error") {
-		throw new Error(`Summarization failed: ${response.errorMessage || "unknown error"}`);
-	}
-	return response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
+	return runSummarizationLLM(model, SUMMARIZATION_SYSTEM_PROMPT, promptText, {
+		apiKey,
+		maxTokens: Math.floor(0.8 * reserveTokens),
+		...(signal ? { signal } : {}),
+		errorPrefix: "Summarization failed",
+	});
 }
 
 async function generateTurnPrefixSummary(
@@ -480,24 +372,14 @@ async function generateTurnPrefixSummary(
 	apiKey: string,
 	signal?: AbortSignal,
 ): Promise<string> {
-	const maxTokens = Math.floor(0.5 * reserveTokens);
 	const conversationText = serializeConversation(messages as Message[]);
 	const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
-	const summarizationMessages: Message[] = [
-		{ role: "user", content: [{ type: "text", text: promptText }], timestamp: Date.now() },
-	];
-	const response = await completeSimple(
-		model,
-		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-		{ maxTokens, ...(signal ? { signal } : {}), apiKey },
-	);
-	if (response.stopReason === "error") {
-		throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "unknown error"}`);
-	}
-	return response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
+	return runSummarizationLLM(model, SUMMARIZATION_SYSTEM_PROMPT, promptText, {
+		apiKey,
+		maxTokens: Math.floor(0.5 * reserveTokens),
+		...(signal ? { signal } : {}),
+		errorPrefix: "Turn prefix summarization failed",
+	});
 }
 
 /**
@@ -551,8 +433,8 @@ export async function runCompaction(
 		);
 	}
 
-	const details = computeFileLists(fileOps);
-	summary += formatFileOperations(details);
+	const details: CompactionDetails = computeFileLists(fileOps);
+	summary += formatFileOperations(details.readFiles, details.modifiedFiles);
 
 	return { summary, firstKeptEntryId, tokensBefore, details };
 }

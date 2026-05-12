@@ -2,24 +2,18 @@ import { expect, test } from "./fixtures.js";
 
 test.describe("model selection persists across /new + /resume", () => {
 	test("status bar reflects the prior model after /new + /resume <id>", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
-		await expect(app.status).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await app.connect();
 		await app.login("openai", process.env.OPENAI_API_KEY!);
 		await app.login("anthropic", process.env.ANTHROPIC_API_KEY!);
+		await app.model("gpt-4o-mini");
 
 		await app.send("Reply with the single word: alpha");
 		await app.expectChatStatus("idle");
 
-		await app.send("/model claude-haiku-4-5");
-		await expect(app.status).toHaveAttribute("data-current-model", "claude-haiku-4-5");
-		// Run a prompt so the model_change is persisted in the session log.
+		await app.model("claude-haiku-4-5");
 		await app.send("Reply with the single word: beta");
 		await app.expectChatStatus("idle");
 
-		// Capture sessionId from /sessions output.
 		await app.send("/sessions");
 		const sysLocator = app.systemMessages().last();
 		await expect(sysLocator).toContainText(/sessions:/);
@@ -30,7 +24,7 @@ test.describe("model selection persists across /new + /resume", () => {
 
 		await app.send("/new");
 		await expect(app.systemMessages().filter({ hasText: "new session" }).last()).toBeVisible();
-		await expect(app.status).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await expect(app.status).not.toHaveAttribute("data-current-model", "claude-haiku-4-5");
 
 		await app.send(`/resume ${sessionA}`);
 		await expect(app.systemMessages().filter({ hasText: "resumed session" }).last()).toBeVisible();

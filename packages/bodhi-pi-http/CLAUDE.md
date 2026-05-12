@@ -33,7 +33,6 @@ All the bodhi-pi-* runtimes, including this are Proof of Concepts, so there is n
 | `src/server/index.ts` | Entry: dotenv, parseArgs, buildServer, listen |
 | `src/server/server.ts` | `buildServer({port, dataDir, ...})` — http server, routing, static |
 | `src/server/cli-args.ts` | `parseArgs(argv)` for `--port`, `--data-dir`, `--workspace`, `--help` |
-| `src/server/models.ts` | env-driven model registry (gpt-4o-mini default) |
 | `src/server/auth/token.ts` | `encodeToken` / `decodeToken` |
 | `src/server/auth/middleware.ts` | `requireAuth(req)` parses Authorization |
 | `src/server/acp/handler.ts` | `POST /acp` router; JSON vs SSE per method |

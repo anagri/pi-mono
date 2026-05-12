@@ -3,8 +3,7 @@ import { expect, test } from "./fixtures";
 test("/tree lists all entries with a leaf marker; /goto rewinds the leaf and the next prompt branches from there", async ({
 	chat,
 }) => {
-	await chat.goto();
-	await chat.waitForState("idle");
+	await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 
 	let firstUserId = "";
 

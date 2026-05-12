@@ -79,7 +79,8 @@ export default function App() {
 	// On first connect: try to resume last session (M17). If none / fails / cross-tenant,
 	// create a fresh session. The session's configOptions return the active model id —
 	// we mirror it into currentModelId + defaultModelId so the StatusBar reflects the
-	// truth without a separate /model query.
+	// truth without a separate /model query. `currentValue` may be `""` when no
+	// auth-resolvable model exists; the chat send path surfaces the agent's error.
 	useEffect(() => {
 		if (status !== "connected" || !client || sessionId !== undefined) return;
 		(async () => {

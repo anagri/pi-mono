@@ -10,20 +10,12 @@ test.describe("auth (Authorization: Bearer)", () => {
 	});
 
 	test("valid token → state=connected", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
-		// Once connected, the chat-root composite test-state takes over from
-		// connection status. Initial chat status is idle.
+		await app.connect();
 		await expect(app.chatPage).toHaveAttribute("data-test-state", "idle");
 	});
 
 	test("disconnect returns state to disconnected", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.connect();
 		await app.clickDisconnect();
 		await app.expectStatus("disconnected");
 	});

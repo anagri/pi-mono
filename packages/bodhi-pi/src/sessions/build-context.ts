@@ -32,43 +32,36 @@ export function walkPath(entries: SessionEntry[], leafId?: string | null): Sessi
 }
 
 /**
- * Synthesize a user-role message that frames a checkpoint summary. bodhi-pi's
- * `AgentMessage` is `Message`-only (no custom roles), so coding-agent's
- * `compactionSummary`/`branchSummary` AgentMessages are encoded as user text
- * with `<context-summary>` tags the LLM can read as instructions.
+ * bodhi-pi's `AgentMessage` is `Message`-only (no custom roles), so the
+ * `compactionSummary` / `branchSummary` AgentMessages from coding-agent are
+ * encoded here as user-role text with XML-tagged bodies the LLM can read as
+ * instructions. The wrapper owns the envelope; per-formatter functions own
+ * only the body shape.
  */
-function compactionSummaryMessage(entry: CompactionEntry): AgentMessage {
+function wrapAsUserMessage(text: string, timestamp: number): AgentMessage {
 	return {
 		role: "user",
-		content: [
-			{
-				type: "text",
-				text: `<context-summary tokens-before="${entry.tokensBefore}">\n${entry.summary}\n</context-summary>`,
-			},
-		],
-		timestamp: entry.timestamp,
+		content: [{ type: "text", text }],
+		timestamp,
 	} as AgentMessage;
+}
+
+function compactionSummaryMessage(entry: CompactionEntry): AgentMessage {
+	return wrapAsUserMessage(
+		`<context-summary tokens-before="${entry.tokensBefore}">\n${entry.summary}\n</context-summary>`,
+		entry.timestamp,
+	);
 }
 
 function branchSummaryMessage(entry: BranchSummaryEntry): AgentMessage {
-	return {
-		role: "user",
-		content: [
-			{
-				type: "text",
-				text: `<branch-summary from-id="${entry.fromId ?? ""}">\n${entry.summary}\n</branch-summary>`,
-			},
-		],
-		timestamp: entry.timestamp,
-	} as AgentMessage;
+	return wrapAsUserMessage(
+		`<branch-summary from-id="${entry.fromId ?? ""}">\n${entry.summary}\n</branch-summary>`,
+		entry.timestamp,
+	);
 }
 
 function customDisplayMessage(entry: CustomMessageEntry): AgentMessage {
-	return {
-		role: "user",
-		content: [{ type: "text", text: entry.content }],
-		timestamp: entry.timestamp,
-	} as AgentMessage;
+	return wrapAsUserMessage(entry.content, entry.timestamp);
 }
 
 /**
@@ -85,27 +78,12 @@ export function buildSessionContext(
 	leafId?: string | null,
 ): SessionContext {
 	const entries = record.entries;
-	const byId = new Map<string, SessionEntry>();
-	for (const entry of entries) byId.set(entry.id, entry);
-
 	const targetLeaf = leafId !== undefined ? leafId : (record.leafId ?? null);
 	if (targetLeaf === null && entries.length === 0) {
 		return { messages: [], currentModelId: null, currentThinkingLevel: null, name: null };
 	}
 
-	let path: SessionEntry[];
-	const haveParentLinks = entries.some((e: SessionEntry) => e.parentId !== undefined && e.parentId !== null);
-	if (haveParentLinks && targetLeaf !== null) {
-		const start = byId.get(targetLeaf) ?? entries[entries.length - 1];
-		path = [];
-		let cur: SessionEntry | undefined = start;
-		while (cur) {
-			path.unshift(cur);
-			cur = cur.parentId ? byId.get(cur.parentId) : undefined;
-		}
-	} else {
-		path = entries.slice();
-	}
+	const path = walkPath(entries, targetLeaf);
 
 	let currentModelId: string | null = null;
 	let currentThinkingLevel: ModelThinkingLevel | null = null;

@@ -14,9 +14,7 @@ test.describe("M11 scripted skill via run_script", () => {
 
 	test("/skill:days-since-birthday calls run_script and reports the integer", async ({ chat }) => {
 		await test.step("boot", async () => {
-			await chat.goto();
-			await chat.waitForState("idle");
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		});
 
 		await test.step("send the scripted skill invocation", async () => {

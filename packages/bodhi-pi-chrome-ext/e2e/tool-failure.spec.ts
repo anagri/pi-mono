@@ -5,9 +5,7 @@ test.describe("M15 tool-failure rendering", () => {
 
 	test("a failed read tool surfaces as a failed card", async ({ chat }) => {
 		await test.step("boot to idle on empty workspace", async () => {
-			await chat.goto();
-			await chat.waitForState("idle");
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		});
 
 		await test.step("ask agent to read a missing file", async () => {

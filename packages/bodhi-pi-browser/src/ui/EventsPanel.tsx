@@ -13,16 +13,18 @@ const LifecycleRow = memo(function LifecycleRow({ row }: { row: LifecycleEventRo
 			{...(row.toolName ? { "data-tool-name": row.toolName } : {})}
 			{...(row.userPrompt ? { "data-user-prompt": row.userPrompt } : {})}
 			{...(row.stopReason ? { "data-stop-reason": row.stopReason } : {})}
-			{...(row.fromModelId ? { "data-from-model-id": row.fromModelId } : {})}
+			{...(row.fromModelId !== undefined
+				? { "data-from-model-id": row.fromModelId === null ? "" : row.fromModelId }
+				: {})}
 			{...(row.toModelId ? { "data-to-model-id": row.toModelId } : {})}
 			className="event-row event-row-lifecycle"
 		>
 			<span className="event-row-type">{row.type}</span>
 			{row.toolName ? <span className="event-row-extra">tool={row.toolName}</span> : null}
 			{row.stopReason ? <span className="event-row-extra">stop={row.stopReason}</span> : null}
-			{row.fromModelId && row.toModelId ? (
+			{row.fromModelId !== undefined && row.toModelId ? (
 				<span className="event-row-extra">
-					{row.fromModelId}→{row.toModelId}
+					{row.fromModelId ?? "(none)"}→{row.toModelId}
 				</span>
 			) : null}
 			{row.userPrompt ? <span className="event-row-prompt">{row.userPrompt}</span> : null}

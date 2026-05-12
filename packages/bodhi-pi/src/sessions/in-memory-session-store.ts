@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { walkPath } from "./build-context.js";
 import type {
 	ExtensionEntry,
 	ListSessionsRequest,
@@ -57,17 +58,10 @@ export function createInMemorySessionStore(): SessionStore {
 		async forkRecord(sourceSessionId: string, fromEntryId: string, position: "before" | "at") {
 			const source = sessions.get(sourceSessionId);
 			if (!source) throw new Error(`session ${sourceSessionId} not found (or deleted)`);
-			const byId = new Map<string, SessionEntry>();
-			for (const entry of source.entries) byId.set(entry.id, entry);
-			const target = byId.get(fromEntryId);
-			if (!target) throw new Error(`entry ${fromEntryId} not found in session ${sourceSessionId}`);
-			// Walk parentId chain from target back to root.
-			const chain: SessionEntry[] = [];
-			let cur: SessionEntry | undefined = target;
-			while (cur) {
-				chain.unshift(cur);
-				cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+			if (!source.entries.some((e) => e.id === fromEntryId)) {
+				throw new Error(`entry ${fromEntryId} not found in session ${sourceSessionId}`);
 			}
+			const chain = walkPath(source.entries, fromEntryId);
 			const copied = position === "before" ? chain.slice(0, -1) : chain;
 			const now = Date.now();
 			const newRecord: SessionRecord = {

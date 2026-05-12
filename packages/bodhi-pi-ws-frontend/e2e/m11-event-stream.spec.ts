@@ -46,10 +46,7 @@ test.describe("M11 EventsPanel: lifecycle + wire tabs (parity with bodhi-pi-web)
 		test.use({ scenario: "workspace-readme" });
 
 		test("text + tool prompt fires every event type expected from web's events.spec", async ({ app }) => {
-			await app.goto();
-			await app.setSettings({ email: "m11-lifecycle@example.com", id: 113, sendToken: true });
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini", { email: "m11-lifecycle@example.com", id: 113, sendToken: true });
 
 			await expect(app.eventsPanel).toBeVisible();
 			await app.selectEventTab("lifecycle");

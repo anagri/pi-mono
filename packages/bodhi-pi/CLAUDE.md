@@ -83,6 +83,16 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 - **No `node:fs` in core, but `Filesystem`-based walks are allowed.** Core never imports `node:fs`/`node:os`. Walks over project-rooted files (AGENTS.md / CLAUDE.md, `.bodhi-pi/settings.json`, `.bodhi-pi/commands/`, `.bodhi-pi/skills/`) go through the injected `Filesystem`. The walk starts at the session `cwd` and ascends ancestors using `path.posix.dirname` — terminates naturally when the host's mount root is reached (FSA-rooted browser hosts) or at `/` for Node.
 - **ACP `fs/*` methods are deliberately absent** — orthogonal to our host-injected `Filesystem`.
 
+## pi-agent-core import policy
+
+`src/acp/agent.ts` imports `Agent` directly from `@earendil-works/pi-agent-core/dist/agent.js`, NOT from the package barrel. This is **intentional and must not be "fixed"** by future agents.
+
+- Upstream `@earendil-works/pi-agent-core` (= `packages/agent`) is no longer runtime-neutral. Its barrel re-exports `harness/session/repo/jsonl.ts`, `harness/session/storage/jsonl.ts`, `harness/session/storage/memory.ts`, `harness/utils/shell-output.ts`, and `harness/env/nodejs.ts` — all of which directly import `node:child_process`, `node:crypto`, `node:fs`, `node:fs/promises`, `node:os`, `node:path`.
+- bodhi-pi must run in browser-shipped runtimes (`bodhi-pi-browser`, `bodhi-pi-web`, `bodhi-pi-chrome-ext`). Importing the barrel pulls in those Node-only modules transitively; bundlers' tree-shaking does not reliably strip them because the harness modules have side-effecting top-level `import` statements.
+- The `dist/agent.js` deep import gives us only the `Agent` class plus its `pi-ai` dependencies — no Node-specific transitive baggage. Tree-shaking is a non-concern because the import graph is already minimal.
+- Type-only imports from `@earendil-works/pi-agent-core` (e.g., `AgentMessage`, `AgentTool`, `AgentToolResult`) are fine — they erase at compile time and don't pull runtime modules.
+- Review finding A.3 in `ai-docs/reviews/2026-05-11-bodhi-pi-tech-debt.md` proposed swapping the `dist/` import for the barrel. That finding is obsolete; the analysis above supersedes it (see Decision log entry dated 2026-05-12).
+
 ## Test conventions
 
 - No `if (cond) { expect(...) }` — use narrowing helpers and `expect(val, "diag").toBe(...)`.

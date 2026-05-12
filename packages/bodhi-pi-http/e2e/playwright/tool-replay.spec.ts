@@ -2,10 +2,7 @@ import { expect, test } from "./fixtures.js";
 
 test.describe("tool-call replay on /resume (real LLM)", () => {
 	test("tool-call cards from a prior session re-render as completed on /resume", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini");
 
 		await app.send("Use the write tool to create a file note.txt with the contents 'replay-marker'.");
 		await app.expectChatStatus("idle");
@@ -20,7 +17,6 @@ test.describe("tool-call replay on /resume (real LLM)", () => {
 		await app.send(`/resume ${sessionId}`);
 		await expect(app.systemMessages().filter({ hasText: "resumed session" }).last()).toBeVisible();
 
-		// Replayed tool-call from session history is rendered with completed status.
 		await expect(app.toolCalls({ status: "completed" }).first()).toBeVisible();
 	});
 });

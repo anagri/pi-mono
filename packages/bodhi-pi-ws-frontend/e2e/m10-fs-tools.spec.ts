@@ -3,10 +3,7 @@ import { expect, test } from "./fixtures";
 test.describe("M10 fs tools surface tool-call cards", () => {
 	test.describe("write + read", () => {
 		test("agent writes a file then reads it back", async ({ app }) => {
-			await app.goto();
-			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 			await app.send(
 				"Step 1: use the write tool to create a file named poem.txt with the content 'roses are red'. " +
@@ -26,10 +23,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-notes-txt" });
 
 		test("agent edits a file and verifies via read", async ({ app }) => {
-			await app.goto();
-			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 			await app.send(
 				"Step 1: use the edit tool to change notes.txt — replace the substring 'world' with 'earth'. " +
@@ -49,10 +43,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-notes-abc" });
 
 		test("agent lists notes/", async ({ app }) => {
-			await app.goto();
-			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 			await app.send(
 				"Use the ls tool to list the contents of the notes directory. " +
@@ -73,10 +64,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-codeword" });
 
 		test("agent greps for a codeword and surfaces the result in the tool card preview", async ({ app }) => {
-			await app.goto();
-			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 			await app.send(
 				"Use the grep tool with a regex to find which file under notes mentions 'codeword'. " +
@@ -96,10 +84,7 @@ test.describe("M10 fs tools surface tool-call cards", () => {
 		test.use({ scenario: "fs-tools-docs-tree" });
 
 		test("agent finds .md files under the workspace", async ({ app }) => {
-			await app.goto();
-			await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 			await app.send(
 				"Use the find tool (NOT grep, NOT ls) to find every file in the current workspace whose name ends in '.md'. " +

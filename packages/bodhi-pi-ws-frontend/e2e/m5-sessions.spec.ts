@@ -1,19 +1,15 @@
 import { expect, test } from "./fixtures";
 
 test("create and list sessions via slash commands", async ({ app }) => {
-	await app.goto();
-	await app.setSettings({ email: "m5@example.com", id: 5, sendToken: true });
-	await app.clickConnect();
-	await app.expectStatus("connected");
+	await app.setup("gpt-4o-mini", { email: "m5@example.com", id: 5, sendToken: true });
 
-	// First prompt — implicit newSession.
 	await app.send("Reply with the single word: alpha");
 	await app.expectChatStatus("idle");
 	expect((await app.lastMessageText("assistant")).toLowerCase()).toContain("alpha");
 
 	// Second session via /new.
-	await app.send("/new");
-	await expect(app.page.getByTestId("system-message").last()).toContainText("new session");
+	await app.newSession();
+	await app.model("gpt-4o-mini");
 
 	await app.send("Reply with the single word: bravo");
 	await app.expectChatStatus("idle");

@@ -181,6 +181,13 @@ export function RuntimeProvider({
 			setCurrentModelId(derivedDefault);
 			setConn(runtime.conn);
 			setStatus("idle");
+			if (!derivedDefault) {
+				addSystemMessage(
+					derivedModels.length > 0
+						? `[no model selected] pick one with /model <id>  (${derivedModels.map((m) => m.id).join(", ")})`
+						: `[no model selected] configure provider auth with /login <provider> <api-key>`,
+				);
+			}
 		})().catch((err) => {
 			if (!cancelled) {
 				addSystemMessage(`error: ${String(err)}`);

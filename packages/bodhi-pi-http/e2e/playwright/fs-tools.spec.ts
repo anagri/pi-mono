@@ -2,10 +2,7 @@ import { expect, test } from "./fixtures.js";
 
 test.describe("fs tools surface tool-call cards (real LLM)", () => {
 	test("write + read round-trip", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini");
 
 		await app.send(
 			"Step 1: use the write tool to create a file named poem.txt with the content 'roses are red'. " +
@@ -25,10 +22,7 @@ test.describe("fs tools surface tool-call cards (real LLM)", () => {
 		test.use({ scenario: "fs-tools-notes-txt" });
 
 		test("agent edits a file then reads it back", async ({ app }) => {
-			await app.goto();
-			await app.setSettings();
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini");
 
 			await app.send(
 				"Step 1: use the edit tool to change notes.txt — replace the substring 'world' with 'earth'. " +
@@ -49,10 +43,7 @@ test.describe("fs tools surface tool-call cards (real LLM)", () => {
 		test.use({ scenario: "fs-tools-notes-abc" });
 
 		test("agent lists notes/", async ({ app }) => {
-			await app.goto();
-			await app.setSettings();
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini");
 
 			await app.send(
 				"Use the ls tool to list the contents of the notes directory. " +
@@ -72,10 +63,7 @@ test.describe("fs tools surface tool-call cards (real LLM)", () => {
 		test.use({ scenario: "fs-tools-codeword" });
 
 		test("agent greps for a codeword and the result lands in the tool-card preview", async ({ app }) => {
-			await app.goto();
-			await app.setSettings();
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini");
 
 			await app.send(
 				"Use the grep tool with a regex to find which file under notes mentions 'codeword'. " +
@@ -96,10 +84,7 @@ test.describe("fs tools surface tool-call cards (real LLM)", () => {
 		test.use({ scenario: "fs-tools-docs-tree" });
 
 		test("agent finds .md files under the workspace", async ({ app }) => {
-			await app.goto();
-			await app.setSettings();
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini");
 
 			await app.send(
 				"Use the find tool (NOT grep, NOT ls) to find every file in the current workspace whose name ends in '.md'. " +

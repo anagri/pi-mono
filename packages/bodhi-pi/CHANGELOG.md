@@ -2,7 +2,73 @@
 
 ## [Unreleased]
 
+### Changed
+- Internal: `acp/agent.ts` decomposed without API change. The 17-arm
+  `extMethod()` if/else dispatch chain becomes a private readonly
+  `Map<string, ExtHandler>` (`extHandlers`) keyed on method name; the
+  `session/delete` body moves into a sibling `handleSessionDelete()`
+  to match the rest. Every handler that takes a `sessionId` param now
+  goes through saturated guards — `requireSessionRecord(id)` for
+  storage-only lookups, `requireSession(id)` for runtime lookups,
+  `validateSessionId(value)` for typed-string narrowing, and
+  `optionalSessionId(value)` for "id or undefined" args — so the same
+  `unknown session` and `not loaded` error strings come from one place.
+  Three call sites that ran a compaction + persisted its entry inline
+  (`/compact`, proactive recovery, post-prompt threshold trigger) now
+  go through `runAndPersistCompaction()` returning a discriminated
+  `{ status: "success" | "skipped" | "error" }` plus a shared
+  `makeCompactionEntry()` builder; the `compaction_start`/
+  `compaction_end` event ordering is unchanged. The four `agent_end`
+  emissions in `prompt()` collapse into one closure-local `finishTurn()`
+  helper. The 200-line `_buildSessionState()` orchestrator splits into
+  `loadProjectArtifacts()` (commands + skills + extensions reload),
+  `composeSystemPrompt()` (skills XML block assembly), and
+  `createPiAgent()` (model resolution + tool registration), reducing
+  `_buildSessionState` itself to ~30 lines of orchestration. The
+  `SessionState` interface splits into `SettingsState` (settings/auth/kv
+  serializable view) and `SessionRuntime` (in-memory `piAgent`,
+  `currentModelId`, `leafId`, `toolset`, etc.); accesses now read
+  `session.settings.X` or `session.runtime.X` consistently. No public
+  type or wire change. (Batch 3 of the 2026-05-11 tech-debt review.)
+- Internal: dedup `FileOps` tracking, message serialization, and the
+  LLM summarization wrapper between `sessions/compaction.ts` and
+  `sessions/branch-summary.ts` into a new module-private
+  `sessions/_shared.ts` (covers `extractFileOpsFromMessage`,
+  `computeFileLists`, `formatFileOperations`, `serializeConversation`,
+  `joinTextBlocks`, and `runSummarizationLLM`). `walkPath` now backs
+  the chain-walk in `buildSessionContext` and
+  `createInMemorySessionStore.forkRecord` instead of two inline
+  copies. The three user-message wrappers in `build-context.ts`
+  (`compactionSummaryMessage`, `branchSummaryMessage`,
+  `customDisplayMessage`) share a single `wrapAsUserMessage` helper.
+  branch-summary's tool-result truncation moves from 800 to 2000
+  chars and now includes thinking blocks, aligning with compaction
+  and upstream coding-agent — observable only in the LLM-facing
+  summarization request, not in any persisted entry. Public exports
+  unchanged. (Batch 2 of the 2026-05-11 tech-debt review.)
+
 ### Changed (BREAKING)
+- No hardcoded `gpt-4o-mini` fallback. `pickDefaultModelId()` now
+  returns `string | null` and only resolves to a concrete id when at
+  least one provider has auth-resolvable credentials AND a configured
+  default model id is present in the candidate list (or there is a
+  unique candidate the host hasn't ruled out). When neither holds,
+  `currentModelId` is `null` for the lifetime of the session until
+  the host calls `setSessionConfigOption({ configId: "model" })` (or
+  the user issues `/model <id>`). `prompt()` now rejects with
+  `RequestError(-32602, ...)` carrying a branched message — the empty-
+  models branch hints "configure provider auth with `/login <provider>
+  <api-key>`" and the populated-models branch hints "pick one with
+  `/model <id>`". `ModelSelectEvent.fromModelId` widens to
+  `string | null` so the boot-from-unset transition is observable; the
+  `current_value` field of the model `ConfigOption` is now `""` (not
+  `"gpt-4o-mini"`) when no model has been chosen — host UIs must
+  display the empty/null state instead of pretending a model is
+  active. Hosts in this repo (`bodhi-pi-cli` REPL, `bodhi-pi-browser`
+  RuntimeProvider, `bodhi-pi-http` frontend, `bodhi-pi-ws-frontend`,
+  `bodhi-pi-web`/`-chrome-ext`) surface the same branched hint via a
+  system message at boot when `currentModelId === null`. (Batch 3 of
+  the 2026-05-11 tech-debt review.)
 - ACP-conforming notifications replace ad-hoc `configOptions` response
   fields. The four ext methods `_bodhi-pi/session/settings/{set,unset}`
   and `_bodhi-pi/kv/{set,remove}` no longer carry `configOptions` in

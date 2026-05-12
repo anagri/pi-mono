@@ -88,12 +88,12 @@ Specs read the panel via `[data-testid="event-row"]` locators with `data-event-s
 - **`requestPermission` must run from a user gesture.** That's why `DirectoryGate.tsx` calls it directly inside the button click. After `showDirectoryPicker({mode:"readwrite"})` resolves, the handle is already granted — do NOT call `requestPermission` again, the activation token is consumed (manual smoke caught this in M7 hardening).
 - **Vite dev port is `35173 --strictPort`.** Playwright `webServer.reuseExistingServer: false`. Fail loud on conflicts; never silently hijack another app's port.
 - **`AsyncFunction`-based `ScriptExecutor` requires `unsafe-eval` CSP.** Vite dev/preview have no CSP by default. Document for production deploys.
-- **Default model stays `gpt-4o-mini`.** Anthropic registers as a switch target only when `VITE_ANTHROPIC_API_KEY` is set.
+- **No hardcoded default model.** `bodhi-pi` core no longer falls back to a fixed model id. The host derives the initial model from configured provider auth (`VITE_OPENAI_API_KEY`, `VITE_ANTHROPIC_API_KEY`, etc.); when none resolves, the runtime exposes `currentModelId === null` and the UI must hint to add a provider or pick a model. Anthropic registers as a switch target only when `VITE_ANTHROPIC_API_KEY` is set.
 - **Don't peek inside the worker.** Cross-realm boundary; assertions go through ACP notifications + the chat store. Mirrors bodhi-pi's "drive via `ClientSideConnection` only" rule.
 
 ## Test conventions
 
-- **One Playwright spec per feature**, ported from a corresponding `bodhi-pi/e2e/*.e2e.ts` test where possible. Same prompts, same assertion patterns, real `gpt-4o-mini`. Cross-provider parity in `cross-provider.spec.ts`.
+- **One Playwright spec per feature**, ported from a corresponding `bodhi-pi/e2e/*.e2e.ts` test where possible. Same prompts, same assertion patterns, real provider-backed models (`gpt-4o-mini` is the conventional cheap-default the suite seeds when `VITE_OPENAI_API_KEY` is set; the runtime no longer guarantees it). Cross-provider parity in `cross-provider.spec.ts`.
 - **Use `data-testid` selectors via the POM.** No CSS selectors in specs. Add new locators to `e2e/pages/ChatPage.ts` (chat surface) or `e2e/pages/EventsPanel.ts` (lifecycle/wire observability) rather than inlining.
 - **No `page.evaluate` / `window.*` reads.** Every observable signal (chat state, tool cards, lifecycle events, ACP wire frames) is exposed via DOM `data-*` attributes and asserted through Playwright locators. The single sanctioned exception is the FSA-seed `addInitScript` in `helpers/seed.ts`; everything else flows through `<EventsPanel>`.
 - **Assert via auto-retrying matchers** (`toContainText`, `toHaveAttribute`, `toHaveCount`). `chat.send` doesn't await the slash-command handler — one-shot snapshots race against React commits. The capture-sessionId pattern (`expect(sysLocator).toContainText(/sessions:/); const sys = await sysLocator.textContent();`) is the canonical workaround.
@@ -101,7 +101,7 @@ Specs read the panel via `[data-testid="event-row"]` locators with `data-event-s
 - **Seed bytes live on disk under `e2e/data/<scenario>/`.** Specs build seeds via `loadScenario(name)` from `e2e/helpers/seed.ts` (recursive walk → flat `Record<seedPath, utf8>`); inline string literals are reserved for trivial cases like `files: {}`. Mirrors cli's `test/fixtures/<scenario>/` pattern; cli-mirroring scenarios (`commands-echo`, `commands-say-tuesday`, `skills-say-hello`, `skills-days-since-birthday`, `extensions-redact-secrets`) carry the same bytes as cli except `skills-days-since-birthday/SKILL.md` bakes in `/mnt/demo/...` instead of cli's `{SCRIPT_PATH}` placeholder (web's mount path is deterministic, so no runtime templating needed).
 - **Session storage / IndexedDB is per-context.** Playwright spawns a fresh browser context per test → tests are isolated automatically.
 - **`workers: 1, fullyParallel: false`.** Real LLM rate limits + the `webServer` dev server are single-tenant. Don't change this without measuring.
-- **No e2e for cancel button.** gpt-4o-mini finishes too fast to reliably catch the streaming state in automation. Manual smoke verified.
+- **No e2e for cancel button.** The default OpenAI model (typically `gpt-4o-mini`) finishes too fast to reliably catch the streaming state in automation. Manual smoke verified.
 - **Examples folder is for humans, not specs.** Specs continue using their own programmatic seeds for locality. `e2e/examples/` is mounted manually via the FSA picker.
 
 ## Milestone history

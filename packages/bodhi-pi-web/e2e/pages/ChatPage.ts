@@ -27,8 +27,9 @@ export class ChatPage {
 		await this.page.goto("/");
 	}
 
-	async waitForState(state: TestState) {
-		await expect(this.chatPage).toHaveAttribute("data-test-state", state);
+	async waitForState(state: TestState, timeout?: number) {
+		const opts = timeout !== undefined ? { timeout } : undefined;
+		await expect(this.chatPage).toHaveAttribute("data-test-state", state, opts);
 	}
 
 	messages(role: MessageRole) {
@@ -67,5 +68,18 @@ export class ChatPage {
 		await this.send(`/login ${provider} ${apiKey}`);
 		await expect(this.systemMessages()).toHaveCount(before + 1);
 		await expect(this.systemMessages().nth(before)).toContainText(`stored auth for ${provider}`);
+	}
+
+	async model(modelId: string) {
+		await this.send(`/model ${modelId}`);
+		await expect(this.statusBar).toHaveAttribute("data-current-model", modelId);
+		await expect(this.messages("system").last()).toContainText(`model switched to: ${modelId}`);
+	}
+
+	async setup(provider: string, apiKey: string, modelId: string) {
+		await this.goto();
+		await this.waitForState("idle");
+		await this.login(provider, apiKey);
+		await this.model(modelId);
 	}
 }

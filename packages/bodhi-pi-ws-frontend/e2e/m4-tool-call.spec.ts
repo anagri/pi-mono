@@ -1,10 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test("real-LLM prompt triggers a tool-call card", async ({ app }) => {
-	await app.goto();
-	await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-	await app.clickConnect();
-	await app.expectStatus("connected");
+	await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 	// Prompt the agent to write a file — exercises the write_text_file tool, which the
 	// builtin toolset registers when bodhi-pi sees a Filesystem at boot.

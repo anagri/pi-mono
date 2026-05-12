@@ -1,9 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test("/compact summarizes prior turns and retains pet-name fact afterwards", async ({ chat }) => {
-	await chat.goto();
-	await chat.waitForState("idle");
-	await chat.login("openai", process.env.OPENAI_API_KEY!);
+	await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 
 	await test.step("seed multi-turn history", async () => {
 		await chat.send("Remember: my pet's name is Mango. Reply only with: noted");

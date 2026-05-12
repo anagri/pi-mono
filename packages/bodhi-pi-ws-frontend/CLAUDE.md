@@ -79,5 +79,5 @@ Each row mirrors `bodhi-pi-web/CLAUDE.md`'s feature list — same user-observabl
 - **Page Object via `e2e/pages/AppPage.ts`**; locators only inside the POM.
 - **Per-test backend** via `spawnTestServer` (port 0, fresh tmpdir, fresh SQLite, materialized scenario files). The frontend dev server is shared across workers.
 - **Per-test tenant identity** derived from `testInfo.titlePath` so parallel workers cannot collide on `userId`/email.
-- **Real LLM** for chat round-trips (gpt-4o-mini default; Anthropic-gated specs for cross-provider parity). Faux providers stay in `bodhi-pi-ws-server/test/`.
+- **Real LLM** for chat round-trips (the suite seeds `OPENAI_API_KEY` so the runtime resolves to OpenAI's cheap default; bodhi-pi core no longer hardcodes `gpt-4o-mini`. Anthropic-gated specs cover cross-provider parity). Faux providers stay in `bodhi-pi-ws-server/test/`.
 - **Auto-retrying matchers only** (`toHaveAttribute`, `toContainText`, `toHaveCount`). The send → render path is async; one-shot snapshots race React commits.

@@ -2,20 +2,15 @@ import { expect, test } from "./fixtures.js";
 
 test.describe("/model command (real providers)", () => {
 	test("/model switches between providers and updates the status bar", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
-		await expect(app.status).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await app.connect();
 		await app.login("openai", process.env.OPENAI_API_KEY!);
 		await app.login("anthropic", process.env.ANTHROPIC_API_KEY!);
+		await app.model("gpt-4o-mini");
 
 		await app.send("Reply with the single word: hello");
 		await app.expectChatStatus("idle");
 
-		await app.send("/model claude-haiku-4-5");
-		await expect(app.systemMessages().filter({ hasText: "model switched to" }).last()).toBeVisible();
-		await expect(app.status).toHaveAttribute("data-current-model", "claude-haiku-4-5");
+		await app.model("claude-haiku-4-5");
 
 		await app.send("Reply with the single word: switched");
 		await app.expectChatStatus("idle");

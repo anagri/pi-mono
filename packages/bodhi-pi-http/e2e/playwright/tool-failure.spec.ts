@@ -2,10 +2,7 @@ import { expect, test } from "./fixtures.js";
 
 test.describe("tool-call failure (real LLM)", () => {
 	test("read tool against a missing file surfaces failed status", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini");
 
 		await app.send(
 			"Use the read tool to read the file 'definitely-does-not-exist-xyz.txt'. " +

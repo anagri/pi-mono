@@ -1,11 +1,12 @@
 import { expect, test } from "./fixtures";
 
 test("M4 multi-model switching with /model", async ({ chat }) => {
-	await test.step("boot defaults to gpt-4o-mini", async () => {
+	await test.step("boot to idle with no default model, then login + select gpt-4o-mini", async () => {
 		await chat.goto();
 		await chat.waitForState("idle");
-		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
+		await expect(chat.statusBar).toHaveAttribute("data-current-model", "");
 		await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await chat.model("gpt-4o-mini");
 	});
 
 	await test.step("/help lists local commands", async () => {
@@ -28,9 +29,7 @@ test("M4 multi-model switching with /model", async ({ chat }) => {
 	});
 
 	await test.step("/model gpt-4o switches", async () => {
-		await chat.send("/model gpt-4o");
-		await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o");
-		await expect(chat.messages("system").last()).toContainText("model switched to: gpt-4o");
+		await chat.model("gpt-4o");
 	});
 
 	await test.step("second turn routes to gpt-4o", async () => {

@@ -4,14 +4,7 @@ test.describe("M7 project slash commands", () => {
 	test.use({ scenario: ["commands-echo", "commands-say-tuesday"] });
 
 	test("/<known> arg expands $1 and reaches the model", async ({ app }) => {
-		await app.goto();
-		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-		await app.clickConnect();
-		await app.expectStatus("connected");
-
-		// Need a session for available_commands_update to fire.
-		await app.send("/new");
-		await expect(app.page.getByTestId("system-message").last()).toContainText("new session");
+		await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 		await app.send("/help");
 		const help = app.page.getByTestId("system-message").last();
@@ -33,10 +26,7 @@ test.describe("M7 project slash commands", () => {
 test.describe("M7 unknown slash command falls through", () => {
 	// No fixtures — empty workspace. Ensures unknown / commands forward to LLM as text.
 	test("/<unknown> passes through verbatim", async ({ app }) => {
-		await app.goto();
-		await app.setSettings({ email: "alice@example.com", id: 1, sendToken: true });
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.setup("gpt-4o-mini", { email: "alice@example.com", id: 1, sendToken: true });
 
 		await app.send("/totally-not-a-command Reply with the single word: gravy");
 		await app.expectChatStatus("idle");

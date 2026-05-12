@@ -2,25 +2,18 @@ import { expect, test } from "./fixtures.js";
 
 test.describe("EventsPanel: lifecycle + wire tabs", () => {
 	test("captures initialize handshake on connect (wire tab)", async ({ app }) => {
-		await app.goto();
-		await app.setSettings();
-		await app.clickConnect();
-		await app.expectStatus("connected");
+		await app.connect();
 
 		await expect(app.eventsPanel).toBeVisible();
 		await app.selectEventTab("wire");
 
-		// Outbound = client → server (request); inbound = server → client (response/notification).
 		await expect(app.wireRows({ direction: "out", method: "initialize", kind: "request" })).not.toHaveCount(0);
 		await expect(app.wireRows({ direction: "in", kind: "response" })).not.toHaveCount(0);
 	});
 
 	test.describe("real-LLM round-trip", () => {
 		test("captures session/prompt + session/update frames around a prompt", async ({ app }) => {
-			await app.goto();
-			await app.setSettings();
-			await app.clickConnect();
-			await app.expectStatus("connected");
+			await app.setup("gpt-4o-mini");
 
 			await app.send("Reply with the single word: pong");
 			await app.expectChatStatus("idle");
@@ -34,10 +27,7 @@ test.describe("EventsPanel: lifecycle + wire tabs", () => {
 			test.use({ scenario: "workspace-readme" });
 
 			test("text + tool prompt fires the canonical event sequence", async ({ app }) => {
-				await app.goto();
-				await app.setSettings();
-				await app.clickConnect();
-				await app.expectStatus("connected");
+				await app.setup("gpt-4o-mini");
 
 				await expect(app.eventsPanel).toBeVisible();
 				await app.selectEventTab("lifecycle");

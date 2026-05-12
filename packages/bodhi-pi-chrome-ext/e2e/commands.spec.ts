@@ -11,9 +11,7 @@ test.describe("M9 project slash commands", () => {
 
 	test("/<known> arg expands $1 and reaches the model", async ({ chat }) => {
 		await test.step("boot", async () => {
-			await chat.goto();
-			await chat.waitForState("idle");
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		});
 
 		await test.step("/help advertises echo and say-tuesday", async () => {
@@ -43,9 +41,7 @@ test.describe("M9 unknown slash command falls through", () => {
 	test.use({ workspaceSeed: { name: "demo", files: {} } });
 
 	test("/<unknown> passes through verbatim", async ({ chat }) => {
-		await chat.goto();
-		await chat.waitForState("idle");
-		await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		await chat.send("/totally-not-a-command Reply with the single word: gravy");
 		await chat.waitForState("streaming");
 		await chat.waitForState("idle");

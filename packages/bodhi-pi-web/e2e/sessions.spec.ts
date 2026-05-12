@@ -4,9 +4,7 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 	let sessionA = "";
 
 	await test.step("session A: prompt with a fact", async () => {
-		await chat.goto();
-		await chat.waitForState("idle");
-		await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		await chat.send("Remember the codeword 'aurora'. Reply only with: noted");
 		await chat.waitForState("streaming");
 		await chat.waitForState("idle");
@@ -74,9 +72,7 @@ test("M5 session lifecycle via slash commands", async ({ chat }) => {
 
 test("M6 reload resumes the last session via Dexie + sessionStorage", async ({ chat }) => {
 	await test.step("seed a session with a known fact", async () => {
-		await chat.goto();
-		await chat.waitForState("idle");
-		await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		await chat.send("Remember the codeword 'cobalt'. Reply only with: noted");
 		await chat.waitForState("streaming");
 		await chat.waitForState("idle");

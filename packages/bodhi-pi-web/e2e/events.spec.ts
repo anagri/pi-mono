@@ -10,9 +10,7 @@ test.describe("EventsPanel surfaces lifecycle events and ACP wire frames", () =>
 
 	test("text + tool + /close fires every event type and surfaces frames on the wire", async ({ chat, events }) => {
 		await test.step("boot lands on idle and the panel is mounted", async () => {
-			await chat.goto();
-			await chat.waitForState("idle", 60_000);
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 			await expect(events.panel).toBeVisible();
 		});
 
@@ -90,21 +88,17 @@ test.describe("EventsPanel surfaces lifecycle events and ACP wire frames", () =>
 	});
 
 	test("/model <other> fires model_select with fromModelId/toModelId populated", async ({ chat, events }) => {
-		await test.step("boot defaults to gpt-4o-mini", async () => {
-			await chat.goto();
-			await chat.waitForState("idle", 60_000);
-			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o-mini");
-			await chat.login("openai", process.env.OPENAI_API_KEY!);
+		await test.step("boot, login, select gpt-4o-mini", async () => {
+			await chat.setup("openai", process.env.OPENAI_API_KEY!, "gpt-4o-mini");
 		});
 
 		await test.step("/model gpt-4o switches the active model", async () => {
-			await chat.send("/model gpt-4o");
-			await expect(chat.statusBar).toHaveAttribute("data-current-model", "gpt-4o");
+			await chat.model("gpt-4o");
 		});
 
 		await test.step("model_select event records the from→to transition", async () => {
 			await events.selectTab("lifecycle");
-			const row = events.lifecycleRows({ type: "model_select" }).first();
+			const row = events.lifecycleRows({ type: "model_select" }).last();
 			await expect(row).toBeVisible();
 			await expect(row).toHaveAttribute("data-from-model-id", "gpt-4o-mini");
 			await expect(row).toHaveAttribute("data-to-model-id", "gpt-4o");
