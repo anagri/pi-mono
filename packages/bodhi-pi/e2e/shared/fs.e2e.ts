@@ -1,6 +1,5 @@
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { requireEnv } from "@test/helpers/env.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
@@ -23,10 +22,9 @@ afterEach(async () => {
 });
 
 test("Haiku writes a file then reads it back", async () => {
-	const apiKey = requireEnv("ANTHROPIC_API_KEY");
 	const h = await harnessFor({
 		model: getModel("anthropic", "claude-haiku-4-5"),
-		apiKey,
+		apiKey: process.env.ANTHROPIC_API_KEY!,
 		provider: "anthropic",
 	});
 	activeHarness = h;
@@ -47,7 +45,6 @@ test("Haiku writes a file then reads it back", async () => {
 
 	expect(await h.filesystem.exists(outFile)).toBe(true);
 	const stored = await h.filesystem.readTextFile(outFile);
-	// Substring match — real LLMs may add capitalisation or punctuation.
 	expect(stored.trim().toLowerCase()).toContain("hello world");
 
 	h.updates.length = 0;
@@ -64,10 +61,9 @@ test("Haiku writes a file then reads it back", async () => {
 });
 
 test("Haiku finds a string with grep", async () => {
-	const apiKey = requireEnv("ANTHROPIC_API_KEY");
 	const h = await harnessFor({
 		model: getModel("anthropic", "claude-haiku-4-5"),
-		apiKey,
+		apiKey: process.env.ANTHROPIC_API_KEY!,
 		provider: "anthropic",
 	});
 	activeHarness = h;

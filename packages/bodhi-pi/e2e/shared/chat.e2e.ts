@@ -1,7 +1,6 @@
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { asSelectOption } from "@test/helpers/acp-narrow.js";
-import { requireEnv } from "@test/helpers/env.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
@@ -39,11 +38,9 @@ async function runSingleTurn(opts: { model: Model<Api>; apiKey: string; provider
 }
 
 test("Anthropic Haiku replies with tuesday via ACP", async () => {
-	const apiKey = requireEnv("ANTHROPIC_API_KEY");
-
 	const result = await runSingleTurn({
 		model: getModel("anthropic", "claude-haiku-4-5"),
-		apiKey,
+		apiKey: process.env.ANTHROPIC_API_KEY!,
 		provider: "anthropic",
 		prompt: "Answer in one word: what day comes after Monday?",
 	});
@@ -54,11 +51,9 @@ test("Anthropic Haiku replies with tuesday via ACP", async () => {
 });
 
 test("OpenAI gpt-5-mini replies with tuesday via ACP", async () => {
-	const apiKey = requireEnv("OPENAI_API_KEY");
-
 	const result = await runSingleTurn({
 		model: getModel("openai", "gpt-5-mini"),
-		apiKey,
+		apiKey: process.env.OPENAI_API_KEY!,
 		provider: "openai",
 		prompt: "Answer in one word: what day comes after Monday?",
 	});
@@ -70,12 +65,8 @@ test("OpenAI gpt-5-mini replies with tuesday via ACP", async () => {
 
 // Skipped under http: per-turn agent rebuild appears to lose the
 // setSessionConfigOption model switch — second prompt still routes via the
-// initial provider. Tracked as a bodhi-pi-http divergence; fix is out of scope
-// for the e2e consolidation phase.
+// initial provider. Tracked as a bodhi-pi-http divergence.
 test.runIf(!isRuntime("http"))("switching model mid-session changes provenance", async () => {
-	const anthropicKey = requireEnv("ANTHROPIC_API_KEY");
-	const openaiKey = requireEnv("OPENAI_API_KEY");
-
 	const claude = getModel("anthropic", "claude-haiku-4-5");
 	const gpt = getModel("openai", "gpt-5-mini");
 
@@ -83,8 +74,8 @@ test.runIf(!isRuntime("http"))("switching model mid-session changes provenance",
 		models: [claude, gpt],
 		defaultModelId: claude.id,
 		getApiKey: (p) => {
-			if (p === "anthropic") return anthropicKey;
-			if (p === "openai") return openaiKey;
+			if (p === "anthropic") return process.env.ANTHROPIC_API_KEY!;
+			if (p === "openai") return process.env.OPENAI_API_KEY!;
 			return undefined;
 		},
 	});
@@ -109,7 +100,6 @@ test.runIf(!isRuntime("http"))("switching model mid-session changes provenance",
 	});
 	expect(claudeResult.stopReason).toBe("end_turn");
 	const claudeText = chunkedAgentText(h.updates).toLowerCase();
-	// Substring match — real LLMs vary phrasing run-to-run.
 	expect(
 		claudeText.includes("anthropic") || claudeText.includes("claude"),
 		`expected anthropic provenance, got: ${JSON.stringify(claudeText)}`,
@@ -137,20 +127,17 @@ test.runIf(!isRuntime("http"))("switching model mid-session changes provenance",
 });
 
 test("real LLM remembers context across two prompts in same session", async () => {
-	const apiKey = requireEnv("ANTHROPIC_API_KEY");
-
 	const haiku = getModel("anthropic", "claude-haiku-4-5");
 	const h = await createE2EHarness({
 		models: [haiku],
 		defaultModelId: haiku.id,
-		getApiKey: (p) => (p === "anthropic" ? apiKey : undefined),
+		getApiKey: (p) => (p === "anthropic" ? process.env.ANTHROPIC_API_KEY! : undefined),
 	});
 	activeHarness = h;
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
-	// Turn 1: state a fact.
 	h.updates.length = 0;
 	await h.clientConn.prompt({
 		sessionId,
@@ -164,7 +151,6 @@ test("real LLM remembers context across two prompts in same session", async () =
 	const noteText = chunkedAgentText(h.updates).toLowerCase();
 	expect(noteText.includes("noted"), `expected acknowledgment, got: ${JSON.stringify(noteText)}`).toBe(true);
 
-	// Turn 2: ask for the fact back — proves multi-turn context survives.
 	h.updates.length = 0;
 	await h.clientConn.prompt({
 		sessionId,

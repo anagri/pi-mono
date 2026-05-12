@@ -1,6 +1,5 @@
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { requireEnv } from "@test/helpers/env.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { toolCallStarts } from "@test/helpers/tool-call-asserts.js";
 import { afterEach, expect, test } from "vitest";
@@ -39,8 +38,7 @@ afterEach(async () => {
 });
 
 test("scripted skill: /skill:days-since-birthday invokes run_script and reports the integer", async () => {
-	const apiKey = requireEnv("OPENAI_API_KEY");
-	const h = await buildHarness(getModel(PROVIDER, MODEL_ID), apiKey);
+	const h = await buildHarness(getModel(PROVIDER, MODEL_ID), process.env.OPENAI_API_KEY!);
 	activeHarness = h;
 
 	const skillDir = `${h.cwd}/.bodhi-pi/skills/days-since-birthday`;

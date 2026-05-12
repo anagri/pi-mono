@@ -1,6 +1,5 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { requireEnv } from "@test/helpers/env.js";
 import {
 	asRegistered,
 	dynamicTools,
@@ -29,8 +28,8 @@ afterEach(async () => {
 });
 
 test.runIf(isRuntime("in-memory"))("input-transform with real LLM: ?quick prefix produces a short answer", async () => {
-	const apiKey = requireEnv("OPENAI_API_KEY");
 	const model = getModel("openai", "gpt-4o-mini");
+	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
 		models: [model],
 		defaultModelId: model.id,
@@ -52,8 +51,8 @@ test.runIf(isRuntime("in-memory"))("input-transform with real LLM: ?quick prefix
 });
 
 test.runIf(isRuntime("in-memory"))("pirate with real LLM: response uses pirate-style language", async () => {
-	const apiKey = requireEnv("OPENAI_API_KEY");
 	const model = getModel("openai", "gpt-4o-mini");
+	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
 		models: [model],
 		defaultModelId: model.id,
@@ -74,8 +73,8 @@ test.runIf(isRuntime("in-memory"))("pirate with real LLM: response uses pirate-s
 test.runIf(isRuntime("in-memory"))(
 	"redact-secrets with real LLM: API-key in tool output is scrubbed before being returned",
 	async () => {
-		const apiKey = requireEnv("OPENAI_API_KEY");
 		const model = getModel("openai", "gpt-4o-mini");
+		const apiKey = process.env.OPENAI_API_KEY!;
 		const h = await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
@@ -107,8 +106,8 @@ test.runIf(isRuntime("in-memory"))(
 );
 
 test.runIf(isRuntime("in-memory"))("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async () => {
-	const apiKey = requireEnv("OPENAI_API_KEY");
 	const model = getModel("openai", "gpt-4o-mini");
+	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
 		models: [model],
 		defaultModelId: model.id,
@@ -138,8 +137,8 @@ test.runIf(isRuntime("in-memory"))("dynamic-tools with real LLM: model picks up 
 test.runIf(isRuntime("in-memory"))(
 	"registerProvider with real Anthropic: switching to extension-supplied model routes to Claude",
 	async () => {
-		const openaiKey = requireEnv("OPENAI_API_KEY");
-		const anthropicKey = requireEnv("ANTHROPIC_API_KEY");
+		const openaiKey = process.env.OPENAI_API_KEY!;
+		const anthropicKey = process.env.ANTHROPIC_API_KEY!;
 		const openai = getModel("openai", "gpt-4o-mini");
 		const claude = getModel("anthropic", "claude-haiku-4-5");
 

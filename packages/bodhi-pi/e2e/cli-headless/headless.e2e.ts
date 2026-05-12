@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import type { Readable as NodeReadable, Writable as NodeWritable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { requireEnv } from "@test/helpers/env.js";
 import { afterEach, expect, test } from "vitest";
 
 // Spawns test-app-cli in --headless mode, feeds tagged user prompts on stdin,
@@ -97,36 +96,26 @@ afterEach(async () => {
 	}
 });
 
-test("headless mode: user prompt → tagged <response> block contains agent text", async () => {
-	requireEnv("OPENAI_API_KEY");
+// 60s override: three chained LLM turns + a tool-call in a single spawned session
+// exceeds the 30s default. The flow shares one spawned cli + one session across
+// all three steps to save the per-test spawn cost.
+test("headless mode: prompt round-trip, multi-turn recall, tool-call to real disk", async () => {
 	const session = await startHeadlessSession({ model: "gpt-4o-mini", provider: "openai" });
 	activeSession = session;
 
-	const response = await session.send("Answer in one word: what day comes after Monday?");
-	expect(response.toLowerCase()).toContain("tuesday");
-}, 60_000);
+	// Step 1: single prompt round-trip via tagged framing.
+	const tuesday = await session.send("Answer in one word: what day comes after Monday?");
+	expect.soft(tuesday.toLowerCase()).toContain("tuesday");
 
-test("headless mode: multi-turn context survives across stdin lines in the same session", async () => {
-	requireEnv("OPENAI_API_KEY");
-	const session = await startHeadlessSession({ model: "gpt-4o-mini", provider: "openai" });
-	activeSession = session;
-
+	// Step 2: multi-turn context survives across stdin lines.
 	const ack = await session.send("My favourite colour is teal. Reply with the single word 'noted' and nothing else.");
-	expect(ack.toLowerCase()).toContain("noted");
-
+	expect.soft(ack.toLowerCase()).toContain("noted");
 	const recall = await session.send("What is my favourite colour? Reply with just the colour word.");
-	expect(recall.toLowerCase()).toContain("teal");
-}, 60_000);
+	expect.soft(recall.toLowerCase()).toContain("teal");
 
-test("headless mode: tool-call writes to real disk via the spawned cli's Node FS", async () => {
-	requireEnv("OPENAI_API_KEY");
-	const session = await startHeadlessSession({ model: "gpt-4o-mini", provider: "openai" });
-	activeSession = session;
-
+	// Step 3: tool-call writes to real disk via the spawned cli's Node FS.
 	const outPath = path.join(session.tmpDir, "headless-out.txt");
 	await session.send(`Use the write tool to create the file ${outPath} with exactly the text: hello headless`);
-
-	// Real Node FS write — confirmed by reading directly on disk, not via the agent.
 	const stored = await fs.readFile(outPath, "utf-8");
-	expect(stored.toLowerCase()).toContain("hello headless");
+	expect.soft(stored.toLowerCase()).toContain("hello headless");
 }, 60_000);

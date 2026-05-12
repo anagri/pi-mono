@@ -1,6 +1,5 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { requireEnv } from "@test/helpers/env.js";
 import { recorder } from "@test/helpers/event-recorder.js";
 import { afterEach, expect, test } from "vitest";
 import type {
@@ -31,8 +30,8 @@ afterEach(async () => {
 test.runIf(isRuntime("in-memory"))(
 	"real LLM (gpt-4o-mini) fires the full event sequence around a single text turn",
 	async () => {
-		const apiKey = requireEnv("OPENAI_API_KEY");
 		const model = getModel("openai", "gpt-4o-mini");
+		const apiKey = process.env.OPENAI_API_KEY!;
 		const { log, handlers } = recorder();
 		const h = await createE2EHarness({
 			models: [model],
@@ -83,8 +82,8 @@ test.runIf(isRuntime("in-memory"))(
 test.runIf(isRuntime("in-memory"))(
 	"real LLM tool turn (gpt-4o-mini) fires tool_call + tool_execution_* + tool_result",
 	async () => {
-		const apiKey = requireEnv("OPENAI_API_KEY");
 		const model = getModel("openai", "gpt-4o-mini");
+		const apiKey = process.env.OPENAI_API_KEY!;
 
 		const { log, handlers } = recorder();
 		const h = await createE2EHarness({

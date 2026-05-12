@@ -1,6 +1,5 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { requireEnv } from "@test/helpers/env.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { EXT_SESSION_COMPACT } from "@/acp/constants.js";
@@ -15,13 +14,13 @@ afterEach(async () => {
 	}
 });
 
+// 60s override: 4 chained prompts + a compact extension call exceeds 30s on most runs.
 test("real LLM /compact returns a summary and the post-compact prompt still recalls earlier facts", async () => {
-	const apiKey = requireEnv("OPENAI_API_KEY");
 	const model = getModel("openai", "gpt-4o-mini");
 	const h = await createE2EHarness({
 		models: [model],
 		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
+		getApiKey: (p) => (p === "openai" ? process.env.OPENAI_API_KEY! : undefined),
 	});
 	activeHarness = h;
 
