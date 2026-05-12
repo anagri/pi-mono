@@ -1,7 +1,8 @@
 import fsNode from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
+import type { SessionNotification } from "@agentclientprotocol/sdk";
+import { type BodhiPiClient, createBodhiPiClient } from "@bodhiapp/bodhi-pi";
 import {
 	type Api,
 	type FauxProviderRegistration,
@@ -57,8 +58,9 @@ async function setup(opts: { homeDir?: string } = {}) {
 		},
 		requestPermission: async () => ({ outcome: { outcome: "approved" } }),
 	}));
-	await clientConn.initialize(stdInitParams);
-	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
+	const client = createBodhiPiClient(clientConn, { cwd: tmpDir });
+	await client.initialize(stdInitParams);
+	const { sessionId } = await client.newSession({ cwd: tmpDir, mcpServers: [] });
 
 	const state: ReplState = {
 		sessionId,
@@ -69,13 +71,13 @@ async function setup(opts: { homeDir?: string } = {}) {
 		closed: false,
 	};
 
-	return { clientConn, agent, state, model };
+	return { client, agent, state, model };
 }
 
-function makeCtx(clientConn: ClientSideConnection, state: ReplState, agent: { sessionStore: unknown }) {
+function makeCtx(client: BodhiPiClient, state: ReplState, agent: { sessionStore: unknown }) {
 	const renderer = createRenderer();
 	return {
-		clientConn,
+		client,
 		state,
 		sessionStore: agent.sessionStore as never,
 		renderer,
@@ -84,10 +86,10 @@ function makeCtx(clientConn: ClientSideConnection, state: ReplState, agent: { se
 }
 
 test("/settings set --project writes .bodhi-pi/settings.json", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/settings set compaction.reserveTokens 9999 --project", makeCtx(clientConn, state, agent));
+	await handleCommand("/settings set compaction.reserveTokens 9999 --project", makeCtx(client, state, agent));
 
 	const written = JSON.parse(await fsNode.readFile(path.join(tmpDir, ".bodhi-pi", "settings.json"), "utf8"));
 	expect(written).toEqual({ compaction: { reserveTokens: 9999 } });
@@ -97,10 +99,10 @@ test("/settings set --project writes .bodhi-pi/settings.json", async () => {
 });
 
 test("/settings set --global writes ~/.bodhi-pi/settings.json", async () => {
-	const { clientConn, state, agent } = await setup({ homeDir });
+	const { client, state, agent } = await setup({ homeDir });
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/settings set defaultThinkingLevel medium --global", makeCtx(clientConn, state, agent));
+	await handleCommand("/settings set defaultThinkingLevel medium --global", makeCtx(client, state, agent));
 
 	const written = JSON.parse(await fsNode.readFile(path.join(homeDir, ".bodhi-pi", "settings.json"), "utf8"));
 	expect(written).toEqual({ defaultThinkingLevel: "medium" });
@@ -108,10 +110,10 @@ test("/settings set --global writes ~/.bodhi-pi/settings.json", async () => {
 });
 
 test("/settings set --global without homeDir surfaces an error", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/settings set foo bar --global", makeCtx(clientConn, state, agent));
+	await handleCommand("/settings set foo bar --global", makeCtx(client, state, agent));
 
 	const out = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(out).toMatch(/--global scope not supported/);
@@ -119,18 +121,18 @@ test("/settings set --global without homeDir surfaces an error", async () => {
 });
 
 test("/login + /logins + /logout round-trip persists across process via NodeKvStore", async () => {
-	const { clientConn, state, agent } = await setup({ homeDir });
+	const { client, state, agent } = await setup({ homeDir });
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/login openai sk-XYZ", makeCtx(clientConn, state, agent));
+	await handleCommand("/login openai sk-XYZ", makeCtx(client, state, agent));
 	writeSpy.mockClear();
-	await handleCommand("/logins", makeCtx(clientConn, state, agent));
+	await handleCommand("/logins", makeCtx(client, state, agent));
 	const list1 = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(list1).toMatch(/openai: \*\*\*/);
 
 	writeSpy.mockClear();
-	await handleCommand("/logout openai", makeCtx(clientConn, state, agent));
-	await handleCommand("/logins", makeCtx(clientConn, state, agent));
+	await handleCommand("/logout openai", makeCtx(client, state, agent));
+	await handleCommand("/logins", makeCtx(client, state, agent));
 	const list2 = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(list2).toContain("(no stored auth)");
 

@@ -1,4 +1,3 @@
-import { EXT_SESSION_CLONE, EXT_SESSION_ENTRIES, EXT_SESSION_FORK } from "@bodhiapp/bodhi-pi";
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
@@ -17,55 +16,51 @@ afterEach(async () => {
 });
 
 test("/fork before a user message: new session excludes that turn (visible via /entries)", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with one short sentence: what comes after Tuesday?" }],
 	});
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with one short sentence: what comes after Wednesday?" }],
 	});
 
-	const entriesResp = (await harness.clientConn.extMethod(EXT_SESSION_ENTRIES, { sessionId })) as {
-		entries: { id: string; role: string; preview: string }[];
-	};
+	const entriesResp = await harness.client.listSessionEntries({ sessionId });
 	const userEntries = entriesResp.entries.filter((e) => e.role === "user");
 	expect(userEntries.length).toBe(2);
 	const forkAt = userEntries[1];
 
-	const fork = (await harness.clientConn.extMethod(EXT_SESSION_FORK, {
+	const fork = await harness.client.forkSession({
 		sessionId,
 		entryId: forkAt.id,
 		position: "before",
-	})) as { newSessionId: string; selectedText?: string };
+	});
 	expect(fork.selectedText?.toLowerCase()).toContain("wednesday");
 
-	const forkedEntries = (await harness.clientConn.extMethod(EXT_SESSION_ENTRIES, {
+	const forkedEntries = await harness.client.listSessionEntries({
 		sessionId: fork.newSessionId,
-	})) as { entries: { id: string; role: string }[] };
+	});
 	expect(forkedEntries.entries.filter((e) => e.role === "user")).toHaveLength(1);
 	expect(forkedEntries.entries.find((e) => e.id === forkAt.id)).toBeUndefined();
 }, 60_000);
 
 test("/clone duplicates the full chain at the leaf", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with one short sentence: what comes after Tuesday?" }],
 	});
 
-	const original = (await harness.clientConn.extMethod(EXT_SESSION_ENTRIES, { sessionId })) as {
-		entries: { id: string }[];
-	};
+	const original = await harness.client.listSessionEntries({ sessionId });
 
-	const clone = (await harness.clientConn.extMethod(EXT_SESSION_CLONE, { sessionId })) as { newSessionId: string };
-	const cloned = (await harness.clientConn.extMethod(EXT_SESSION_ENTRIES, {
+	const clone = await harness.client.cloneSession({ sessionId });
+	const cloned = await harness.client.listSessionEntries({
 		sessionId: clone.newSessionId,
-	})) as { entries: { id: string }[] };
+	});
 	expect(cloned.entries.length).toBe(original.entries.length);
 }, 60_000);

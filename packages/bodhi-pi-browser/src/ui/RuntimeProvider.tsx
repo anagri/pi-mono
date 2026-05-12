@@ -1,5 +1,5 @@
-import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { AvailableCommand, ClientSideConnection } from "@agentclientprotocol/sdk";
+import { createBodhiPiClient, modelConfigFromOptions, type BodhiPiClient, type ModelOption } from "@bodhiapp/bodhi-pi";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { dispatchNotification } from "../runtime/render";
 import { type AgentRuntime, startAgentRuntime } from "../runtime/runtime";
@@ -10,9 +10,10 @@ import { handleCommand, isCommand } from "./commands";
 
 interface RuntimeContextValue {
 	conn: ClientSideConnection | null;
+	client: BodhiPiClient | null;
 	sessionId: string;
 	currentModelId: string;
-	models: Model<Api>[];
+	models: ModelOption[];
 	availableCommands: AvailableCommand[];
 	prompt: (text: string) => Promise<void>;
 	cancelPrompt: () => Promise<void>;
@@ -45,36 +46,6 @@ export interface RuntimeProviderProps {
 	sandboxPortFactory?: () => Promise<MessagePort>;
 }
 
-function modelsFromConfigOptions(options: readonly SessionConfigOption[] | undefined): {
-	models: Model<Api>[];
-	defaultModelId: string;
-} {
-	const modelOption = options?.find((o) => o.id === "model");
-	if (!modelOption || modelOption.type !== "select") return { models: [], defaultModelId: "" };
-	const items = modelOption.options ?? [];
-	// `options` is `(Option | Group)[]`; flatten group children into top-level options.
-	const flat: Array<{ value: string; name?: string }> = [];
-	for (const item of items) {
-		if ("value" in item) flat.push({ value: item.value, ...(item.name ? { name: item.name } : {}) });
-	}
-	const models = flat.map(
-		(o): Model<Api> =>
-			({
-				id: o.value,
-				name: o.name ?? o.value,
-				provider: "unknown",
-				api: "unknown",
-				baseUrl: "",
-				reasoning: false,
-				input: ["text"],
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 128000,
-				maxTokens: 16384,
-			}) as unknown as Model<Api>,
-	);
-	return { models, defaultModelId: (modelOption.currentValue as string) ?? "" };
-}
-
 export function RuntimeProvider({
 	workspace,
 	onUnmount,
@@ -83,8 +54,10 @@ export function RuntimeProvider({
 	sandboxPortFactory,
 }: RuntimeProviderProps) {
 	const runtimeRef = useRef<AgentRuntime | null>(null);
+	const clientRef = useRef<BodhiPiClient | null>(null);
 	const [conn, setConn] = useState<ClientSideConnection | null>(null);
-	const [models, setModels] = useState<Model<Api>[]>([]);
+	const [client, setClient] = useState<BodhiPiClient | null>(null);
+	const [models, setModels] = useState<ModelOption[]>([]);
 	const [defaultModelId, setDefaultModelId] = useState<string>("");
 	const [availableCommands, setAvailableCommands] = useState<AvailableCommand[]>([]);
 	const {
@@ -123,11 +96,11 @@ export function RuntimeProvider({
 						updateToolCall,
 						setAvailableCommands,
 						refreshConfigOptions: (options) => {
-							const next = modelsFromConfigOptions(options);
+							const next = modelConfigFromOptions(options);
 							setModels(next.models);
-							if (next.defaultModelId) {
-								setDefaultModelId(next.defaultModelId);
-								setCurrentModelId(next.defaultModelId);
+							if (next.currentModelId) {
+								setDefaultModelId(next.currentModelId);
+								setCurrentModelId(next.currentModelId);
 							}
 						},
 						setSessionTitle: (title) => {
@@ -142,30 +115,29 @@ export function RuntimeProvider({
 				return;
 			}
 			runtimeRef.current = runtime;
+			const bodhiClient = createBodhiPiClient(runtime.conn, { cwd: workspace.rootPath });
+			clientRef.current = bodhiClient;
 
 			// Auto-resume per-tab last session if Dexie still has it.
 			const lastId = readLastSessionId();
 			let activeId: string | undefined;
-			let configOptions: readonly SessionConfigOption[] | undefined;
 			if (lastId) {
 				try {
-					const loaded = await runtime.conn.loadSession({
+					await bodhiClient.loadSession({
 						sessionId: lastId,
 						cwd: workspace.rootPath,
 						mcpServers: [],
 					});
-					configOptions = loaded.configOptions ?? undefined;
 					activeId = lastId;
 				} catch {
 					clearLastSessionId();
 				}
 			}
 			if (!activeId) {
-				const created = await runtime.conn.newSession({
+				const created = await bodhiClient.newSession({
 					cwd: workspace.rootPath,
 					mcpServers: [],
 				});
-				configOptions = created.configOptions ?? undefined;
 				activeId = created.sessionId;
 			}
 			if (cancelled) {
@@ -173,13 +145,14 @@ export function RuntimeProvider({
 				return;
 			}
 
-			const { models: derivedModels, defaultModelId: derivedDefault } = modelsFromConfigOptions(configOptions);
+			const { models: derivedModels, currentModelId: derivedDefault } = bodhiClient.models();
 			setModels(derivedModels);
 			setDefaultModelId(derivedDefault);
 			setSessionId(activeId);
 			writeLastSessionId(activeId);
 			setCurrentModelId(derivedDefault);
 			setConn(runtime.conn);
+			setClient(bodhiClient);
 			setStatus("idle");
 			if (!derivedDefault) {
 				addSystemMessage(
@@ -199,6 +172,7 @@ export function RuntimeProvider({
 			cancelled = true;
 			runtimeRef.current?.dispose();
 			runtimeRef.current = null;
+			clientRef.current = null;
 		};
 		// All captured setters are referentially stable (Zustand bound actions + useState setters);
 		// `workspace` is the only re-init trigger.
@@ -216,7 +190,7 @@ export function RuntimeProvider({
 	}, [sessionId, status]);
 
 	async function prompt(text: string): Promise<void> {
-		const c = conn;
+		const c = clientRef.current;
 		if (!c) {
 			addSystemMessage("error: runtime not ready");
 			return;
@@ -228,7 +202,7 @@ export function RuntimeProvider({
 			if (!isAgentCommand) {
 				addMessage("user", text);
 				const handled = await handleCommand(text, {
-					conn: c,
+					client: c,
 					state: {
 						sessionId: useChatStore.getState().sessionId,
 						currentModelId: useChatStore.getState().currentModelId,
@@ -256,7 +230,7 @@ export function RuntimeProvider({
 		addMessage("user", text);
 		setStatus("streaming");
 		try {
-			await c.prompt({ sessionId: sid, prompt: [{ type: "text", text }] });
+			await c.prompt(text, { sessionId: sid });
 		} catch (err) {
 			addSystemMessage(`error: ${String(err)}`);
 		} finally {
@@ -270,7 +244,7 @@ export function RuntimeProvider({
 	}
 
 	async function cancelPrompt(): Promise<void> {
-		const c = conn;
+		const c = clientRef.current;
 		if (!c) return;
 		const sid = useChatStore.getState().sessionId;
 		if (!sid || sid === "local") return;
@@ -288,6 +262,7 @@ export function RuntimeProvider({
 		<RuntimeContext.Provider
 			value={{
 				conn,
+				client,
 				sessionId,
 				currentModelId,
 				models,

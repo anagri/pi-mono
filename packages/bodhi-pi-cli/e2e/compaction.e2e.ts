@@ -1,4 +1,3 @@
-import { EXT_SESSION_COMPACT } from "@bodhiapp/bodhi-pi";
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
@@ -18,33 +17,29 @@ afterEach(async () => {
 });
 
 test("/compact through Node host (real SQLite + gpt-4o-mini) returns a summary; post-compact prompt still recalls earlier fact", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Remember: my pet's name is Mango. Reply only with: noted" }],
 	});
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with one short sentence: what comes after Tuesday?" }],
 	});
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with one short sentence: what comes after Wednesday?" }],
 	});
 
-	const result = (await harness.clientConn.extMethod(EXT_SESSION_COMPACT, { sessionId })) as {
-		summary: string;
-		firstKeptEntryId: string;
-		tokensBefore: number;
-	};
+	const result = await harness.client.compactSession({ sessionId });
 	expect(typeof result.summary).toBe("string");
 	expect(result.summary.length).toBeGreaterThan(20);
 	expect(typeof result.firstKeptEntryId).toBe("string");
 
 	harness.updates.length = 0;
-	const followUp = await harness.clientConn.prompt({
+	const followUp = await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "What is my pet's name? Reply with the single word." }],
 	});

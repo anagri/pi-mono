@@ -34,10 +34,10 @@ test("a failing read surfaces as tool_call_update.status='failed' AND the render
 		return watchedPushOriginal(...items);
 	}) as typeof harness.updates.push;
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 	const missing = path.join(harness.tmpDir, "missing.txt");
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [
 			{

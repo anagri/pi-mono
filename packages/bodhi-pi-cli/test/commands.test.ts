@@ -1,7 +1,8 @@
 import fsNode from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
+import type { SessionNotification } from "@agentclientprotocol/sdk";
+import { type BodhiPiClient, createBodhiPiClient } from "@bodhiapp/bodhi-pi";
 import {
 	type Api,
 	type FauxProviderRegistration,
@@ -56,8 +57,9 @@ async function setup() {
 		},
 		requestPermission: async () => ({ outcome: { outcome: "approved" } }),
 	}));
-	await clientConn.initialize(stdInitParams);
-	const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
+	const client = createBodhiPiClient(clientConn, { cwd: tmpDir });
+	await client.initialize(stdInitParams);
+	const { sessionId } = await client.newSession({ cwd: tmpDir, mcpServers: [] });
 
 	const state: ReplState = {
 		sessionId,
@@ -68,13 +70,13 @@ async function setup() {
 		closed: false,
 	};
 
-	return { clientConn, agent, state, model, updates, faux };
+	return { client, agent, state, model, updates, faux };
 }
 
-function makeCtx(clientConn: ClientSideConnection, state: ReplState, agent: { sessionStore: unknown }) {
+function makeCtx(client: BodhiPiClient, state: ReplState, agent: { sessionStore: unknown }) {
 	const renderer = createRenderer();
 	return {
-		clientConn,
+		client,
 		state,
 		sessionStore: agent.sessionStore as never,
 		renderer,
@@ -83,17 +85,17 @@ function makeCtx(clientConn: ClientSideConnection, state: ReplState, agent: { se
 }
 
 test("/close marks state.closed; subsequent /sessions still lists the persisted session", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/close", makeCtx(clientConn, state, agent));
+	await handleCommand("/close", makeCtx(client, state, agent));
 
 	expect(state.closed).toBe(true);
 	const closedLine = writeSpy.mock.calls.map((c) => String(c[0])).find((s) => s.includes("closed session"));
 	expect(closedLine, "stdout should announce the closed session").toBeDefined();
 
 	writeSpy.mockClear();
-	await handleCommand("/sessions", makeCtx(clientConn, state, agent));
+	await handleCommand("/sessions", makeCtx(client, state, agent));
 	const sessionsOut = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(sessionsOut).toContain(state.sessionId.slice(0, 8));
 
@@ -101,14 +103,14 @@ test("/close marks state.closed; subsequent /sessions still lists the persisted 
 });
 
 test("/new after /close clears closed flag and creates a fresh session", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const oldSessionId = state.sessionId;
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/close", makeCtx(clientConn, state, agent));
+	await handleCommand("/close", makeCtx(client, state, agent));
 	expect(state.closed).toBe(true);
 
-	await handleCommand("/new", makeCtx(clientConn, state, agent));
+	await handleCommand("/new", makeCtx(client, state, agent));
 	expect(state.closed).toBe(false);
 	expect(state.sessionId).not.toBe(oldSessionId);
 
@@ -116,12 +118,12 @@ test("/new after /close clears closed flag and creates a fresh session", async (
 });
 
 test("/delete <id> removes a non-active session and leaves active session intact", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const activeId = state.sessionId;
-	const { sessionId: otherId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
+	const { sessionId: otherId } = await client.newSession({ cwd: tmpDir, mcpServers: [] });
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand(`/delete ${otherId}`, makeCtx(clientConn, state, agent));
+	await handleCommand(`/delete ${otherId}`, makeCtx(client, state, agent));
 
 	const deletedLine = writeSpy.mock.calls.map((c) => String(c[0])).find((s) => s.includes("deleted session"));
 	expect(deletedLine).toBeDefined();
@@ -129,7 +131,7 @@ test("/delete <id> removes a non-active session and leaves active session intact
 	expect(state.closed).toBe(false);
 
 	writeSpy.mockClear();
-	await handleCommand("/sessions", makeCtx(clientConn, state, agent));
+	await handleCommand("/sessions", makeCtx(client, state, agent));
 	const sessionsOut = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(sessionsOut).toContain(activeId.slice(0, 8));
 	expect(sessionsOut).not.toContain(otherId.slice(0, 8));
@@ -138,11 +140,11 @@ test("/delete <id> removes a non-active session and leaves active session intact
 });
 
 test("/delete <active-id> removes the active session AND recurses into /new", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const oldSessionId = state.sessionId;
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand(`/delete ${oldSessionId}`, makeCtx(clientConn, state, agent));
+	await handleCommand(`/delete ${oldSessionId}`, makeCtx(client, state, agent));
 
 	expect(state.sessionId).not.toBe(oldSessionId);
 	expect(state.closed).toBe(false);
@@ -155,10 +157,10 @@ test("/delete <active-id> removes the active session AND recurses into /new", as
 });
 
 test("/delete with no id prints usage and does not throw", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/delete", makeCtx(clientConn, state, agent));
+	await handleCommand("/delete", makeCtx(client, state, agent));
 
 	const out = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(out).toContain("usage: /delete");
@@ -177,10 +179,10 @@ test("/config surfaces cwd, AGENTS.md paths, compaction overrides, and appendSys
 		"utf-8",
 	);
 
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/config", makeCtx(clientConn, state, agent));
+	await handleCommand("/config", makeCtx(client, state, agent));
 
 	const out = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(out).toContain(`cwd: ${tmpDir}`);
@@ -192,10 +194,10 @@ test("/config surfaces cwd, AGENTS.md paths, compaction overrides, and appendSys
 });
 
 test("/help lists /close and /delete in the local-commands block", async () => {
-	const { clientConn, state, agent } = await setup();
+	const { client, state, agent } = await setup();
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/help", makeCtx(clientConn, state, agent));
+	await handleCommand("/help", makeCtx(client, state, agent));
 
 	const out = writeSpy.mock.calls.map((c) => String(c[0])).join("");
 	expect(out).toContain("/close");

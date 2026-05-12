@@ -19,9 +19,9 @@ test("/skill:<name> arg expands and reaches the model with the skill body", asyn
 		skills: { "say-hello/SKILL.md": await loadFixture("skills-say-hello/.bodhi-pi/skills/say-hello/SKILL.md") },
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
-	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "/skill:say-hello world" }] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.prompt({ sessionId, prompt: [{ type: "text", text: "/skill:say-hello world" }] });
 
 	expect(chunkedAgentText(harness.updates).toLowerCase()).toContain("hello, world");
 });
@@ -44,8 +44,8 @@ test("disable-model-invocation skills are advertised via available_commands_upda
 		},
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	const update = harness.updates.find((u) => u.update.sessionUpdate === "available_commands_update");
 	expect(update, "expected available_commands_update on session/new").toBeDefined();
@@ -58,9 +58,9 @@ test("disable-model-invocation skills are advertised via available_commands_upda
 test("unknown /skill:<name> falls through to the LLM as a plain prompt", async () => {
 	harness = await createCliTestHarness({ model: getModel("openai", "gpt-4o-mini"), apiKey: OPENAI_KEY });
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
-	const result = await harness.clientConn.prompt({
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	const result = await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "/skill:nonexistent please answer with the single word: pong" }],
 	});

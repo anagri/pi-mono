@@ -21,8 +21,8 @@ test("/resume restores the previously-selected model from the persisted model_ch
 		apiKey: OPENAI_KEY,
 		extraModels: [full],
 	});
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId: firstId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId: firstId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	const state: ReplState = {
 		sessionId: firstId,
@@ -34,7 +34,7 @@ test("/resume restores the previously-selected model from the persisted model_ch
 	};
 	const renderer = createRenderer();
 	const ctx = {
-		clientConn: harness.clientConn,
+		client: harness.client,
 		state,
 		sessionStore: {} as never,
 		renderer,

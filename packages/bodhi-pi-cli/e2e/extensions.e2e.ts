@@ -57,9 +57,9 @@ test("CLI host loads extensions via Node loader and applies redact-secrets to a 
 			"utf8",
 		);
 
-		await harness.clientConn.initialize(stdInitParams);
-		const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
-		await harness.clientConn.prompt({
+		await harness.client.initialize(stdInitParams);
+		const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+		await harness.client.prompt({
 			sessionId,
 			prompt: [
 				{
@@ -96,9 +96,9 @@ test("CLI host loads dynamic-tools extension via Node loader; LLM picks up bodhi
 			extensionFactories: factories,
 		});
 
-		await harness.clientConn.initialize(stdInitParams);
-		const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
-		await harness.clientConn.prompt({
+		await harness.client.initialize(stdInitParams);
+		const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+		await harness.client.prompt({
 			sessionId,
 			prompt: [
 				{

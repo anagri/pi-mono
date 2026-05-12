@@ -1,3 +1,4 @@
+import type { BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
@@ -16,12 +17,12 @@ afterEach(async () => {
 test("multi-turn context survives across two prompts in the same Node-host session", async () => {
 	harness = await createCliTestHarness({ model: getModel("openai", "gpt-4o-mini"), apiKey: OPENAI_KEY });
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	// Turn 1: state a fact, ask for a single-word ack.
 	harness.updates.length = 0;
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [
 			{
@@ -35,7 +36,7 @@ test("multi-turn context survives across two prompts in the same Node-host sessi
 
 	// Turn 2: ask for the fact back; proves message history is in the prompt context.
 	harness.updates.length = 0;
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [
 			{
@@ -49,16 +50,25 @@ test("multi-turn context survives across two prompts in the same Node-host sessi
 });
 
 // Mirrors bodhi-pi/e2e/chat.e2e.ts "switching model mid-session" — same provenance
-// signal, same setSessionConfigOption flow, but driven through the Node host
+// signal, same BodhiPiClient flow, but driven through the Node host
 // (createCliAgent + createSqliteSessionStore + createNodeFilesystem).
-test("mid-session model switch via setSessionConfigOption flips OpenAI ↔ Anthropic provenance", async () => {
+test("mid-session model switch via BodhiPiClient flips OpenAI ↔ Anthropic provenance", async () => {
 	const openai = getModel("openai", "gpt-4o-mini");
 	const claude = getModel("anthropic", "claude-haiku-4-5");
+	const providerRequests: Array<{ provider: string; modelId: string }> = [];
+	const eventHandlers: BodhiPiEventHandlers = {
+		before_provider_request: [
+			async (event) => {
+				providerRequests.push({ provider: event.provider, modelId: event.modelId });
+			},
+		],
+	};
 
 	harness = await createCliTestHarness({
 		model: openai,
 		apiKey: OPENAI_KEY,
 		extraModels: [claude],
+		eventHandlers,
 		getApiKey: (p) => {
 			if (p === "openai") return OPENAI_KEY;
 			if (p === "anthropic") return ANTHROPIC_KEY;
@@ -66,32 +76,24 @@ test("mid-session model switch via setSessionConfigOption flips OpenAI ↔ Anthr
 		},
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	const provenance =
 		"Are you made by Anthropic or by OpenAI? Answer with exactly one of those two words and nothing else.";
 
 	harness.updates.length = 0;
-	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: provenance }] });
+	await harness.client.prompt({ sessionId, prompt: [{ type: "text", text: provenance }] });
 	const openaiText = chunkedAgentText(harness.updates).toLowerCase();
+	expect(providerRequests.at(-1)).toEqual({ provider: "openai", modelId: openai.id });
 	expect(
 		openaiText.includes("openai") || openaiText.includes("gpt") || openaiText.includes("chatgpt"),
 		`expected openai provenance, got: ${JSON.stringify(openaiText)}`,
 	).toBe(true);
 
-	const switchResult = await harness.clientConn.setSessionConfigOption({
-		sessionId,
-		configId: "model",
-		value: claude.id,
-	});
-	expect((switchResult.configOptions[0] as { currentValue?: string })?.currentValue).toBe(claude.id);
+	await expect(harness.client.model(claude.id, { sessionId })).resolves.toBe(claude.id);
 
 	harness.updates.length = 0;
-	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: provenance }] });
-	const claudeText = chunkedAgentText(harness.updates).toLowerCase();
-	expect(
-		claudeText.includes("anthropic") || claudeText.includes("claude"),
-		`expected anthropic provenance after switch, got: ${JSON.stringify(claudeText)}`,
-	).toBe(true);
+	await harness.client.prompt({ sessionId, prompt: [{ type: "text", text: provenance }] });
+	expect(providerRequests.at(-1)).toEqual({ provider: "anthropic", modelId: claude.id });
 });

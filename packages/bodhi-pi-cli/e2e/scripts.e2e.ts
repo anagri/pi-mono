@@ -22,10 +22,10 @@ test("run_script executes a real Node process and returns stdout", async () => {
 	// Use a relative filename — the run_script tool resolves relative to session cwd (harness.tmpDir)
 	await nodeFs.writeFile(path.join(harness.tmpDir, "greet.js"), 'console.log("greetings from " + args[0]);', "utf-8");
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: 'Use the run_script tool to execute greet.js with args ["node-process"].' }],
 	});
@@ -39,10 +39,10 @@ test("run_script executes a real Node process and returns stdout", async () => {
 test("run_script captures non-zero exit code", async () => {
 	await nodeFs.writeFile(path.join(harness.tmpDir, "fail.js"), "process.exit(42);", "utf-8");
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [
 			{

@@ -38,9 +38,9 @@ test("scripted skill invokes run_script via createNodeScriptExecutor and reports
 		},
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
-	await harness.clientConn.prompt({
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: `/skill:days-since-birthday ${BIRTHDAY}` }],
 	});

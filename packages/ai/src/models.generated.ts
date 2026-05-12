@@ -9610,13 +9610,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.29900000000000004,
+				input: 0.19999999999999998,
 				output: 1.2,
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 196608,
-			maxTokens: 131072,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"mistralai/codestral-2508": {
 			id: "mistralai/codestral-2508",
@@ -11970,7 +11970,7 @@ export const MODELS = {
 			cost: {
 				input: 0.39,
 				output: 2.34,
-				cacheRead: 0.195,
+				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,

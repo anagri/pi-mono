@@ -25,10 +25,10 @@ afterEach(async () => {
 });
 
 test("CLI host emits the full event sequence around a real LLM turn", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	const result = await harness.clientConn.prompt({
+	const result = await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with exactly one word: hello" }],
 	});

@@ -2,13 +2,19 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
-import type { BodhiPiEventHandlers, RegisteredExtension } from "@bodhiapp/bodhi-pi";
+import {
+	type BodhiPiClient,
+	type BodhiPiEventHandlers,
+	createBodhiPiClient,
+	type RegisteredExtension,
+} from "@bodhiapp/bodhi-pi";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "@/agent.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
 
 export interface CliTestHarness {
 	clientConn: ClientSideConnection;
+	client: BodhiPiClient;
 	updates: SessionNotification[];
 	tmpDir: string;
 	dbPath: string;
@@ -70,6 +76,7 @@ export async function createCliTestHarness(opts: CliTestHarnessOptions): Promise
 
 	return {
 		clientConn,
+		client: createBodhiPiClient(clientConn, { cwd: tmpDir }),
 		updates,
 		tmpDir,
 		dbPath,

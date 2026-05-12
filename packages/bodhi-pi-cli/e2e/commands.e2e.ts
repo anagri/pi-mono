@@ -21,9 +21,9 @@ test("/<no-args> command (.bodhi-pi/commands/*.md) expands and the LLM sees the 
 		commands: { "say-tuesday.md": await loadFixture("commands-say-tuesday/.bodhi-pi/commands/say-tuesday.md") },
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
-	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "/say-tuesday" }] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.prompt({ sessionId, prompt: [{ type: "text", text: "/say-tuesday" }] });
 
 	expect(chunkedAgentText(harness.updates).toLowerCase()).toContain("tuesday");
 });
@@ -34,12 +34,12 @@ test("/<known> arg expands $1 with user-supplied value across two consecutive pr
 		commands: { "echo.md": await loadFixture("commands-echo/.bodhi-pi/commands/echo.md") },
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	for (const word of ["banana", "cherry"]) {
 		harness.updates.length = 0;
-		await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: `/echo ${word}` }] });
+		await harness.client.prompt({ sessionId, prompt: [{ type: "text", text: `/echo ${word}` }] });
 		expect(chunkedAgentText(harness.updates).toLowerCase(), `expected ${word} in response`).toContain(word);
 	}
 });
@@ -50,10 +50,10 @@ test("/<known> arg expands into a tool-using prompt and the file is written to t
 		commands: { "write-file.md": await loadFixture("commands-write-file/.bodhi-pi/commands/write-file.md") },
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 	const target = path.join(harness.tmpDir, "out.txt");
-	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: `/write-file ${target}` }] });
+	await harness.client.prompt({ sessionId, prompt: [{ type: "text", text: `/write-file ${target}` }] });
 
 	const stored = await fsNode.readFile(target, "utf8");
 	expect(stored.toLowerCase()).toContain("hello world");
@@ -68,8 +68,8 @@ test("available_commands_update lists project commands after newSession", async 
 		},
 	});
 
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	const update = harness.updates.find((u) => u.update.sessionUpdate === "available_commands_update");
 	expect(update, "expected available_commands_update notification on session/new").toBeDefined();

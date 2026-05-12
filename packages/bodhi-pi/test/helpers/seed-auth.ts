@@ -1,5 +1,5 @@
 import type { ClientSideConnection } from "@agentclientprotocol/sdk";
-import { AUTH_PREFIX, EXT_KV_SET, MODEL_CONFIG_ID } from "@/index.js";
+import { createBodhiPiClient } from "@/index.js";
 
 export interface SeedAuthOptions {
 	clientConn: ClientSideConnection;
@@ -23,15 +23,7 @@ export interface SeedAuthOptions {
  * specifically wants to persist the default for FUTURE sessions on this cwd.
  */
 export async function seedAuth(opts: SeedAuthOptions): Promise<void> {
-	await opts.clientConn.extMethod(EXT_KV_SET, {
-		sessionId: opts.sessionId,
-		key: `${AUTH_PREFIX}${opts.provider}`,
-		value: opts.apiKey,
-		secret: true,
-	});
-	await opts.clientConn.setSessionConfigOption({
-		sessionId: opts.sessionId,
-		configId: MODEL_CONFIG_ID,
-		value: opts.modelId,
-	});
+	const client = createBodhiPiClient(opts.clientConn);
+	await client.addProvider(opts.provider, opts.apiKey, { sessionId: opts.sessionId });
+	await client.model(opts.modelId, { sessionId: opts.sessionId });
 }

@@ -1,5 +1,4 @@
 import readline from "node:readline/promises";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
 	type Agent,
 	AgentSideConnection,
@@ -8,8 +7,12 @@ import {
 	ClientSideConnection,
 	type Stream,
 } from "@agentclientprotocol/sdk";
-import type { createBodhiPiAgent, SessionStore } from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import {
+	type createBodhiPiAgent,
+	createBodhiPiClient,
+	modelConfigFromOptions,
+	type SessionStore,
+} from "@bodhiapp/bodhi-pi";
 import chalk from "chalk";
 import { handleCommand, isCommand, type ReplState, refreshStateFromConfigOptions } from "./commands.js";
 import { createRenderer } from "./render.js";
@@ -26,34 +29,6 @@ export interface ReplOptions {
 	factory: ReturnType<typeof createBodhiPiAgent>;
 	cwd: string;
 	sessionStore: SessionStore;
-}
-
-function modelsFromConfigOptions(options: readonly SessionConfigOption[] | undefined): {
-	models: Model<Api>[];
-	defaultModelId: string;
-} {
-	const modelOption = options?.find((o) => o.id === "model");
-	if (!modelOption || modelOption.type !== "select") return { models: [], defaultModelId: "" };
-	const flat: Array<{ value: string; name?: string }> = [];
-	for (const item of modelOption.options ?? []) {
-		if ("value" in item) flat.push({ value: item.value, ...(item.name ? { name: item.name } : {}) });
-	}
-	const models = flat.map(
-		(o): Model<Api> =>
-			({
-				id: o.value,
-				name: o.name ?? o.value,
-				provider: "unknown",
-				api: "unknown",
-				baseUrl: "",
-				reasoning: false,
-				input: ["text"],
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 128000,
-				maxTokens: 16384,
-			}) as unknown as Model<Api>,
-	);
-	return { models, defaultModelId: (modelOption.currentValue as string) ?? "" };
 }
 
 export async function runRepl(opts: ReplOptions): Promise<void> {
@@ -96,9 +71,12 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	);
 
 	await clientConn.initialize(INIT_PARAMS);
-	const created = await clientConn.newSession({ cwd: opts.cwd, mcpServers: [] });
+	const bodhiClient = createBodhiPiClient(clientConn, { cwd: opts.cwd });
+	const created = await bodhiClient.newSession({ cwd: opts.cwd, mcpServers: [] });
 	state.sessionId = created.sessionId;
-	const { models: derivedModels, defaultModelId: derivedDefault } = modelsFromConfigOptions(created.configOptions);
+	const { models: derivedModels, currentModelId: derivedDefault } = modelConfigFromOptions(
+		created.configOptions ?? undefined,
+	);
 	state.models = derivedModels;
 	state.defaultModelId = derivedDefault;
 	state.currentModelId = derivedDefault;
@@ -137,7 +115,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 
 		if (isCommand(line) && !isAgentCommand) {
 			const shouldExit = await handleCommand(line, {
-				clientConn,
+				client: bodhiClient,
 				state,
 				sessionStore: opts.sessionStore,
 				renderer,
@@ -151,10 +129,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 			}
 			process.stdout.write("\n");
 			try {
-				const result = await clientConn.prompt({
-					sessionId: state.sessionId,
-					prompt: [{ type: "text", text: line }],
-				});
+				const result = await bodhiClient.prompt(line, { sessionId: state.sessionId });
 				renderer.flush();
 				process.stdout.write(`${chalk.dim(`[${result.stopReason}]`)}\n`);
 			} catch (err) {

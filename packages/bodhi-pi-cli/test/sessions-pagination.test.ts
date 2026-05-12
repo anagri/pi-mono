@@ -2,6 +2,7 @@ import fsNode from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
+import { createBodhiPiClient } from "@bodhiapp/bodhi-pi";
 import { type Api, type FauxProviderRegistration, type Model, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createCliAgent } from "@/agent.js";
@@ -44,11 +45,12 @@ test("/sessions paginates across cursor boundaries — all 60 sessions visible i
 		},
 		requestPermission: async () => ({ outcome: { outcome: "approved" } }),
 	}));
-	await clientConn.initialize(stdInitParams);
+	const client = createBodhiPiClient(clientConn, { cwd: tmpDir });
+	await client.initialize(stdInitParams);
 
 	const sessionIds: string[] = [];
 	for (let i = 0; i < 60; i++) {
-		const { sessionId } = await clientConn.newSession({ cwd: tmpDir, mcpServers: [] });
+		const { sessionId } = await client.newSession({ cwd: tmpDir, mcpServers: [] });
 		sessionIds.push(sessionId);
 	}
 
@@ -61,7 +63,7 @@ test("/sessions paginates across cursor boundaries — all 60 sessions visible i
 		closed: false,
 	};
 	const ctx = {
-		clientConn,
+		client,
 		state,
 		sessionStore: agent.sessionStore as never,
 		renderer: createRenderer(),

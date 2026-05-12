@@ -1,40 +1,18 @@
-import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
-import {
-	AUTH_PREFIX,
-	EXT_DELETE_SESSION,
-	EXT_KV_LIST,
-	EXT_KV_REMOVE,
-	EXT_KV_SET,
-	EXT_SESSION_CLONE,
-	EXT_SESSION_COMPACT,
-	EXT_SESSION_CONFIG,
-	EXT_SESSION_ENTRIES,
-	EXT_SESSION_EXPORT,
-	EXT_SESSION_FORK,
-	EXT_SESSION_NAVIGATE,
-	EXT_SESSION_SET_NAME,
-	EXT_SESSION_SETTINGS_GET,
-	EXT_SESSION_SETTINGS_LIST,
-	EXT_SESSION_SETTINGS_SET,
-	EXT_SESSION_SETTINGS_UNSET,
-	EXT_SESSION_STATS,
-	EXT_SESSION_TREE,
-	type SessionStore,
-} from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { AvailableCommand, SessionConfigOption } from "@agentclientprotocol/sdk";
+import { type BodhiPiClient, type ModelOption, modelConfigFromOptions, type SessionStore } from "@bodhiapp/bodhi-pi";
 import type { Renderer } from "./render.js";
 
 export interface ReplState {
 	sessionId: string;
 	currentModelId: string;
 	defaultModelId: string;
-	models: Model<Api>[];
+	models: ModelOption[];
 	availableCommands: AvailableCommand[];
 	closed: boolean;
 }
 
 export interface CommandContext {
-	clientConn: ClientSideConnection;
+	client: BodhiPiClient;
 	state: ReplState;
 	sessionStore: SessionStore;
 	renderer: Renderer;
@@ -55,29 +33,10 @@ export function refreshStateFromConfigOptions(
 	state: ReplState,
 	options: readonly SessionConfigOption[] | undefined,
 ): void {
-	if (!options) return;
-	const modelOption = options.find((o) => o.id === "model");
-	if (!modelOption || modelOption.type !== "select") return;
-	const flat: Array<{ value: string; name?: string }> = [];
-	for (const item of modelOption.options ?? []) {
-		if ("value" in item) flat.push({ value: item.value, ...(item.name ? { name: item.name } : {}) });
-	}
-	state.models = flat.map(
-		(o): Model<Api> =>
-			({
-				id: o.value,
-				name: o.name ?? o.value,
-				provider: "unknown",
-				api: "unknown",
-				baseUrl: "",
-				reasoning: false,
-				input: ["text"],
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 128000,
-				maxTokens: 16384,
-			}) as unknown as Model<Api>,
-	);
-	state.currentModelId = (modelOption.currentValue as string) ?? state.currentModelId;
+	const next = modelConfigFromOptions(options);
+	if (next.models.length === 0 && !next.currentModelId) return;
+	state.models = next.models;
+	state.currentModelId = next.currentModelId || state.currentModelId;
 }
 
 /** Extract `--global|--project|--session` from a token list, returning the scope (or undefined) and remaining args. */
@@ -144,12 +103,13 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 		case "/new": {
 			if (!ctx.state.closed && ctx.state.sessionId) {
 				try {
-					await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+					await ctx.client.closeSession({ sessionId: ctx.state.sessionId });
 				} catch {
 					// Already-closed sessions throw; safe to ignore.
 				}
 			}
-			const { sessionId } = await ctx.clientConn.newSession({ cwd: ctx.cwd, mcpServers: [] });
+			const { sessionId, configOptions } = await ctx.client.newSession({ cwd: ctx.cwd, mcpServers: [] });
+			refreshStateFromConfigOptions(ctx.state, configOptions ?? undefined);
 			ctx.state.sessionId = sessionId;
 			ctx.state.currentModelId = ctx.state.defaultModelId || ctx.state.models[0]?.id || "";
 			ctx.state.closed = false;
@@ -182,7 +142,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			}
 			if (!ctx.state.closed && ctx.state.sessionId && ctx.state.sessionId !== targetId) {
 				try {
-					await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+					await ctx.client.closeSession({ sessionId: ctx.state.sessionId });
 				} catch {
 					// already closed; ignore
 				}
@@ -190,17 +150,17 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			process.stdout.write("loading session history…\n");
 			ctx.state.sessionId = targetId;
 			try {
-				const result = await ctx.clientConn.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
-				const restoredModel =
-					(result.configOptions?.[0]?.currentValue as string | undefined) ?? ctx.state.defaultModelId;
-				ctx.state.currentModelId = restoredModel;
+				const result = await ctx.client.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
+				refreshStateFromConfigOptions(ctx.state, result.configOptions ?? undefined);
+				ctx.state.currentModelId = ctx.state.currentModelId || ctx.state.defaultModelId;
 				ctx.state.closed = false;
 				ctx.renderer.flush();
 				process.stdout.write(`resumed session: ${targetId}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 				// fall back to a fresh session
-				const { sessionId } = await ctx.clientConn.newSession({ cwd: ctx.cwd, mcpServers: [] });
+				const { sessionId, configOptions } = await ctx.client.newSession({ cwd: ctx.cwd, mcpServers: [] });
+				refreshStateFromConfigOptions(ctx.state, configOptions ?? undefined);
 				ctx.state.sessionId = sessionId;
 				ctx.state.currentModelId = ctx.state.defaultModelId || ctx.state.models[0]?.id || "";
 				ctx.state.closed = false;
@@ -210,7 +170,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/close": {
 			try {
-				await ctx.clientConn.closeSession({ sessionId: ctx.state.sessionId });
+				await ctx.client.closeSession({ sessionId: ctx.state.sessionId });
 				ctx.state.closed = true;
 				process.stdout.write(`closed session: ${ctx.state.sessionId.slice(0, 8)}…  (use /new or /resume <id>)\n`);
 			} catch (err) {
@@ -226,7 +186,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				await ctx.clientConn.extMethod(EXT_DELETE_SESSION, { sessionId: targetId });
+				await ctx.client.deleteSession({ sessionId: targetId });
 				process.stdout.write(`deleted session: ${targetId.slice(0, 8)}…\n`);
 				if (targetId === ctx.state.sessionId) {
 					ctx.state.closed = true;
@@ -244,17 +204,15 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			if (!modelId) {
 				for (const m of ctx.state.models) {
 					const marker = m.id === ctx.state.currentModelId ? " *" : "  ";
-					process.stdout.write(`${marker} ${m.id}  (${m.provider})\n`);
+					process.stdout.write(`${marker} ${m.id}\n`);
 				}
 				return false;
 			}
 			try {
-				const result = await ctx.clientConn.setSessionConfigOption({
-					sessionId: ctx.state.sessionId,
-					configId: "model",
-					value: modelId,
-				});
-				refreshStateFromConfigOptions(ctx.state, result.configOptions);
+				await ctx.client.model(modelId, { sessionId: ctx.state.sessionId });
+				const next = ctx.client.models();
+				ctx.state.models = next.models;
+				ctx.state.currentModelId = next.currentModelId || modelId;
 				process.stdout.write(`model switched to: ${ctx.state.currentModelId}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
@@ -265,10 +223,10 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 		case "/compact": {
 			const customInstructions = parts.slice(1).join(" ").trim() || undefined;
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_COMPACT, {
+				const result = await ctx.client.compactSession({
 					sessionId: ctx.state.sessionId,
 					...(customInstructions ? { customInstructions } : {}),
-				})) as { summary?: string; tokensBefore?: number };
+				});
 				const tokens = typeof result.tokensBefore === "number" ? ` (was ~${result.tokensBefore} tokens)` : "";
 				process.stdout.write(`compacted${tokens}\n${result.summary ?? ""}\n`);
 			} catch (err) {
@@ -279,9 +237,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/entries": {
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_ENTRIES, {
+				const result = await ctx.client.listSessionEntries({
 					sessionId: ctx.state.sessionId,
-				})) as { entries: { id: string; role: string; preview: string }[] };
+				});
 				if (result.entries.length === 0) {
 					process.stdout.write("  (no message entries)\n");
 				} else {
@@ -297,19 +255,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/tree": {
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_TREE, {
+				const result = await ctx.client.getSessionTree({
 					sessionId: ctx.state.sessionId,
-				})) as {
-					leafId: string | null;
-					nodes: {
-						id: string;
-						parentId: string | null;
-						type: string;
-						role?: string;
-						preview?: string;
-						isLeaf: boolean;
-					}[];
-				};
+				});
 				if (result.nodes.length === 0) {
 					process.stdout.write("  (empty session)\n");
 				} else {
@@ -333,10 +281,10 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_NAVIGATE, {
+				const result = await ctx.client.navigateSession({
 					sessionId: ctx.state.sessionId,
 					targetEntryId,
-				})) as { leafId: string };
+				});
 				process.stdout.write(`leaf moved to: ${result.leafId}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
@@ -351,11 +299,11 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_FORK, {
+				const result = await ctx.client.forkSession({
 					sessionId: ctx.state.sessionId,
 					entryId,
 					position: "before",
-				})) as { newSessionId: string; selectedText?: string };
+				});
 				process.stdout.write(`forked: ${result.newSessionId}\n`);
 				if (result.selectedText) process.stdout.write(`  user message: ${result.selectedText}\n`);
 				process.stdout.write(`  use /resume ${result.newSessionId} to continue from the fork\n`);
@@ -367,9 +315,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/clone":
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_CLONE, {
+				const result = await ctx.client.cloneSession({
 					sessionId: ctx.state.sessionId,
-				})) as { newSessionId: string };
+				});
 				process.stdout.write(`cloned: ${result.newSessionId}\n`);
 				process.stdout.write(`  use /resume ${result.newSessionId} to continue on the clone\n`);
 			} catch (err) {
@@ -384,10 +332,10 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_SET_NAME, {
+				const result = await ctx.client.setSessionName({
 					sessionId: ctx.state.sessionId,
 					name,
-				})) as { name: string };
+				});
 				process.stdout.write(`session name set to: ${result.name}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
@@ -397,9 +345,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/session": {
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_STATS, {
+				const result = await ctx.client.getSessionStats({
 					sessionId: ctx.state.sessionId,
-				})) as { messageCount: number; toolCallCount: number; leafId: string; name?: string };
+				});
 				process.stdout.write(
 					[
 						`  session: ${ctx.state.sessionId}`,
@@ -418,9 +366,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/export": {
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_EXPORT, {
+				const result = await ctx.client.exportSession({
 					sessionId: ctx.state.sessionId,
-				})) as { format: string; content: string };
+				});
 				process.stdout.write(`${result.content}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
@@ -430,16 +378,9 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/config": {
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_SESSION_CONFIG, {
+				const result = await ctx.client.getSessionConfig({
 					sessionId: ctx.state.sessionId,
-				})) as {
-					cwd: string;
-					defaultModelId: string;
-					currentModelId: string;
-					compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
-					appendSystemPrompt: string | null;
-					contextFilePaths: string[];
-				};
+				});
 				const lines = [
 					`  cwd: ${result.cwd}`,
 					`  default model: ${result.defaultModelId}`,
@@ -468,10 +409,10 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			try {
 				if (sub === "list") {
 					const { scope } = extractScopeFlag(tail);
-					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+					const result = await ctx.client.settings.list({
 						sessionId: ctx.state.sessionId,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; settings: Record<string, unknown> };
+					});
 					process.stdout.write(`scope: ${result.scope}\n`);
 					const entries = Object.entries(result.settings ?? {});
 					if (entries.length === 0) process.stdout.write("  (empty)\n");
@@ -483,11 +424,11 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						process.stdout.write("usage: /settings get <key> [--scope]\n");
 						return false;
 					}
-					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_GET, {
+					const result = await ctx.client.settings.get({
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { key: string; value: unknown; effective: unknown; source: string };
+					});
 					process.stdout.write(
 						`  ${result.key} = ${JSON.stringify(result.effective)}  (source: ${result.source})\n`,
 					);
@@ -499,12 +440,12 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						process.stdout.write("usage: /settings set <key> <value> [--scope]\n");
 						return false;
 					}
-					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_SET, {
+					const result = await ctx.client.settings.set({
 						sessionId: ctx.state.sessionId,
 						key,
 						value,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown };
+					});
 					process.stdout.write(
 						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
 					);
@@ -515,11 +456,11 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						process.stdout.write("usage: /settings unset <key> [--scope]\n");
 						return false;
 					}
-					const result = (await ctx.clientConn.extMethod(EXT_SESSION_SETTINGS_UNSET, {
+					const result = await ctx.client.settings.unset({
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown };
+					});
 					process.stdout.write(
 						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}\n`,
 					);
@@ -540,12 +481,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				await ctx.clientConn.extMethod(EXT_KV_SET, {
-					sessionId: ctx.state.sessionId,
-					key: `${AUTH_PREFIX}${provider}`,
-					value: apiKey,
-					secret: true,
-				});
+				await ctx.client.addProvider(provider, apiKey, { sessionId: ctx.state.sessionId });
 				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				process.stdout.write(`stored auth for ${provider}\n`);
 			} catch (err) {
@@ -561,10 +497,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				return false;
 			}
 			try {
-				await ctx.clientConn.extMethod(EXT_KV_REMOVE, {
-					sessionId: ctx.state.sessionId,
-					key: `${AUTH_PREFIX}${provider}`,
-				});
+				await ctx.client.removeProvider(provider, { sessionId: ctx.state.sessionId });
 				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				process.stdout.write(`removed auth for ${provider}\n`);
 			} catch (err) {
@@ -575,15 +508,12 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 
 		case "/logins": {
 			try {
-				const result = (await ctx.clientConn.extMethod(EXT_KV_LIST, { prefix: AUTH_PREFIX })) as {
-					entries: Array<{ key: string; value: string; secret: boolean }>;
-				};
-				if (result.entries.length === 0) {
+				const providers = await ctx.client.listProviders();
+				if (providers.length === 0) {
 					process.stdout.write("  (no stored auth)\n");
 				} else {
-					for (const e of result.entries) {
-						const provider = e.key.startsWith(AUTH_PREFIX) ? e.key.slice(AUTH_PREFIX.length) : e.key;
-						process.stdout.write(`  ${provider}: ${e.value}\n`);
+					for (const entry of providers) {
+						process.stdout.write(`  ${entry.provider}: ${entry.value}\n`);
 					}
 				}
 			} catch (err) {

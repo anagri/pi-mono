@@ -21,12 +21,12 @@ test("a write tool_call replays as a completed card after /resume — Node host 
 	const mini = getModel("openai", "gpt-4o-mini");
 	harness = await createCliTestHarness({ model: mini, apiKey: OPENAI_KEY });
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId: sessionA } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId: sessionA } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	// Drive a turn that calls write — agent persists the tool_call entry into SQLite.
 	const target = path.join(harness.tmpDir, "note.txt");
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId: sessionA,
 		prompt: [
 			{
@@ -52,7 +52,7 @@ test("a write tool_call replays as a completed card after /resume — Node host 
 	};
 	const renderer = createRenderer();
 	const ctx = {
-		clientConn: harness.clientConn,
+		client: harness.client,
 		state,
 		sessionStore: harness as never, // unused by /new and /resume
 		renderer,

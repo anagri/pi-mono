@@ -1,50 +1,24 @@
-import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
-import {
-	AUTH_PREFIX,
-	EXT_DELETE_SESSION,
-	EXT_KV_LIST,
-	EXT_KV_REMOVE,
-	EXT_KV_SET,
-	EXT_SESSION_CLONE,
-	EXT_SESSION_COMPACT,
-	EXT_SESSION_CONFIG,
-	EXT_SESSION_ENTRIES,
-	EXT_SESSION_EXPORT,
-	EXT_SESSION_FORK,
-	EXT_SESSION_NAVIGATE,
-	EXT_SESSION_SET_NAME,
-	EXT_SESSION_SETTINGS_GET,
-	EXT_SESSION_SETTINGS_LIST,
-	EXT_SESSION_SETTINGS_SET,
-	EXT_SESSION_SETTINGS_UNSET,
-	EXT_SESSION_STATS,
-	EXT_SESSION_TREE,
-} from "@bodhiapp/bodhi-pi";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { AvailableCommand } from "@agentclientprotocol/sdk";
+import type { BodhiPiClient, ModelOption } from "@bodhiapp/bodhi-pi";
 import type { ChatState } from "../store/chatStore";
 
 /**
  * Slash-command dispatcher for bodhi-pi-web. Ported from
- * `bodhi-pi-cli/src/repl/commands.ts` — same `clientConn`/state surface,
+ * `bodhi-pi-cli/src/repl/commands.ts` — same client/state surface,
  * different sink (system messages instead of stdout). M4 ships /help and
  * /model; M5 adds /sessions, /new, /resume, /close, /delete.
  */
-
-function modelIdFromOption(opt: SessionConfigOption | undefined): string | undefined {
-	if (!opt || opt.type !== "select") return undefined;
-	return opt.currentValue;
-}
 
 export interface UiCommandState {
 	sessionId: string;
 	currentModelId: string;
 	defaultModelId: string;
-	models: Model<Api>[];
+	models: ModelOption[];
 	availableCommands: AvailableCommand[];
 }
 
 export interface UiCommandContext {
-	conn: ClientSideConnection;
+	client: BodhiPiClient;
 	state: UiCommandState;
 	addSystemMessage: ChatState["addSystemMessage"];
 	setCurrentModelId: ChatState["setCurrentModelId"];
@@ -125,19 +99,15 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 			if (!modelId) {
 				const rows = ctx.state.models.map((m) => {
 					const marker = m.id === ctx.state.currentModelId ? "*" : " ";
-					return `${marker} ${m.id}  (${m.provider})`;
+					return `${marker} ${m.id}`;
 				});
 				ctx.addSystemMessage(["models:", ...rows].join("\n"));
 				return true;
 			}
 			try {
-				const result = await ctx.conn.setSessionConfigOption({
-					sessionId: ctx.state.sessionId,
-					configId: "model",
-					value: modelId,
-				});
+				await ctx.client.model(modelId, { sessionId: ctx.state.sessionId });
 				// Picker state refresh arrives via `config_option_update` sessionUpdate.
-				const newId = modelIdFromOption(result.configOptions.find((o) => o.id === "model")) ?? modelId;
+				const newId = ctx.client.models().currentModelId || modelId;
 				ctx.addSystemMessage(`model switched to: ${newId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -151,7 +121,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				let cursor: string | undefined;
 				let total = 0;
 				do {
-					const result = await ctx.conn.listSessions({ cwd: ctx.cwd, ...(cursor ? { cursor } : {}) });
+					const result = await ctx.client.listSessions({ cwd: ctx.cwd, ...(cursor ? { cursor } : {}) });
 					for (const s of result.sessions) {
 						const marker = s.sessionId === ctx.state.sessionId ? "*" : " ";
 						const updated = s.updatedAt ? formatAge(Date.parse(s.updatedAt)) : "";
@@ -171,12 +141,12 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		case "/new": {
 			try {
 				if (ctx.state.sessionId) {
-					await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
+					await ctx.client.closeSession({ sessionId: ctx.state.sessionId });
 				}
-				const result = await ctx.conn.newSession({ cwd: ctx.cwd, mcpServers: [] });
+				const result = await ctx.client.newSession({ cwd: ctx.cwd, mcpServers: [] });
 				ctx.clear();
 				ctx.setSessionId(result.sessionId);
-				ctx.setCurrentModelId(modelIdFromOption(result.configOptions?.[0]) ?? ctx.state.defaultModelId);
+				ctx.setCurrentModelId(ctx.client.models().currentModelId || ctx.state.defaultModelId);
 				ctx.setStatus("idle");
 				ctx.addSystemMessage(`new session: ${result.sessionId.slice(0, 8)}…`);
 			} catch (err) {
@@ -193,12 +163,12 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 			}
 			try {
 				if (ctx.state.sessionId && ctx.state.sessionId !== targetId) {
-					await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
+					await ctx.client.closeSession({ sessionId: ctx.state.sessionId });
 				}
 				ctx.clear();
 				ctx.setSessionId(targetId);
-				const result = await ctx.conn.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
-				const restoredModel = modelIdFromOption(result.configOptions?.[0]) ?? ctx.state.defaultModelId;
+				await ctx.client.loadSession({ sessionId: targetId, cwd: ctx.cwd, mcpServers: [] });
+				const restoredModel = ctx.client.models().currentModelId || ctx.state.defaultModelId;
 				ctx.setCurrentModelId(restoredModel);
 				ctx.setStatus("idle");
 				ctx.addSystemMessage(`resumed session: ${targetId.slice(0, 8)}…`);
@@ -211,7 +181,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/close": {
 			try {
-				await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
+				await ctx.client.closeSession({ sessionId: ctx.state.sessionId });
 				ctx.setStatus("closed");
 				ctx.addSystemMessage(`closed session: ${ctx.state.sessionId.slice(0, 8)}…  (use /new or /resume <id>)`);
 			} catch (err) {
@@ -227,7 +197,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				await ctx.conn.extMethod(EXT_DELETE_SESSION, { sessionId: targetId });
+				await ctx.client.deleteSession({ sessionId: targetId });
 				ctx.addSystemMessage(`deleted session: ${targetId.slice(0, 8)}…`);
 				if (targetId === ctx.state.sessionId) {
 					// Recurse into /new to leave the user on a fresh, usable session.
@@ -242,10 +212,10 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		case "/compact": {
 			const customInstructions = parts.slice(1).join(" ").trim() || undefined;
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_COMPACT, {
+				const result = await ctx.client.compactSession({
 					sessionId: ctx.state.sessionId,
 					...(customInstructions ? { customInstructions } : {}),
-				})) as { summary?: string; tokensBefore?: number };
+				});
 				const tokens = typeof result.tokensBefore === "number" ? ` (was ~${result.tokensBefore} tokens)` : "";
 				ctx.addSystemMessage(`compacted${tokens}\n\n${result.summary ?? ""}`);
 			} catch (err) {
@@ -256,9 +226,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/entries": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_ENTRIES, {
+				const result = await ctx.client.listSessionEntries({
 					sessionId: ctx.state.sessionId,
-				})) as { entries: { id: string; role: string; preview: string }[] };
+				});
 				if (result.entries.length === 0) {
 					ctx.addSystemMessage("(no message entries)");
 				} else {
@@ -274,10 +244,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/tree": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_TREE, { sessionId: ctx.state.sessionId })) as {
-					leafId: string | null;
-					nodes: { id: string; type: string; role?: string; preview?: string; isLeaf: boolean }[];
-				};
+				const result = await ctx.client.getSessionTree({ sessionId: ctx.state.sessionId });
 				if (result.nodes.length === 0) {
 					ctx.addSystemMessage("(empty session)");
 				} else {
@@ -303,10 +270,10 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_NAVIGATE, {
+				const result = await ctx.client.navigateSession({
 					sessionId: ctx.state.sessionId,
 					targetEntryId,
-				})) as { leafId: string };
+				});
 				ctx.addSystemMessage(`leaf moved to: ${result.leafId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -321,11 +288,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_FORK, {
+				const result = await ctx.client.forkSession({
 					sessionId: ctx.state.sessionId,
 					entryId,
 					position: "before",
-				})) as { newSessionId: string; selectedText?: string };
+				});
 				ctx.addSystemMessage(
 					`forked: ${result.newSessionId}${result.selectedText ? `\n  user message: ${result.selectedText}` : ""}`,
 				);
@@ -337,9 +304,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/clone": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_CLONE, {
+				const result = await ctx.client.cloneSession({
 					sessionId: ctx.state.sessionId,
-				})) as { newSessionId: string };
+				});
 				ctx.addSystemMessage(`cloned: ${result.newSessionId}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -354,10 +321,10 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_SET_NAME, {
+				const result = await ctx.client.setSessionName({
 					sessionId: ctx.state.sessionId,
 					name,
-				})) as { name: string };
+				});
 				ctx.addSystemMessage(`session name set to: ${result.name}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
@@ -367,9 +334,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/session": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_STATS, {
+				const result = await ctx.client.getSessionStats({
 					sessionId: ctx.state.sessionId,
-				})) as { messageCount: number; toolCallCount: number; leafId: string; name?: string };
+				});
 				const lines = [
 					`session: ${ctx.state.sessionId}`,
 					...(result.name ? [`  name: ${result.name}`] : []),
@@ -386,9 +353,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/export": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_EXPORT, {
+				const result = await ctx.client.exportSession({
 					sessionId: ctx.state.sessionId,
-				})) as { format: string; content: string };
+				});
 				try {
 					await navigator.clipboard.writeText(result.content);
 					ctx.addSystemMessage(
@@ -405,16 +372,9 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/config": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_SESSION_CONFIG, {
+				const result = await ctx.client.getSessionConfig({
 					sessionId: ctx.state.sessionId,
-				})) as {
-					cwd: string;
-					defaultModelId: string;
-					currentModelId: string;
-					compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
-					appendSystemPrompt: string | null;
-					contextFilePaths: string[];
-				};
+				});
 				const lines = [
 					`cwd: ${result.cwd}`,
 					`default model: ${result.defaultModelId}`,
@@ -443,10 +403,10 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 			try {
 				if (sub === "list") {
 					const { scope } = extractScopeFlag(tail);
-					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+					const result = await ctx.client.settings.list({
 						sessionId: ctx.state.sessionId,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; settings: Record<string, unknown> };
+					});
 					const entries = Object.entries(result.settings ?? {});
 					const lines = [`scope: ${result.scope}`];
 					if (entries.length === 0) lines.push("  (empty)");
@@ -459,11 +419,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 						ctx.addSystemMessage("usage: /settings get <key> [--scope]");
 						return true;
 					}
-					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_GET, {
+					const result = await ctx.client.settings.get({
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { key: string; effective: unknown; source: string };
+					});
 					ctx.addSystemMessage(`${result.key} = ${JSON.stringify(result.effective)}  (source: ${result.source})`);
 				} else if (sub === "set") {
 					const { scope, rest } = extractScopeFlag(tail);
@@ -473,12 +433,12 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 						ctx.addSystemMessage("usage: /settings set <key> <value> [--scope]");
 						return true;
 					}
-					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_SET, {
+					const result = await ctx.client.settings.set({
 						sessionId: ctx.state.sessionId,
 						key,
 						value,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown };
+					});
 					ctx.addSystemMessage(
 						`set ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}`,
 					);
@@ -489,11 +449,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 						ctx.addSystemMessage("usage: /settings unset <key> [--scope]");
 						return true;
 					}
-					const result = (await ctx.conn.extMethod(EXT_SESSION_SETTINGS_UNSET, {
+					const result = await ctx.client.settings.unset({
 						sessionId: ctx.state.sessionId,
 						key,
 						...(scope ? { scope } : {}),
-					})) as { scope: string; effective: unknown };
+					});
 					ctx.addSystemMessage(
 						`unset ${key} (scope: ${result.scope}); effective = ${JSON.stringify(result.effective)}`,
 					);
@@ -514,12 +474,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				await ctx.conn.extMethod(EXT_KV_SET, {
-					sessionId: ctx.state.sessionId,
-					key: `${AUTH_PREFIX}${provider}`,
-					value: apiKey,
-					secret: true,
-				});
+				await ctx.client.addProvider(provider, apiKey, { sessionId: ctx.state.sessionId });
 				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				ctx.addSystemMessage(`stored auth for ${provider}`);
 			} catch (err) {
@@ -535,10 +490,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				return true;
 			}
 			try {
-				await ctx.conn.extMethod(EXT_KV_REMOVE, {
-					sessionId: ctx.state.sessionId,
-					key: `${AUTH_PREFIX}${provider}`,
-				});
+				await ctx.client.removeProvider(provider, { sessionId: ctx.state.sessionId });
 				// Picker state refresh arrives via `config_option_update` sessionUpdate.
 				ctx.addSystemMessage(`removed auth for ${provider}`);
 			} catch (err) {
@@ -549,16 +501,11 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 
 		case "/logins": {
 			try {
-				const result = (await ctx.conn.extMethod(EXT_KV_LIST, { prefix: AUTH_PREFIX })) as {
-					entries: Array<{ key: string; value: string; secret: boolean }>;
-				};
-				if (result.entries.length === 0) {
+				const providers = await ctx.client.listProviders();
+				if (providers.length === 0) {
 					ctx.addSystemMessage("(no stored auth)");
 				} else {
-					const lines = result.entries.map((e) => {
-						const provider = e.key.startsWith(AUTH_PREFIX) ? e.key.slice(AUTH_PREFIX.length) : e.key;
-						return `  ${provider}: ${e.value}`;
-					});
+					const lines = providers.map((entry) => `  ${entry.provider}: ${entry.value}`);
 					ctx.addSystemMessage(["stored auth:", ...lines].join("\n"));
 				}
 			} catch (err) {

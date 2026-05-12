@@ -1,4 +1,3 @@
-import { EXT_SESSION_ENTRIES, EXT_SESSION_NAVIGATE, EXT_SESSION_TREE } from "@bodhiapp/bodhi-pi";
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { type CliTestHarness, createCliTestHarness } from "@test/helpers/cli-harness.js";
@@ -17,47 +16,41 @@ afterEach(async () => {
 });
 
 test("/tree lists all entries with a single leaf marker; /goto moves the leaf and the next prompt branches from there", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply only with: first" }],
 	});
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply only with: second" }],
 	});
 
-	const tree = (await harness.clientConn.extMethod(EXT_SESSION_TREE, { sessionId })) as {
-		leafId: string;
-		nodes: { id: string; isLeaf: boolean; type: string }[];
-	};
+	const tree = await harness.client.getSessionTree({ sessionId });
 	expect(tree.nodes.length).toBeGreaterThan(0);
 	expect(tree.nodes.filter((n) => n.isLeaf)).toHaveLength(1);
 
-	const entries = (await harness.clientConn.extMethod(EXT_SESSION_ENTRIES, { sessionId })) as {
-		entries: { id: string; role: string; preview: string }[];
-	};
+	const entries = await harness.client.listSessionEntries({ sessionId });
 	const firstUserId = entries.entries.find((e) => e.role === "user" && e.preview.toLowerCase().includes("first"))?.id;
 	expect(firstUserId).toBeDefined();
+	if (!firstUserId) throw new Error("expected first user entry");
 
-	const nav = (await harness.clientConn.extMethod(EXT_SESSION_NAVIGATE, {
+	const nav = await harness.client.navigateSession({
 		sessionId,
 		targetEntryId: firstUserId,
-	})) as { leafId: string };
+	});
 	// Cross-branch /goto auto-appends a branch_summary; leafId points there now.
 	expect(typeof nav.leafId).toBe("string");
 	expect(nav.leafId).not.toBe(firstUserId);
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply only with: branch" }],
 	});
 
-	const after = (await harness.clientConn.extMethod(EXT_SESSION_ENTRIES, { sessionId })) as {
-		entries: { preview: string }[];
-	};
+	const after = await harness.client.listSessionEntries({ sessionId });
 	const previews = after.entries.map((e) => e.preview.toLowerCase());
 	expect(previews.some((p) => p.includes("first"))).toBe(true);
 	expect(previews.some((p) => p.includes("branch"))).toBe(true);

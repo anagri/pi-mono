@@ -17,10 +17,10 @@ afterEach(async () => {
 });
 
 test("CLI agent returns end_turn and streams chunks (gpt-4o-mini)", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	const result = await harness.clientConn.prompt({
+	const result = await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply with exactly one word: hello" }],
 	});

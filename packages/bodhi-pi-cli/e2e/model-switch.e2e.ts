@@ -21,8 +21,8 @@ async function setup() {
 		apiKey: OPENAI_KEY,
 		extraModels: [full],
 	});
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 	const state: ReplState = {
 		sessionId,
 		currentModelId: mini.id,
@@ -33,7 +33,7 @@ async function setup() {
 	};
 	const renderer = createRenderer();
 	const ctx = {
-		clientConn: harness.clientConn,
+		client: harness.client,
 		state,
 		// Cast: e2e doesn't use sessionStore through commands.ts, so leaving it
 		// as unknown is safe for this slice.

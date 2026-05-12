@@ -20,11 +20,11 @@ afterEach(async () => {
 });
 
 test("write tool creates a real file in tmpDir", async () => {
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
 	const target = path.join(harness.tmpDir, "output.txt");
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [
 			{ type: "text", text: `Use the write tool to create the file ${target} with exactly the text: disk-written` },
@@ -39,10 +39,10 @@ test("read tool reads a pre-seeded file from tmpDir", async () => {
 	const seedPath = path.join(harness.tmpDir, "seed.txt");
 	await nodeFs.writeFile(seedPath, "real disk content", "utf-8");
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: `Use the read tool on ${seedPath}.` }],
 	});
@@ -57,10 +57,10 @@ test("ls tool lists real files in tmpDir", async () => {
 	await nodeFs.writeFile(path.join(harness.tmpDir, "alpha.txt"), "a", "utf-8");
 	await nodeFs.writeFile(path.join(harness.tmpDir, "beta.txt"), "b", "utf-8");
 
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: harness.tmpDir, mcpServers: [] });
+	await harness.client.initialize(stdInitParams);
+	const { sessionId } = await harness.client.newSession({ cwd: harness.tmpDir, mcpServers: [] });
 
-	await harness.clientConn.prompt({
+	await harness.client.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: `Use the ls tool on ${harness.tmpDir} and tell me what files are there.` }],
 	});
