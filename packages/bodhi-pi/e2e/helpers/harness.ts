@@ -186,36 +186,27 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	};
 }
 
-async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
+async function createHttpHarness(_opts: E2EHarnessOptions): Promise<E2EHarness> {
 	const { createNodeFilesystem } = await import("@e2e/helpers/node-adapters/index.js");
 	const { HttpAcpConnection } = await import("./http-connection.js");
 	const { mintTestToken } = await import("./auth.js");
-	// In-process buildServer is the cleanest way to wire models + getApiKey
-	// upfront. Spawning bodhi-pi-http would require it to accept --models /
-	// --default-model / env-based API keys — a small follow-up. For now we
-	// import the factory from the sibling package via a relative dist path
-	// (workspace symlink resolution), avoiding a package.json devDep on it.
-	const { buildServer } = (await import(
-		"@bodhiapp/bodhi-pi-http/dist/server/server.js"
-	)) as typeof import("@bodhiapp/bodhi-pi-http/dist/server/server.js");
 
-	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-http-"));
-	const dataDir = path.join(tmpDir, ".data");
-	await fs.mkdir(dataDir, { recursive: true });
+	const baseUrl = process.env.BODHI_PI_E2E_HTTP_BASE_URL;
+	const dataDir = process.env.BODHI_PI_E2E_HTTP_DATA_DIR;
+	if (!baseUrl || !dataDir) {
+		throw new Error(
+			"http harness: BODHI_PI_E2E_HTTP_BASE_URL / BODHI_PI_E2E_HTTP_DATA_DIR not set. The shared test-app-http must be spawned by e2e/global-setup.ts before tests run.",
+		);
+	}
 
-	const server = await buildServer({
-		port: 0,
-		dataDir,
-		models: opts.models,
-		defaultModelId: opts.defaultModelId,
-		...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
-		workspaceOverride: tmpDir,
-		staticDir: null,
-	});
+	// Per-test user token → multi-tenant SQLite isolates workspaces under
+	// <dataDir>/users/<id>/workspace/. Random 32-bit id keeps the cross-test
+	// collision odds negligible.
+	const userId = Math.floor(Math.random() * 0x7fff_ffff);
+	const token = mintTestToken({ id: userId, email: `test-${userId}@example.com` });
+	const cwd = path.join(dataDir, "users", String(userId), "workspace");
+	await fs.mkdir(cwd, { recursive: true });
 
-	const port = server.port();
-	const baseUrl = `http://localhost:${port}`;
-	const token = mintTestToken();
 	const updates: SessionNotification[] = [];
 	const clientConn = new HttpAcpConnection({
 		baseUrl,
@@ -223,23 +214,24 @@ async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		onUpdate: (n) => updates.push(n),
 	});
 
-	const filesystem = createNodeFilesystem({ rootCwd: tmpDir });
+	const filesystem = createNodeFilesystem({ rootCwd: cwd });
 	const sessionStore = createInMemorySessionStore();
 	const kvStore = createInMemoryKvStore();
 
 	const cleanup = async () => {
-		await server.close();
-		await fs.rm(tmpDir, { recursive: true, force: true });
+		// Server stays up (global-setup teardown shuts it down). Only the per-user
+		// workspace directory belongs to this test.
+		await fs.rm(cwd, { recursive: true, force: true });
 	};
 
 	return {
 		clientConn,
-		client: createBodhiPiClient(clientConn, { cwd: tmpDir }),
+		client: createBodhiPiClient(clientConn, { cwd }),
 		updates,
 		filesystem,
 		sessionStore,
 		kvStore,
-		cwd: tmpDir,
+		cwd,
 		cleanup,
 	};
 }

@@ -82,9 +82,17 @@ test("switching model mid-session changes provenance", async () => {
 		cwd: h.cwd,
 		mcpServers: [],
 	});
+	// At least claude + gpt must be in the model select. The harness may have
+	// other models registered too (shared http server boots with a wider list);
+	// we don't assert the option count.
 	const initialOption = asSelectOption(configOptions?.[0]);
-	expect(initialOption.currentValue).toBe(claude.id);
-	expect(initialOption.options).toHaveLength(2);
+	const ids = (initialOption.options as Array<{ value: string }>).map((o) => o.value);
+	expect(ids).toContain(claude.id);
+	expect(ids).toContain(gpt.id);
+
+	// Pin to claude before the first prompt so the assertion is independent of
+	// the harness's boot-time default.
+	await h.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: claude.id });
 
 	const provenancePrompt =
 		"Are you made by Anthropic or by OpenAI? Answer with exactly one of those two words and nothing else.";
