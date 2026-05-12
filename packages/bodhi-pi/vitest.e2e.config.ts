@@ -49,7 +49,7 @@ export default defineConfig({
 					...sharedProjectTest,
 					name: "http",
 					setupFiles: ["./e2e/setup/http.ts"],
-					include: ["e2e/shared/**/*.e2e.ts", "e2e/http-playwright/**/*.e2e.ts"],
+					include: ["e2e/shared/**/*.e2e.ts"],
 				},
 			},
 		],

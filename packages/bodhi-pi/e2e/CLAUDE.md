@@ -5,10 +5,14 @@ Real-LLM e2e for bodhi-pi. Same `e2e/shared/*.e2e.ts` files run under three Vite
 | Project | Transport | Adapters | What it spawns |
 |---|---|---|---|
 | `in-memory` | in-process ACP pair | in-memory FS/sessions/kv | nothing |
-| `cli` | ACP JSON-RPC over real stdio | `bodhi-pi-node` (real FS + SQLite) | `test-app-cli --rpc` child process |
-| `http` | HTTP+SSE on `/acp` | `bodhi-pi-node` (real FS + SQLite) | bodhi-pi-http server (in-process) |
+| `cli` | ACP JSON-RPC over real stdio | inlined Node adapters (real FS + SQLite) | `test-app-cli --rpc` child process |
+| `http` | HTTP+SSE on `/acp` | inlined Node adapters (real FS + SQLite) | one shared `test-app-http` server (spawned in global-setup, shared across all http tests via per-test user tokens) |
 
-`e2e/cli-headless/` runs only under `cli`. `e2e/http-playwright/` runs only under `http`.
+`e2e/cli-headless/` runs only under `cli`. Playwright surface tests are NOT run from these Vitest projects — see "Vitest ≠ Playwright" below.
+
+## Vitest ≠ Playwright
+
+vitest and Playwright are two separate runners. We do not co-mingle them. The Vitest projects here exercise shared ACP behavior over each transport. Playwright UI tests (`http-playwright/`, `ws-playwright/`, `browser-playwright/`, `chrome-ext-playwright/`) — when they exist — live in their own buckets and kick off via their own runner (`npx playwright test ...`), not via vitest. Whoever introduces a runtime's Playwright surface decides where its `npm run` script lives.
 
 ## Conventions
 
@@ -96,9 +100,9 @@ Use `test.runIf(!isRuntime("http"))` for tests that fail under bodhi-pi-http's p
 
 ### Don't depend on bodhi-pi-* packages from e2e
 
-`bodhi-pi/e2e/` must not import from `@bodhiapp/bodhi-pi-node`, `@bodhiapp/bodhi-pi-cli`, etc. Required adapters live under `e2e/helpers/` (e.g. `node-filesystem.ts` is a copy of bodhi-pi-node's `createNodeFilesystem`). If a helper drifts from its source, update the copy in lockstep.
+`bodhi-pi/e2e/` must not import from any `@bodhiapp/bodhi-pi-*` sibling-package (bodhi-pi-node, bodhi-pi-cli, bodhi-pi-http, bodhi-pi-browser, etc.). Required adapters and helpers live under `e2e/helpers/node-adapters/` and are reachable via the `@e2e/*` tsconfig path alias (e.g. `import { createNodeFilesystem } from "@e2e/helpers/node-adapters/index.js"`). If a helper drifts from its source-package counterpart, update the copy in lockstep.
 
-Exception, currently retained: the `http` branch imports `buildServer` from `@bodhiapp/bodhi-pi-http/dist/server/server.js`. Listed in bodhi-pi's devDeps. Full decoupling requires either copying that source under `e2e/test-app-http/` or extending bodhi-pi-http's CLI args so the harness can spawn it like `test-app-cli`.
+The two test-app workspaces (`e2e/test-app-cli/`, `e2e/test-app-http/`) are independent Node projects (their own package.json + tsconfigs); they re-use the same `e2e/helpers/node-adapters/` via `@e2e/*` so source stays single-canonical. Each test-app's `tsconfig.build.json` extends `include` to pull in the helpers folder and emits a self-contained `dist/` tree.
 
 ### Anti-patterns
 
@@ -109,4 +113,5 @@ Exception, currently retained: the `http` branch imports `buildServer` from `@bo
 | Hardcoded paths like `"/proj/.bodhi-pi/foo"` | `${h.cwd}/.bodhi-pi/foo` |
 | `expect()` in flow steps that should keep running | `expect.soft()` |
 | 5 granular tests with identical setup | One flow test with shared setup + `expect.soft` per step |
-| Importing from `@bodhiapp/bodhi-pi-node` | Add the helper under `e2e/helpers/` |
+| Importing from any `@bodhiapp/bodhi-pi-*` sibling package | Inline what you need under `e2e/helpers/`, import via `@e2e/*` |
+| Co-mingling Playwright specs into a vitest project | Keep Playwright in its own bucket with its own runner |

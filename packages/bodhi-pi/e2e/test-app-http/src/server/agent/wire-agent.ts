@@ -5,7 +5,7 @@ import {
 	createNodeFilesystem,
 	createNodeKvStore,
 	createNodeScriptExecutor,
-} from "@bodhiapp/bodhi-pi-node";
+} from "@e2e/helpers/node-adapters/index.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
