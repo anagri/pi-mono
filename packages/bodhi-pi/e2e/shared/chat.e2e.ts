@@ -4,7 +4,6 @@ import { asSelectOption } from "@test/helpers/acp-narrow.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
-import { isRuntime } from "../helpers/runtime.js";
 
 let activeHarness: E2EHarness | undefined;
 
@@ -63,10 +62,7 @@ test("OpenAI gpt-5-mini replies with tuesday via ACP", async () => {
 	expect(result.text.toLowerCase()).toContain("tuesday");
 });
 
-// Skipped under http: per-turn agent rebuild appears to lose the
-// setSessionConfigOption model switch — second prompt still routes via the
-// initial provider. Tracked as a bodhi-pi-http divergence.
-test.runIf(!isRuntime("http"))("switching model mid-session changes provenance", async () => {
+test("switching model mid-session changes provenance", async () => {
 	const claude = getModel("anthropic", "claude-haiku-4-5");
 	const gpt = getModel("openai", "gpt-5-mini");
 

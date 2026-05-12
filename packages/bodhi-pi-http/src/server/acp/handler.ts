@@ -158,24 +158,14 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 		const agent = wired.factory(conn);
 
 		try {
-			// Methods that read in-memory SessionState need transparent rehydration
-			// from store, since each HTTP request gets a fresh agent. `prompt` does
-			// this in handleSseMethod; the methods listed here do it before dispatch.
-			const NEEDS_REHYDRATE = new Set([
-				"session/setSessionConfigOption",
-				"_bodhi-pi/session/compact",
-				"_bodhi-pi/session/setName",
-				"_bodhi-pi/session/config",
-				"_bodhi-pi/session/settings/get",
-				"_bodhi-pi/session/settings/set",
-				"_bodhi-pi/session/settings/unset",
-				"_bodhi-pi/session/settings/list",
-			]);
-			if (NEEDS_REHYDRATE.has(body.method)) {
-				const sid = (params as { sessionId?: unknown }).sessionId;
-				if (typeof sid === "string" && agent.resumeSession) {
-					await agent.resumeSession({ sessionId: sid, cwd: wired.cwd, mcpServers: [] } as never);
-				}
+			// Each HTTP request gets a fresh agent with no in-memory SessionState.
+			// Any method whose params carry a sessionId is treated as session-bound
+			// and rehydrated up-front, matching the stateful-agent assumption the
+			// rest of the bodhi-pi contract makes. The SSE path (handleSseMethod)
+			// applies the same rule for session/prompt and session/load.
+			const sid = (params as { sessionId?: unknown }).sessionId;
+			if (typeof sid === "string" && agent.resumeSession) {
+				await agent.resumeSession({ sessionId: sid, cwd: wired.cwd, mcpServers: [] } as never);
 			}
 			const result = await dispatchJsonMethod(agent, body.method, params);
 			// Inject captured availableCommands into newSession's response so the
