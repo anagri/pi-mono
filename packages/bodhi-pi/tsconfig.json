@@ -4,7 +4,8 @@
 		"noEmit": true,
 		"paths": {
 			"@/*": ["./src/*"],
-			"@test/*": ["./test/*"]
+			"@test/*": ["./test/*"],
+			"@e2e/*": ["./e2e/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts"],

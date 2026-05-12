@@ -6,9 +6,9 @@ export interface NodeFilesystemOptions {
 	rootCwd: string;
 }
 
-// Copy of `createNodeFilesystem` from `@bodhiapp/bodhi-pi-node` — duplicated so
-// bodhi-pi/e2e has no dependency on any sibling bodhi-pi-* package. Update in
-// lockstep if the Filesystem interface changes.
+// Inline of `createNodeFilesystem` from bodhi-pi-node so bodhi-pi/e2e has no
+// dependency on the sibling adapter package. Update in lockstep if the
+// Filesystem interface changes upstream.
 export function createNodeFilesystem(opts: NodeFilesystemOptions): Filesystem {
 	const { rootCwd } = opts;
 	const unjailed = rootCwd === "/";

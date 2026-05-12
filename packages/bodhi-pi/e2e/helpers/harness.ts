@@ -115,7 +115,7 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 }
 
 async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
-	const { createNodeFilesystem } = await import("./node-filesystem.js");
+	const { createNodeFilesystem } = await import("@e2e/helpers/node-adapters/index.js");
 
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-cli-"));
 	const dbPath = path.join(tmpDir, "sessions.db");
@@ -187,7 +187,7 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 }
 
 async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
-	const { createNodeFilesystem } = await import("./node-filesystem.js");
+	const { createNodeFilesystem } = await import("@e2e/helpers/node-adapters/index.js");
 	const { HttpAcpConnection } = await import("./http-connection.js");
 	const { mintTestToken } = await import("./auth.js");
 	// In-process buildServer is the cleanest way to wire models + getApiKey
