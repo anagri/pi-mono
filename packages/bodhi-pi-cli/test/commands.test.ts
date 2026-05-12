@@ -186,7 +186,6 @@ test("/config surfaces cwd, AGENTS.md paths, compaction overrides, and appendSys
 	expect(out).toContain(`cwd: ${tmpDir}`);
 	expect(out).toContain("compaction.reserveTokens: 42424");
 	expect(out).toContain("appendSystemPrompt: CFG-PROJECT-APPEND");
-	expect(out).toContain("project settings present: true");
 	expect(out).toContain(path.join(tmpDir, "AGENTS.md"));
 
 	writeSpy.mockRestore();

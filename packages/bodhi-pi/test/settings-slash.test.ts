@@ -7,7 +7,6 @@ import {
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
-	EXT_SESSION_CONFIG,
 	EXT_SESSION_SETTINGS_GET,
 	EXT_SESSION_SETTINGS_LIST,
 	EXT_SESSION_SETTINGS_SET,
@@ -50,10 +49,12 @@ test("set --session mutates only in-memory overrides (no FS writes)", async () =
 	});
 
 	expect(await filesystem.exists("/proj/.bodhi-pi/settings.json")).toBe(false);
-	const result = (await harness.clientConn.extMethod(EXT_SESSION_CONFIG, { sessionId })) as {
-		sessionOverrides: { appendSystemPrompt?: string };
-	};
-	expect(result.sessionOverrides.appendSystemPrompt).toBe("EXTRA");
+	const result = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+		sessionId,
+		scope: "session",
+	})) as { scope: string; settings: { appendSystemPrompt?: string } };
+	expect(result.scope).toBe("session");
+	expect(result.settings.appendSystemPrompt).toBe("EXTRA");
 });
 
 test("set --project writes .bodhi-pi/settings.json", async () => {

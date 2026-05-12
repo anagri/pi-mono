@@ -50,7 +50,6 @@ test("session/config returns resolved per-session config", async () => {
 		compaction: { reserveTokens: number };
 		appendSystemPrompt: string | null;
 		contextFilePaths: string[];
-		projectSettingsPresent: boolean;
 	};
 
 	expect(result.sessionId).toBe(sessionId);
@@ -60,7 +59,6 @@ test("session/config returns resolved per-session config", async () => {
 	expect(result.compaction.reserveTokens).toBe(99999);
 	expect(result.appendSystemPrompt).toBe("FROM-PROJECT");
 	expect(result.contextFilePaths).toEqual(["/proj/AGENTS.md"]);
-	expect(result.projectSettingsPresent).toBe(true);
 });
 
 test("session/config: defaults when no settings/AGENTS.md present", async () => {
@@ -73,11 +71,9 @@ test("session/config: defaults when no settings/AGENTS.md present", async () => 
 	const result = (await harness.clientConn.extMethod(EXT_SESSION_CONFIG, { sessionId })) as {
 		appendSystemPrompt: string | null;
 		contextFilePaths: string[];
-		projectSettingsPresent: boolean;
 	};
 	expect(result.appendSystemPrompt).toBeNull();
 	expect(result.contextFilePaths).toEqual([]);
-	expect(result.projectSettingsPresent).toBe(false);
 });
 
 test("session/config: host appendSystemPrompt beats project settings", async () => {

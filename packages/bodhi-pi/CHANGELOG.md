@@ -48,6 +48,22 @@
   unchanged. (Batch 2 of the 2026-05-11 tech-debt review.)
 
 ### Changed (BREAKING)
+- `_bodhi-pi/session/config` response slims to the per-session resolved
+  bits that aren't reachable elsewhere: `{ sessionId, cwd, defaultModelId,
+  currentModelId, thinkingLevel, retryOptions, compaction,
+  appendSystemPrompt, contextFilePaths }` plus optional
+  `globalSettingsParseError` / `projectSettingsParseError`. Six fields
+  drop — `projectSettings`, `globalSettings`, `sessionOverrides`,
+  `layers`, `projectSettingsPresent`, `globalSettingsPresent`. The
+  per-scope settings layers are already reachable through
+  `_bodhi-pi/session/settings/list?scope={global|project|session|effective}`,
+  which is now the single source of truth for layer inspection. Hosts in
+  this repo that printed `project settings present: ...` in `/config`
+  (`bodhi-pi-cli`, `bodhi-pi-browser`, `bodhi-pi-ws-frontend`,
+  `bodhi-pi-http` frontend) drop that line; the
+  `bodhi-pi-http` typed wrapper `getSessionConfig()` drops the field
+  from its return type. No warn-then-drop — every host migrates in the
+  same release. (Batch 4 / F.2 of the 2026-05-11 tech-debt review.)
 - `agentCapabilities._meta["bodhi-pi"]` collapses to a single
   `{ version: BODHI_PI_VERSION }` stamp. Hosts that probed individual
   per-method flags (`sessionDelete`, `sessionCompact`, `sessionConfig`,

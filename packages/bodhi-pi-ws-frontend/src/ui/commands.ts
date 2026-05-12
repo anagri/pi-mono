@@ -430,7 +430,6 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
 					appendSystemPrompt: string | null;
 					contextFilePaths: string[];
-					projectSettingsPresent: boolean;
 				};
 				const lines = [
 					`cwd: ${result.cwd}`,
@@ -440,7 +439,6 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 					`compaction.reserveTokens: ${result.compaction.reserveTokens}`,
 					`compaction.keepRecentTokens: ${result.compaction.keepRecentTokens}`,
 					`appendSystemPrompt: ${result.appendSystemPrompt ?? "(none)"}`,
-					`project settings present: ${result.projectSettingsPresent}`,
 					`context files: ${result.contextFilePaths.length === 0 ? "(none)" : ""}`,
 					...result.contextFilePaths.map((p) => `  - ${p}`),
 				];

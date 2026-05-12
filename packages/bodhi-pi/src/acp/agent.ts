@@ -865,7 +865,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private async handleSessionConfig(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const sessionId = this.validateSessionId(EXT_SESSION_CONFIG, params);
 		const session = this.requireSession(EXT_SESSION_CONFIG, params);
-		const effective = this.effectiveSettings(session);
 		return {
 			sessionId,
 			cwd: session.cwd,
@@ -876,17 +875,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 			compaction: { ...session.compaction },
 			appendSystemPrompt: session.appendSystemPrompt,
 			contextFilePaths: session.contextFiles.map((f) => f.path),
-			projectSettingsPresent: session.settings.projectSettingsPresent,
-			projectSettings: session.settings.projectSettings as Record<string, unknown>,
-			globalSettingsPresent: session.settings.globalSettingsPresent,
-			globalSettings: (session.settings.globalSettings ?? null) as Record<string, unknown> | null,
-			sessionOverrides: session.settings.sessionOverrides as Record<string, unknown>,
-			layers: {
-				global: (session.settings.globalSettings ?? null) as Record<string, unknown> | null,
-				project: session.settings.projectSettings as Record<string, unknown>,
-				sessionOverrides: session.settings.sessionOverrides as Record<string, unknown>,
-				effective: effective as Record<string, unknown>,
-			},
 			...(session.settings.globalSettingsParseError !== undefined
 				? { globalSettingsParseError: session.settings.globalSettingsParseError }
 				: {}),

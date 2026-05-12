@@ -6,7 +6,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { EXT_SESSION_CONFIG } from "@/acp/constants.js";
+import { EXT_SESSION_CONFIG, EXT_SESSION_SETTINGS_LIST } from "@/acp/constants.js";
 import { loadProjectSettings } from "@/core/settings.js";
 import { loadGlobalSettings } from "@/core/settings-global.js";
 import { mergeSettings } from "@/core/settings-merge.js";
@@ -137,7 +137,7 @@ describe("mergeSettings", () => {
 	});
 });
 
-describe("layered settings (via session/config)", () => {
+describe("layered settings (via session/config + settings/list)", () => {
 	test("project overrides global, global inherits when project omits", async () => {
 		const model = newFaux();
 		const filesystem = createInMemoryFilesystem();
@@ -160,24 +160,31 @@ describe("layered settings (via session/config)", () => {
 		await harness.clientConn.initialize(stdInitParams);
 		const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
 
-		const result = (await harness.clientConn.extMethod(EXT_SESSION_CONFIG, { sessionId })) as {
+		// session/config still surfaces the resolved unique bits (compaction, appendSystemPrompt).
+		const cfg = (await harness.clientConn.extMethod(EXT_SESSION_CONFIG, { sessionId })) as {
 			compaction: { reserveTokens: number };
 			appendSystemPrompt: string | null;
-			globalSettingsPresent: boolean;
-			layers: {
-				global: Record<string, unknown> | null;
-				project: Record<string, unknown>;
-				effective: Record<string, unknown>;
-			};
 		};
+		expect(cfg.compaction.reserveTokens).toBe(4000);
+		expect(cfg.appendSystemPrompt).toBe("FROM-GLOBAL");
 
-		expect(result.compaction.reserveTokens).toBe(4000);
-		expect(result.appendSystemPrompt).toBe("FROM-GLOBAL");
-		expect(result.globalSettingsPresent).toBe(true);
-		expect((result.layers.effective as { defaultThinkingLevel?: string }).defaultThinkingLevel).toBe("low");
+		// Per-scope layers move to settings/list.
+		const effective = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+			sessionId,
+			scope: "effective",
+		})) as { scope: string; settings: { defaultThinkingLevel?: string } };
+		expect(effective.scope).toBe("effective");
+		expect(effective.settings.defaultThinkingLevel).toBe("low");
+
+		const global = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+			sessionId,
+			scope: "global",
+		})) as { scope: string; settings: { appendSystemPrompt?: string } };
+		expect(global.scope).toBe("global");
+		expect(global.settings.appendSystemPrompt).toBe("FROM-GLOBAL");
 	});
 
-	test("homeDir omitted → no global layer", async () => {
+	test("homeDir omitted → settings/list?scope=global rejects (global scope unsupported)", async () => {
 		const model = newFaux();
 		const filesystem = createInMemoryFilesystem();
 		await seedGlobalSettings(filesystem, "/home/user", JSON.stringify({ defaultThinkingLevel: "high" }));
@@ -185,12 +192,18 @@ describe("layered settings (via session/config)", () => {
 		await harness.clientConn.initialize(stdInitParams);
 		const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
 
-		const result = (await harness.clientConn.extMethod(EXT_SESSION_CONFIG, { sessionId })) as {
-			globalSettingsPresent: boolean;
-			layers: { global: Record<string, unknown> | null };
-		};
-		expect(result.globalSettingsPresent).toBe(false);
-		expect(result.layers.global).toBeNull();
+		// When homeDir is unset the runtime refuses global-scope settings access.
+		await expect(
+			harness.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, { sessionId, scope: "global" }),
+		).rejects.toThrow(/--global scope not supported on this runtime/);
+
+		// The seeded /home/user file is therefore not visible in effective either.
+		const effective = (await harness.clientConn.extMethod(EXT_SESSION_SETTINGS_LIST, {
+			sessionId,
+			scope: "effective",
+		})) as { scope: string; settings: { defaultThinkingLevel?: string } };
+		expect(effective.scope).toBe("effective");
+		expect(effective.settings.defaultThinkingLevel).toBeUndefined();
 	});
 
 	test("parse error in global is non-fatal, surfaces via session/config", async () => {

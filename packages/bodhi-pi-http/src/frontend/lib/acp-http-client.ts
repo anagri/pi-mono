@@ -225,7 +225,6 @@ export class AcpHttpClient {
 		compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
 		appendSystemPrompt: string | null;
 		contextFilePaths: string[];
-		projectSettingsPresent: boolean;
 	}> {
 		return this.call("_bodhi-pi/session/config", params as unknown as Record<string, unknown>) as Promise<{
 			sessionId: string;
@@ -235,7 +234,6 @@ export class AcpHttpClient {
 			compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
 			appendSystemPrompt: string | null;
 			contextFilePaths: string[];
-			projectSettingsPresent: boolean;
 		}>;
 	}
 

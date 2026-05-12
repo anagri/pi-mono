@@ -43,7 +43,6 @@ describe("POST /acp — _bodhi-pi/session/config", () => {
 			compaction: { reserveTokens: number };
 			appendSystemPrompt: string | null;
 			contextFilePaths: string[];
-			projectSettingsPresent: boolean;
 		}>(ts.url, tok, {
 			method: "_bodhi-pi/session/config",
 			params: { sessionId },
@@ -52,7 +51,6 @@ describe("POST /acp — _bodhi-pi/session/config", () => {
 		expect(result.result.cwd).toBe(workspace);
 		expect(result.result.compaction.reserveTokens).toBe(31337);
 		expect(result.result.appendSystemPrompt).toBe("HTTP-PROJECT-APPEND");
-		expect(result.result.projectSettingsPresent).toBe(true);
 		expect(result.result.contextFilePaths).toContain(path.join(workspace, "AGENTS.md"));
 	});
 
