@@ -16,13 +16,25 @@ loadEnv({ path: path.join(here, "e2e", ".env.test"), override: true });
 // `src/**/*.test.ts` and `test/**/*.test.ts`. Compose explicitly instead.
 const base = typeof baseConfig === "function" ? baseConfig({ command: "serve", mode: "test" }) : baseConfig;
 
+// Vitest projects: each project runs the shared e2e suite under a different
+// runtime configuration. Phase 1 ships only the `in-memory` project; `cli` and
+// `http` projects join in Phases 2 and 3.
 export default defineConfig({
 	plugins: base.plugins,
 	resolve: base.resolve,
 	test: {
-		globals: true,
-		environment: "node",
-		testTimeout: 60000,
-		include: ["e2e/**/*.e2e.ts"],
+		projects: [
+			{
+				plugins: base.plugins,
+				resolve: base.resolve,
+				test: {
+					name: "in-memory",
+					globals: true,
+					environment: "node",
+					testTimeout: 60000,
+					include: ["e2e/shared/**/*.e2e.ts"],
+				},
+			},
+		],
 	},
 });
