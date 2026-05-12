@@ -1,24 +1,34 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { requireEnv } from "@test/helpers/env.js";
-import { createTestHarness } from "@test/helpers/harness.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { EXT_SESSION_COMPACT } from "@/acp/constants.js";
+import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+
+let activeHarness: E2EHarness | undefined;
+
+afterEach(async () => {
+	if (activeHarness) {
+		await activeHarness.cleanup();
+		activeHarness = undefined;
+	}
+});
 
 test("real LLM /compact returns a summary and the post-compact prompt still recalls earlier facts", async () => {
 	const apiKey = requireEnv("OPENAI_API_KEY");
 	const model = getModel("openai", "gpt-4o-mini");
-	const { clientConn, updates } = createTestHarness({
+	const h = await createE2EHarness({
 		models: [model],
 		defaultModelId: model.id,
 		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
 	});
+	activeHarness = h;
 
-	await clientConn.initialize(stdInitParams);
-	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
-	await clientConn.prompt({
+	await h.clientConn.prompt({
 		sessionId,
 		prompt: [
 			{
@@ -27,16 +37,16 @@ test("real LLM /compact returns a summary and the post-compact prompt still reca
 			},
 		],
 	});
-	await clientConn.prompt({
+	await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply in one short sentence: what colour is the sky on a clear day?" }],
 	});
-	await clientConn.prompt({
+	await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "Reply in one short sentence: what comes after Tuesday?" }],
 	});
 
-	const result = (await clientConn.extMethod(EXT_SESSION_COMPACT, { sessionId })) as {
+	const result = (await h.clientConn.extMethod(EXT_SESSION_COMPACT, { sessionId })) as {
 		summary: string;
 		firstKeptEntryId: string;
 		tokensBefore: number;
@@ -46,11 +56,11 @@ test("real LLM /compact returns a summary and the post-compact prompt still reca
 	expect(typeof result.firstKeptEntryId).toBe("string");
 	expect(typeof result.tokensBefore).toBe("number");
 
-	updates.length = 0;
-	const followUp = await clientConn.prompt({
+	h.updates.length = 0;
+	const followUp = await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "What is my pet's name? Reply with the single word." }],
 	});
 	expect(followUp.stopReason).toBe("end_turn");
-	expect(chunkedAgentText(updates).toLowerCase()).toContain("mango");
+	expect(chunkedAgentText(h.updates).toLowerCase()).toContain("mango");
 }, 60_000);

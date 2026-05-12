@@ -2,28 +2,38 @@ import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { asSelectOption } from "@test/helpers/acp-narrow.js";
 import { requireEnv } from "@test/helpers/env.js";
-import { createTestHarness } from "@test/helpers/harness.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+
+let activeHarness: E2EHarness | undefined;
+
+afterEach(async () => {
+	if (activeHarness) {
+		await activeHarness.cleanup();
+		activeHarness = undefined;
+	}
+});
 
 async function runSingleTurn(opts: { model: Model<Api>; apiKey: string; provider: string; prompt: string }) {
-	const { clientConn, updates } = createTestHarness({
+	const h = await createE2EHarness({
 		models: [opts.model],
 		defaultModelId: opts.model.id,
 		getApiKey: (p) => (p === opts.provider ? opts.apiKey : undefined),
 	});
+	activeHarness = h;
 
-	await clientConn.initialize(stdInitParams);
-	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
-	const result = await clientConn.prompt({
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const result = await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: opts.prompt }],
 	});
-	const chunks = updates.filter((u) => u.update.sessionUpdate === "agent_message_chunk");
+	const chunks = h.updates.filter((u) => u.update.sessionUpdate === "agent_message_chunk");
 	return {
 		stopReason: result.stopReason,
 		chunks,
-		text: chunkedAgentText(updates),
+		text: chunkedAgentText(h.updates),
 	};
 }
 
@@ -64,7 +74,7 @@ test("switching model mid-session changes provenance", async () => {
 	const claude = getModel("anthropic", "claude-haiku-4-5");
 	const gpt = getModel("openai", "gpt-5-mini");
 
-	const { clientConn, updates } = createTestHarness({
+	const h = await createE2EHarness({
 		models: [claude, gpt],
 		defaultModelId: claude.id,
 		getApiKey: (p) => {
@@ -73,10 +83,11 @@ test("switching model mid-session changes provenance", async () => {
 			return undefined;
 		},
 	});
+	activeHarness = h;
 
-	await clientConn.initialize(stdInitParams);
-	const { sessionId, configOptions } = await clientConn.newSession({
-		cwd: process.cwd(),
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId, configOptions } = await h.clientConn.newSession({
+		cwd: h.cwd,
 		mcpServers: [],
 	});
 	const initialOption = asSelectOption(configOptions?.[0]);
@@ -86,20 +97,20 @@ test("switching model mid-session changes provenance", async () => {
 	const provenancePrompt =
 		"Are you made by Anthropic or by OpenAI? Answer with exactly one of those two words and nothing else.";
 
-	updates.length = 0;
-	const claudeResult = await clientConn.prompt({
+	h.updates.length = 0;
+	const claudeResult = await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: provenancePrompt }],
 	});
 	expect(claudeResult.stopReason).toBe("end_turn");
-	const claudeText = chunkedAgentText(updates).toLowerCase();
+	const claudeText = chunkedAgentText(h.updates).toLowerCase();
 	// Substring match — real LLMs vary phrasing run-to-run.
 	expect(
 		claudeText.includes("anthropic") || claudeText.includes("claude"),
 		`expected anthropic provenance, got: ${JSON.stringify(claudeText)}`,
 	).toBe(true);
 
-	const switchResult = await clientConn.setSessionConfigOption({
+	const switchResult = await h.clientConn.setSessionConfigOption({
 		sessionId,
 		configId: "model",
 		value: gpt.id,
@@ -107,13 +118,13 @@ test("switching model mid-session changes provenance", async () => {
 	const switched = asSelectOption(switchResult.configOptions[0]);
 	expect(switched.currentValue).toBe(gpt.id);
 
-	updates.length = 0;
-	const gptResult = await clientConn.prompt({
+	h.updates.length = 0;
+	const gptResult = await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: provenancePrompt }],
 	});
 	expect(gptResult.stopReason).toBe("end_turn");
-	const gptText = chunkedAgentText(updates).toLowerCase();
+	const gptText = chunkedAgentText(h.updates).toLowerCase();
 	expect(
 		gptText.includes("openai") || gptText.includes("gpt") || gptText.includes("chatgpt"),
 		`expected openai provenance, got: ${JSON.stringify(gptText)}`,
@@ -124,18 +135,19 @@ test("real LLM remembers context across two prompts in same session", async () =
 	const apiKey = requireEnv("ANTHROPIC_API_KEY");
 
 	const haiku = getModel("anthropic", "claude-haiku-4-5");
-	const { clientConn, updates } = createTestHarness({
+	const h = await createE2EHarness({
 		models: [haiku],
 		defaultModelId: haiku.id,
 		getApiKey: (p) => (p === "anthropic" ? apiKey : undefined),
 	});
+	activeHarness = h;
 
-	await clientConn.initialize(stdInitParams);
-	const { sessionId } = await clientConn.newSession({ cwd: process.cwd(), mcpServers: [] });
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
 	// Turn 1: state a fact.
-	updates.length = 0;
-	await clientConn.prompt({
+	h.updates.length = 0;
+	await h.clientConn.prompt({
 		sessionId,
 		prompt: [
 			{
@@ -144,12 +156,12 @@ test("real LLM remembers context across two prompts in same session", async () =
 			},
 		],
 	});
-	const noteText = chunkedAgentText(updates).toLowerCase();
+	const noteText = chunkedAgentText(h.updates).toLowerCase();
 	expect(noteText.includes("noted"), `expected acknowledgment, got: ${JSON.stringify(noteText)}`).toBe(true);
 
 	// Turn 2: ask for the fact back — proves multi-turn context survives.
-	updates.length = 0;
-	await clientConn.prompt({
+	h.updates.length = 0;
+	await h.clientConn.prompt({
 		sessionId,
 		prompt: [
 			{
@@ -158,6 +170,6 @@ test("real LLM remembers context across two prompts in same session", async () =
 			},
 		],
 	});
-	const recallText = chunkedAgentText(updates);
+	const recallText = chunkedAgentText(h.updates);
 	expect(recallText.includes("42"), `expected to recall '42', got: ${JSON.stringify(recallText)}`).toBe(true);
 });

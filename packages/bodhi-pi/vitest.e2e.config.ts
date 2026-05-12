@@ -17,8 +17,9 @@ loadEnv({ path: path.join(here, "e2e", ".env.test"), override: true });
 const base = typeof baseConfig === "function" ? baseConfig({ command: "serve", mode: "test" }) : baseConfig;
 
 // Vitest projects: each project runs the shared e2e suite under a different
-// runtime configuration. Phase 1 ships only the `in-memory` project; `cli` and
-// `http` projects join in Phases 2 and 3.
+// runtime configuration. Phase 1 shipped `in-memory`. Phase 2 adds `cli`
+// (ACP JSON-RPC over real stdio against a spawned test-app-cli). Phase 3
+// will add `http` (HTTP+SSE against a spawned test-app-http server).
 export default defineConfig({
 	plugins: base.plugins,
 	resolve: base.resolve,
@@ -32,7 +33,20 @@ export default defineConfig({
 					globals: true,
 					environment: "node",
 					testTimeout: 60000,
+					setupFiles: ["./e2e/setup/in-memory.ts"],
 					include: ["e2e/shared/**/*.e2e.ts"],
+				},
+			},
+			{
+				plugins: base.plugins,
+				resolve: base.resolve,
+				test: {
+					name: "cli",
+					globals: true,
+					environment: "node",
+					testTimeout: 60000,
+					setupFiles: ["./e2e/setup/cli.ts"],
+					include: ["e2e/shared/**/*.e2e.ts", "e2e/cli-headless/**/*.e2e.ts"],
 				},
 			},
 		],

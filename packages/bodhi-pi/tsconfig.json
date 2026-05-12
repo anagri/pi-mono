@@ -7,5 +7,6 @@
 			"@test/*": ["./test/*"]
 		}
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts"]
+	"include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts"],
+	"exclude": ["e2e/test-app-cli/**", "e2e/test-app-http/**"]
 }

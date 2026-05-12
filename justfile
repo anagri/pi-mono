@@ -55,7 +55,6 @@ test:
 
     run "@bodhiapp/bodhi-pi-cli  — build"                  npm --workspace @bodhiapp/bodhi-pi-cli run build
     run "@bodhiapp/bodhi-pi-cli  — test (unit + integration)" npm --workspace @bodhiapp/bodhi-pi-cli run test
-    run "@bodhiapp/bodhi-pi-cli  — test:e2e"               npm --workspace @bodhiapp/bodhi-pi-cli run test:e2e
 
     run "@bodhiapp/bodhi-pi-web  — build"                  npm --workspace @bodhiapp/bodhi-pi-web run build
     run "@bodhiapp/bodhi-pi-web  — test:e2e (playwright)"  npm --workspace @bodhiapp/bodhi-pi-web run test:e2e
