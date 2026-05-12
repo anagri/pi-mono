@@ -2,11 +2,12 @@
 	"extends": "../../../../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "./dist",
-		"rootDir": "./src",
+		"rootDir": "../",
 		"paths": {
-			"@/*": ["./src/*"]
+			"@/*": ["./src/*"],
+			"@e2e/*": ["../*"]
 		}
 	},
-	"include": ["src/**/*.ts"],
+	"include": ["src/**/*.ts", "../helpers/node-adapters/**/*.ts"],
 	"exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.e2e.ts", "**/*.d.ts"]
 }

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { DirEntry, FileStat, Filesystem } from "@/index.js";
+import type { DirEntry, FileStat, Filesystem } from "@bodhiapp/bodhi-pi";
 
 export interface NodeFilesystemOptions {
 	rootCwd: string;

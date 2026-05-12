@@ -35,7 +35,7 @@ import {
 import { getRuntime } from "./runtime.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_CLI_BIN = path.resolve(here, "../test-app-cli/dist/cli.js");
+const TEST_APP_CLI_BIN = path.resolve(here, "../test-app-cli/dist/test-app-cli/src/cli.js");
 
 export interface E2EHarnessOptions {
 	models: Model<Api>[];

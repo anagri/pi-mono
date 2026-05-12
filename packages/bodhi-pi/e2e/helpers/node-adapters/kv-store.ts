@@ -1,7 +1,7 @@
 import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { KvStore, KvStoreEntry, KvStoreSetOptions } from "@/index.js";
+import type { KvStore, KvStoreEntry, KvStoreSetOptions } from "@bodhiapp/bodhi-pi";
 import { decodeKey, encodeKey } from "./key-encoding.js";
 
 export interface NodeKvStoreOptions {

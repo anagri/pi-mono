@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ExtensionFactory, RegisteredExtension } from "@/index.js";
+import type { ExtensionFactory, RegisteredExtension } from "@bodhiapp/bodhi-pi";
 
 export interface NodeExtensionLoaderOptions {
 	cwd: string;

@@ -13,7 +13,7 @@ import {
 	createNodeKvStore,
 	createNodeScriptExecutor,
 	createSqliteSessionStore,
-} from "@bodhiapp/bodhi-pi-node";
+} from "@e2e/helpers/node-adapters/index.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 
 export interface CliAgentOptions {

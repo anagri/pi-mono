@@ -2,7 +2,7 @@
 import os from "node:os";
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import { createNodeExtensionLoader } from "@bodhiapp/bodhi-pi-node";
+import { createNodeExtensionLoader } from "@e2e/helpers/node-adapters/index.js";
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";

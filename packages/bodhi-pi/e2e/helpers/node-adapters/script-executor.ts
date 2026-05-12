@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import type { ScriptExecuteParams, ScriptExecuteResult, ScriptExecutor } from "@/index.js";
+import type { ScriptExecuteParams, ScriptExecuteResult, ScriptExecutor } from "@bodhiapp/bodhi-pi";
 
 export function createNodeScriptExecutor(): ScriptExecutor {
 	return {

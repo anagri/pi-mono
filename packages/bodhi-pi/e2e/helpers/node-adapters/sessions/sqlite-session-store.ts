@@ -1,9 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import type {
+	ExtensionEntry,
+	ReadExtensionEntriesFilter,
+	SessionEntry,
+	SessionRecord,
+	SessionStore,
+} from "@bodhiapp/bodhi-pi";
 import Database from "better-sqlite3";
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import type { ExtensionEntry, ReadExtensionEntriesFilter, SessionEntry, SessionRecord, SessionStore } from "@/index.js";
 import { runMigrations } from "./migrate.js";
 import { sessionEntries, sessions } from "./schema.js";
 

@@ -32,6 +32,7 @@
 			"packages/web-ui/src/**/*.ts",
 			"packages/web-ui/example/**/*.ts",
 			"!**/node_modules/**/*",
+			"!**/dist/**/*",
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",
 			"!packages/web-ui/src/app.css",
