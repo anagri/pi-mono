@@ -1,0 +1,43 @@
+{
+	"name": "@bodhiapp/bodhi-pi-test-app-http",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Test-app HTTP for bodhi-pi e2e — copy of bodhi-pi-http with --models / --default-model / env-based API keys for headless spawn-based testing.",
+	"type": "module",
+	"main": "./dist/test-app-http/src/server/index.js",
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "npm run build:server && npm run build:frontend",
+		"build:server": "tsgo -p tsconfig.server.build.json && tsc-alias -p tsconfig.server.build.json",
+		"build:frontend": "vite build",
+		"dev": "concurrently --names \"server,frontend\" --prefix-colors \"yellow,cyan\" \"npm run dev:server\" \"npm run dev:frontend\"",
+		"dev:server": "tsx watch src/server/index.ts",
+		"dev:frontend": "vite",
+		"e2e:dev": "npm run dev",
+		"start": "node dist/test-app-http/src/server/index.js"
+	},
+	"dependencies": {
+		"@agentclientprotocol/sdk": "^0.21.0",
+		"@bodhiapp/bodhi-pi": "^0.0.1",
+		"@earendil-works/pi-ai": "^0.74.0",
+		"better-sqlite3": "^11.10.0",
+		"drizzle-orm": "^0.43.1",
+		"react": "^19.2.5",
+		"react-dom": "^19.2.5"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/node": "^24.3.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"concurrently": "^9.2.1",
+		"tsc-alias": "^1.8.10",
+		"tsx": "^4.20.3",
+		"typescript": "^5.7.3",
+		"vite": "^8.0.10"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}

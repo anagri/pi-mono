@@ -1,0 +1,15 @@
+{
+	"extends": "../../../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "../",
+		"declaration": true,
+		"sourceMap": true,
+		"paths": {
+			"@/*": ["./src/server/*"],
+			"@e2e/*": ["../*"]
+		}
+	},
+	"include": ["src/server/**/*.ts", "../helpers/node-adapters/**/*.ts"],
+	"exclude": ["test", "e2e", "dist", "node_modules", "src/frontend", "**/*.test.ts"]
+}
