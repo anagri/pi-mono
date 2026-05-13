@@ -15,12 +15,13 @@ import {
 	type Stream,
 } from "@agentclientprotocol/sdk";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { recorder } from "@test/helpers/event-recorder.js";
 import { createTestHarness } from "@test/helpers/harness.js";
 import { createTestScriptExecutor } from "@test/helpers/script-executor.js";
 import {
 	type BodhiPiAcpConnection,
 	type BodhiPiClient,
-	type BodhiPiEventHandlers,
+	type BodhiPiEvent,
 	type CompactionSettings,
 	createBodhiPiClient,
 	createInMemoryFilesystem,
@@ -32,6 +33,7 @@ import {
 	type ScriptExecutor,
 	type SessionStore,
 } from "@/index.js";
+import { waitForAgentEndBalance } from "./events-assert.js";
 import { getRuntime } from "./runtime.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -50,7 +52,6 @@ export interface E2EHarnessOptions {
 	sessionStore?: SessionStore;
 	kvStore?: KvStore;
 	scriptExecutor?: ScriptExecutor;
-	eventHandlers?: BodhiPiEventHandlers;
 	extensionFactories?: RegisteredExtension[];
 	compaction?: Partial<CompactionSettings>;
 }
@@ -59,6 +60,19 @@ export interface E2EHarness {
 	clientConn: BodhiPiAcpConnection;
 	client: BodhiPiClient;
 	updates: SessionNotification[];
+	/**
+	 * Lifecycle events captured during the test, populated by the runtime's
+	 * event channel: direct push (in-memory), SSE `_bodhi-pi/lifecycle/event`
+	 * frames (http), or stderr ndjson lines (cli). Read after `flushEvents()`.
+	 */
+	events: BodhiPiEvent[];
+	/**
+	 * Sync barrier between `prompt()` and assertions. Required for cli (stderr
+	 * and stdout are independent pipes); no-op fast path for in-memory/http.
+	 * Resolves when every observed `agent_start` has a matching `agent_end`
+	 * and no new event has arrived for a short idle window.
+	 */
+	flushEvents: () => Promise<void>;
 	filesystem: Filesystem;
 	sessionStore: SessionStore;
 	kvStore: KvStore;
@@ -83,6 +97,7 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 	// tests work without explicit wiring. The cli/http runtimes use the real
 	// Node executor via their respective hosts.
 	const scriptExecutor = opts.scriptExecutor ?? createTestScriptExecutor(filesystem);
+	const { log: events, handlers } = recorder();
 	const inner = createTestHarness({
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,
@@ -90,10 +105,10 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 		sessionStore,
 		kvStore,
 		scriptExecutor,
+		eventHandlers: handlers,
 		...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
-		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
 		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 		...(opts.compaction ? { compaction: opts.compaction } : {}),
 		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
@@ -106,6 +121,8 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 		clientConn: inner.clientConn,
 		client: createBodhiPiClient(inner.clientConn, { cwd }),
 		updates: inner.updates,
+		events,
+		flushEvents: () => waitForAgentEndBalance(events),
 		filesystem: inner.filesystem,
 		sessionStore: inner.sessionStore,
 		kvStore: inner.kvStore,
@@ -165,6 +182,8 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	void kvDir;
 	void dbPath;
 
+	const events: BodhiPiEvent[] = [];
+
 	const cleanup = async () => {
 		try {
 			child.kill("SIGTERM");
@@ -178,6 +197,8 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		clientConn,
 		client: createBodhiPiClient(clientConn, { cwd: tmpDir }),
 		updates,
+		events,
+		flushEvents: () => waitForAgentEndBalance(events),
 		filesystem,
 		sessionStore,
 		kvStore,
@@ -218,6 +239,8 @@ async function createHttpHarness(_opts: E2EHarnessOptions): Promise<E2EHarness> 
 	const sessionStore = createInMemorySessionStore();
 	const kvStore = createInMemoryKvStore();
 
+	const events: BodhiPiEvent[] = [];
+
 	const cleanup = async () => {
 		// Server stays up (global-setup teardown shuts it down). Only the per-user
 		// workspace directory belongs to this test.
@@ -228,6 +251,8 @@ async function createHttpHarness(_opts: E2EHarnessOptions): Promise<E2EHarness> 
 		clientConn,
 		client: createBodhiPiClient(clientConn, { cwd }),
 		updates,
+		events,
+		flushEvents: () => waitForAgentEndBalance(events),
 		filesystem,
 		sessionStore,
 		kvStore,
