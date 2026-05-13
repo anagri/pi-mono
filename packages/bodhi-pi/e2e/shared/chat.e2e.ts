@@ -168,3 +168,57 @@ test("real LLM remembers context across two prompts in same session", async () =
 	const recallText = chunkedAgentText(h.updates);
 	expect(recallText.includes("42"), `expected to recall '42', got: ${JSON.stringify(recallText)}`).toBe(true);
 });
+
+test("thinking level: setSessionConfigOption('thinking') persists as a ThinkingChangeEntry", async () => {
+	// No real LLM call — exercise only the config-option machinery + entry persistence.
+	const claude = getModel("anthropic", "claude-haiku-4-5");
+	const h = await createE2EHarness({
+		models: [claude],
+		defaultModelId: claude.id,
+		getApiKey: () => "ignored-no-prompt",
+	});
+	activeHarness = h;
+
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+
+	// The http test-app server boots with its own model list; pin the session
+	// to claude-haiku explicitly so the "thinking" selector is in scope under
+	// every runtime. Under in-memory/cli this is a no-op (claude is already
+	// the default).
+	const modelSwitch = await h.clientConn.setSessionConfigOption({
+		sessionId,
+		configId: "model",
+		value: claude.id,
+	});
+	const thinkingOption = (modelSwitch.configOptions ?? []).find((o) => o.id === "thinking");
+	if (!thinkingOption) throw new Error("expected 'thinking' configOption after pinning claude-haiku-4-5");
+	const select = asSelectOption(thinkingOption);
+	const values = (select.options as Array<{ value: string }>).map((o) => o.value);
+	const otherLevel = values.find((v) => v !== select.currentValue);
+	if (!otherLevel) throw new Error(`expected an alternative thinking level; got: ${JSON.stringify(values)}`);
+
+	const switchResult = await h.clientConn.setSessionConfigOption({
+		sessionId,
+		configId: "thinking",
+		value: otherLevel,
+	});
+	const updated = (switchResult.configOptions ?? []).find((o) => o.id === "thinking");
+	if (!updated) throw new Error("expected updated 'thinking' option in response");
+	expect.soft(asSelectOption(updated).currentValue).toBe(otherLevel);
+
+	// The agent appends a `thinking_change` entry to the session record.
+	const tree = (await h.clientConn.extMethod("_bodhi-pi/session/tree", { sessionId })) as {
+		nodes: Array<{ type: string }>;
+	};
+	const change = tree.nodes.find((n) => n.type === "thinking_change");
+	expect.soft(change, "expected thinking_change entry in session tree").toBeDefined();
+});
+
+// Token-limit / stopReason="max_tokens" coverage: bodhi-pi does not expose
+// `max_tokens` (or a per-call output-token cap) at the ACP boundary today.
+// The faux provider can produce a `max_tokens` stop reason synthetically
+// (in-memory only), but that effectively retests the faux contract, not the
+// agent's stop-reason mapping under a real provider. Park as a known gap;
+// revisit if/when an ACP knob lands.
+test.skip("stopReason='max_tokens' — no ACP knob to set per-call output cap; revisit", () => {});

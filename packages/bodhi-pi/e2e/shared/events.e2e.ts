@@ -13,6 +13,11 @@ import type {
 import { expectSubsequence } from "../helpers/events-assert.js";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 
+// Lifecycle-event coverage across the two distinct shapes: a plain text turn
+// and a tool-using turn. Both share the same gpt-4o-mini setup; one harness,
+// two prompts back-to-back, with `harness.events` reset between so the
+// subsequence assertion runs against a clean slate per turn.
+
 let activeHarness: E2EHarness | undefined;
 
 afterEach(async () => {
@@ -22,7 +27,7 @@ afterEach(async () => {
 	}
 });
 
-test("real LLM (gpt-4o-mini) fires the full event sequence around a single text turn", async () => {
+test("events: text turn + tool turn fire the expected sequences and payloads", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
@@ -31,68 +36,61 @@ test("real LLM (gpt-4o-mini) fires the full event sequence around a single text 
 		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
 	});
 	activeHarness = h;
-
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
-	const result = await h.clientConn.prompt({
-		sessionId,
+
+	// Step 1: plain text turn — full lifecycle sequence + per-event payload checks.
+	const { sessionId: sidText } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const textResult = await h.clientConn.prompt({
+		sessionId: sidText,
 		prompt: [{ type: "text", text: "Answer in one word: what day comes after Monday?" }],
 	});
-
-	expect(result.stopReason).toBe("end_turn");
+	expect.soft(textResult.stopReason).toBe("end_turn");
 	await h.flushEvents();
 
-	const types = h.events.map((e) => e.type);
-	expectSubsequence(types, [
-		"session_start",
-		"input",
-		"before_agent_start",
-		"agent_start",
-		"turn_start",
-		"message_start",
-		"message_update",
-		"message_end",
-		"turn_end",
-		"agent_end",
-	]);
+	{
+		const types = h.events.map((e) => e.type);
+		expectSubsequence(types, [
+			"session_start",
+			"input",
+			"before_agent_start",
+			"agent_start",
+			"turn_start",
+			"message_start",
+			"message_update",
+			"message_end",
+			"turn_end",
+			"agent_end",
+		]);
 
-	const start = h.events.find((e): e is AgentStartEvent => e.type === "agent_start");
-	const end = h.events.find((e): e is AgentEndEvent => e.type === "agent_end");
-	expect(start, "agent_start present").toBeDefined();
-	expect(end, "agent_end present").toBeDefined();
-	expect(start?.userPrompt).toMatch(/Monday/);
-	expect(start?.sessionId).toBe(sessionId);
-	expect(end?.stopReason).toBe("end_turn");
-	expect(end?.sessionId).toBe(sessionId);
+		const start = h.events.find((e): e is AgentStartEvent => e.type === "agent_start");
+		const end = h.events.find((e): e is AgentEndEvent => e.type === "agent_end");
+		expect.soft(start?.userPrompt).toMatch(/Monday/);
+		expect.soft(start?.sessionId).toBe(sidText);
+		expect.soft(end?.stopReason).toBe("end_turn");
+		expect.soft(end?.sessionId).toBe(sidText);
 
-	const updates = h.events.filter((e): e is MessageUpdateEvent => e.type === "message_update");
-	const textDeltas = updates.filter((u) => u.assistantMessageEvent.type === "text_delta");
-	expect(textDeltas.length, "at least one text_delta indicates streaming").toBeGreaterThan(0);
+		const updates = h.events.filter((e): e is MessageUpdateEvent => e.type === "message_update");
+		const textDeltas = updates.filter((u) => u.assistantMessageEvent.type === "text_delta");
+		expect.soft(textDeltas.length, "at least one text_delta indicates streaming").toBeGreaterThan(0);
 
-	const req = h.events.find((e): e is BeforeProviderRequestEvent => e.type === "before_provider_request");
-	const res = h.events.find((e): e is AfterProviderResponseEvent => e.type === "after_provider_response");
-	expect(req?.provider).toBe("openai");
-	expect(req?.modelId).toBe(model.id);
-	expect(res?.status).toBe(200);
-});
+		const req = h.events.find((e): e is BeforeProviderRequestEvent => e.type === "before_provider_request");
+		const res = h.events.find((e): e is AfterProviderResponseEvent => e.type === "after_provider_response");
+		expect.soft(req?.provider).toBe("openai");
+		expect.soft(req?.modelId).toBe(model.id);
+		expect.soft(res?.status).toBe(200);
+	}
 
-test("real LLM tool turn (gpt-4o-mini) fires tool_call + tool_execution_* + tool_result", async () => {
-	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-	});
-	activeHarness = h;
+	// Reset between turns so the next subsequence assertion runs against a
+	// clean slate. Within a single channel events arrive in order, so clearing
+	// the snapshot is safe — the next prompt produces its own complete sequence.
+	h.events.length = 0;
 
+	// Step 2: tool turn — tool_execution_* brackets, tool_call/tool_result hooks inside.
 	await h.filesystem.mkdir(`${h.cwd}/proj`, { recursive: true });
 	await h.filesystem.writeTextFile(`${h.cwd}/proj/README.md`, "# project readme\n\nhello world");
-
-	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
-	const result = await h.clientConn.prompt({
-		sessionId,
+	const { sessionId: sidTool } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
+	const toolResult = await h.clientConn.prompt({
+		sessionId: sidTool,
 		prompt: [
 			{
 				type: "text",
@@ -100,21 +98,20 @@ test("real LLM tool turn (gpt-4o-mini) fires tool_call + tool_execution_* + tool
 			},
 		],
 	});
-
-	expect(result.stopReason).toBe("end_turn");
+	expect.soft(toolResult.stopReason).toBe("end_turn");
 	await h.flushEvents();
 
-	const types = h.events.map((e) => e.type);
-	// Per agent.ts emit order: tool_execution_start brackets the call; the
-	// mutable tool_call / tool_result hooks fire inside that bracket; the call
-	// closes with tool_execution_end.
-	expectSubsequence(types, ["tool_execution_start", "tool_call", "tool_result", "tool_execution_end"]);
+	{
+		const types = h.events.map((e) => e.type);
+		// Per agent.ts emit order: tool_execution_start brackets the call; the
+		// mutable tool_call / tool_result hooks fire inside that bracket; the
+		// call closes with tool_execution_end.
+		expectSubsequence(types, ["tool_execution_start", "tool_call", "tool_result", "tool_execution_end"]);
 
-	const callEv = h.events.find((e): e is ToolCallEvent => e.type === "tool_call");
-	const execEnd = h.events.find((e): e is ToolExecutionEndEvent => e.type === "tool_execution_end");
-	expect(callEv, "tool_call present").toBeDefined();
-	expect(execEnd, "tool_execution_end present").toBeDefined();
-	expect(callEv?.toolName).toBe("read");
-	expect(execEnd?.toolName).toBe("read");
-	expect(execEnd?.isError).toBe(false);
+		const callEv = h.events.find((e): e is ToolCallEvent => e.type === "tool_call");
+		const execEnd = h.events.find((e): e is ToolExecutionEndEvent => e.type === "tool_execution_end");
+		expect.soft(callEv?.toolName).toBe("read");
+		expect.soft(execEnd?.toolName).toBe("read");
+		expect.soft(execEnd?.isError).toBe(false);
+	}
 });
