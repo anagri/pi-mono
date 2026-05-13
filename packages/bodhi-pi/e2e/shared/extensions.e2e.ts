@@ -21,7 +21,7 @@ afterEach(async () => {
 	}
 });
 
-test.runIf(!isRuntime("http"))("input-transform with real LLM: ?quick prefix produces a short answer", async () => {
+test("input-transform with real LLM: ?quick prefix produces a short answer", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
@@ -44,7 +44,7 @@ test.runIf(!isRuntime("http"))("input-transform with real LLM: ?quick prefix pro
 	expect(text.length).toBeLessThan(200);
 });
 
-test.runIf(!isRuntime("http"))("pirate with real LLM: response uses pirate-style language", async () => {
+test("pirate with real LLM: response uses pirate-style language", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
@@ -64,42 +64,39 @@ test.runIf(!isRuntime("http"))("pirate with real LLM: response uses pirate-style
 	expect(hits.length, `expected pirate vocabulary in: ${text}`).toBeGreaterThan(0);
 });
 
-test.runIf(!isRuntime("http"))(
-	"redact-secrets with real LLM: API-key in tool output is scrubbed before being returned",
-	async () => {
-		const model = getModel("openai", "gpt-4o-mini");
-		const apiKey = process.env.OPENAI_API_KEY!;
-		const h = await createE2EHarness({
-			models: [model],
-			defaultModelId: model.id,
-			getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-			bodhiPiFixture: "redact-secrets",
-		});
-		activeHarness = h;
-		await h.filesystem.mkdir(`${h.cwd}/proj`, { recursive: true });
-		await h.filesystem.writeTextFile(`${h.cwd}/proj/leak.txt`, "API_KEY=sk-PLAINTEXTSECRETXYZ123 should not leak");
-		await h.clientConn.initialize(stdInitParams);
-		const { sessionId } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
-		await h.clientConn.prompt({
-			sessionId,
-			prompt: [
-				{
-					type: "text",
-					text: `Use the read tool on ${h.cwd}/proj/leak.txt and tell me what's there verbatim.`,
-				},
-			],
-		});
+test("redact-secrets with real LLM: API-key in tool output is scrubbed before being returned", async () => {
+	const model = getModel("openai", "gpt-4o-mini");
+	const apiKey = process.env.OPENAI_API_KEY!;
+	const h = await createE2EHarness({
+		models: [model],
+		defaultModelId: model.id,
+		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
+		bodhiPiFixture: "redact-secrets",
+	});
+	activeHarness = h;
+	await h.filesystem.mkdir(`${h.cwd}/proj`, { recursive: true });
+	await h.filesystem.writeTextFile(`${h.cwd}/proj/leak.txt`, "API_KEY=sk-PLAINTEXTSECRETXYZ123 should not leak");
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
+	await h.clientConn.prompt({
+		sessionId,
+		prompt: [
+			{
+				type: "text",
+				text: `Use the read tool on ${h.cwd}/proj/leak.txt and tell me what's there verbatim.`,
+			},
+		],
+	});
 
-		const completed = h.updates.find(
-			(u) => u.update.sessionUpdate === "tool_call_update" && u.update.status === "completed",
-		);
-		const flat = JSON.stringify(completed);
-		expect(flat).toContain("[REDACTED]");
-		expect(flat).not.toContain("sk-PLAINTEXTSECRETXYZ123");
-	},
-);
+	const completed = h.updates.find(
+		(u) => u.update.sessionUpdate === "tool_call_update" && u.update.status === "completed",
+	);
+	const flat = JSON.stringify(completed);
+	expect(flat).toContain("[REDACTED]");
+	expect(flat).not.toContain("sk-PLAINTEXTSECRETXYZ123");
+});
 
-test.runIf(!isRuntime("http"))("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async () => {
+test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({

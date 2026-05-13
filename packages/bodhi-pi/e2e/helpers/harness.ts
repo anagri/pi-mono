@@ -249,7 +249,7 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	};
 }
 
-async function createHttpHarness(_opts: E2EHarnessOptions): Promise<E2EHarness> {
+async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	const { createNodeFilesystem } = await import("@e2e/helpers/node-adapters/index.js");
 	const { HttpAcpConnection } = await import("./http-connection.js");
 	const { mintTestToken } = await import("./auth.js");
@@ -269,6 +269,14 @@ async function createHttpHarness(_opts: E2EHarnessOptions): Promise<E2EHarness> 
 	const token = mintTestToken({ id: userId, email: `test-${userId}@example.com` });
 	const cwd = path.join(dataDir, "users", String(userId), "workspace");
 	await fs.mkdir(cwd, { recursive: true });
+
+	// When the test seeds a fixture, symlink the source `.bodhi-pi/` into the
+	// per-user workspace. wireAgentForRequest's `createNodeExtensionLoader` walks
+	// the symlinked snapshot per request; following the symlink reaches the
+	// monorepo node_modules for package-mode imports.
+	if (opts.bodhiPiFixture) {
+		await fs.symlink(fixtureBodhiPiDir(opts.bodhiPiFixture), path.join(cwd, ".bodhi-pi"), "dir");
+	}
 
 	const updates: SessionNotification[] = [];
 	const events: BodhiPiEvent[] = [];
