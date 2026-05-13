@@ -36,6 +36,13 @@ test("events: text turn + tool turn fire the expected sequences and payloads", a
 		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
 	});
 	activeHarness = h;
+
+	// Step-2 seed (tool turn reads proj/README.md). Seeded up-front because
+	// the harness forbids in-session writes — uniform Option B across runtimes.
+	await h.setupFiles({
+		"proj/README.md": "# project readme\n\nhello world",
+	});
+
 	await h.clientConn.initialize(stdInitParams);
 
 	// Step 1: plain text turn — full lifecycle sequence + per-event payload checks.
@@ -86,8 +93,6 @@ test("events: text turn + tool turn fire the expected sequences and payloads", a
 	h.events.length = 0;
 
 	// Step 2: tool turn — tool_execution_* brackets, tool_call/tool_result hooks inside.
-	await h.filesystem.mkdir(`${h.cwd}/proj`, { recursive: true });
-	await h.filesystem.writeTextFile(`${h.cwd}/proj/README.md`, "# project readme\n\nhello world");
 	const { sessionId: sidTool } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
 	const toolResult = await h.clientConn.prompt({
 		sessionId: sidTool,

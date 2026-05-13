@@ -26,20 +26,14 @@ test("project slash commands: no-args expand, $1 substitution, tool-using expans
 	});
 	activeHarness = h;
 
-	const dir = `${h.cwd}/.bodhi-pi/commands`;
-	await h.filesystem.mkdir(dir, { recursive: true });
-	await h.filesystem.writeTextFile(
-		`${dir}/say-tuesday.md`,
-		'---\ndescription: Say tuesday\n---\nReply with exactly the single word "tuesday" and nothing else.\n',
-	);
-	await h.filesystem.writeTextFile(
-		`${dir}/echo.md`,
-		"---\ndescription: Echo a word\nargument-hint: <word>\n---\nReply with exactly the single word: $1\nAnd nothing else.\n",
-	);
-	await h.filesystem.writeTextFile(
-		`${dir}/write-file.md`,
-		"---\ndescription: Write a fixed line into a file\nargument-hint: <path>\n---\nUse the write tool to create the file $1 with exactly the text: hello world\n",
-	);
+	await h.setupFiles({
+		".bodhi-pi/commands/say-tuesday.md":
+			'---\ndescription: Say tuesday\n---\nReply with exactly the single word "tuesday" and nothing else.\n',
+		".bodhi-pi/commands/echo.md":
+			"---\ndescription: Echo a word\nargument-hint: <word>\n---\nReply with exactly the single word: $1\nAnd nothing else.\n",
+		".bodhi-pi/commands/write-file.md":
+			"---\ndescription: Write a fixed line into a file\nargument-hint: <path>\n---\nUse the write tool to create the file $1 with exactly the text: hello world\n",
+	});
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });

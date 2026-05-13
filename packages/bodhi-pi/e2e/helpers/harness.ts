@@ -36,6 +36,7 @@ import {
 import { waitForAgentEndBalance } from "./events-assert.js";
 import { getRuntime } from "./runtime.js";
 import { fixtureBodhiPiDir, loadFixtureFactoriesFromSource } from "./seed-bodhi-pi.js";
+import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "./test-filesystem.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_CLI_BIN = path.resolve(here, "../test-app-cli/dist/test-app-cli/src/cli.js");
@@ -82,7 +83,19 @@ export interface E2EHarness {
 	 * and no new event has arrived for a short idle window.
 	 */
 	flushEvents: () => Promise<void>;
+	/**
+	 * Read-only filesystem proxy over the agent's real Filesystem. Exposes
+	 * `readTextFile` + `exists` only; all other methods throw. Pre-init seeding
+	 * uses `setupFiles` instead (Option B — uniform across all runtimes so
+	 * browser, which cannot share a Filesystem handle across realms, can run
+	 * the same shared suite).
+	 */
 	filesystem: Filesystem;
+	/**
+	 * Seed files at paths relative to `cwd`. MUST be called before
+	 * `clientConn.initialize()`. Parent directories are created automatically.
+	 */
+	setupFiles: (files: Record<string, string>) => Promise<void>;
 	sessionStore: SessionStore;
 	kvStore: KvStore;
 	/** Working directory the agent is rooted at. Tests pass this to `newSession({cwd})`. */
@@ -134,7 +147,8 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 		updates: inner.updates,
 		events,
 		flushEvents: () => waitForAgentEndBalance(events),
-		filesystem: inner.filesystem,
+		filesystem: createReadOnlyFilesystemProxy(inner.filesystem),
+		setupFiles: (files) => seedFilesViaFilesystem(inner.filesystem, cwd, files),
 		sessionStore: inner.sessionStore,
 		kvStore: inner.kvStore,
 		cwd,
@@ -241,7 +255,8 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		updates,
 		events,
 		flushEvents: () => waitForAgentEndBalance(events),
-		filesystem,
+		filesystem: createReadOnlyFilesystemProxy(filesystem),
+		setupFiles: (files) => seedFilesViaFilesystem(filesystem, tmpDir, files),
 		sessionStore,
 		kvStore,
 		cwd: tmpDir,
@@ -303,7 +318,8 @@ async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		updates,
 		events,
 		flushEvents: () => waitForAgentEndBalance(events),
-		filesystem,
+		filesystem: createReadOnlyFilesystemProxy(filesystem),
+		setupFiles: (files) => seedFilesViaFilesystem(filesystem, cwd, files),
 		sessionStore,
 		kvStore,
 		cwd,
@@ -366,7 +382,8 @@ async function createWsHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		updates,
 		events,
 		flushEvents: () => waitForAgentEndBalance(events),
-		filesystem,
+		filesystem: createReadOnlyFilesystemProxy(filesystem),
+		setupFiles: (files) => seedFilesViaFilesystem(filesystem, cwd, files),
 		sessionStore,
 		kvStore,
 		cwd,

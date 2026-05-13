@@ -30,15 +30,13 @@ test("appendSystemPrompt: rule from .bodhi-pi/settings.json is appended to the s
 	});
 	activeHarness = h;
 
-	// Project settings file is loaded at newSession; write it before opening
-	// the session so the agent picks up the appended rule.
-	await h.filesystem.mkdir(`${h.cwd}/.bodhi-pi`, { recursive: true });
-	await h.filesystem.writeTextFile(
-		`${h.cwd}/.bodhi-pi/settings.json`,
-		JSON.stringify({
+	// Project settings file is loaded at newSession; seed it before initialize
+	// so the agent picks up the appended rule.
+	await h.setupFiles({
+		".bodhi-pi/settings.json": JSON.stringify({
 			appendSystemPrompt: "When asked to greet, end your reply with the single uppercase word PINEAPPLE.",
 		}),
-	);
+	});
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
@@ -58,10 +56,10 @@ test("AGENTS.md: ancestor-walk picks up project rules and feeds them into the mo
 
 	// AGENTS.md lives at cwd root; `loadProjectContextFiles` walks ancestors
 	// at newSession time and threads the contents into the system prompt.
-	await h.filesystem.writeTextFile(
-		`${h.cwd}/AGENTS.md`,
-		"# Project rules\n\nThe user's favorite color is amber-marigold. Whenever the user asks about colors, include that exact color name in your answer.\n",
-	);
+	await h.setupFiles({
+		"AGENTS.md":
+			"# Project rules\n\nThe user's favorite color is amber-marigold. Whenever the user asks about colors, include that exact color name in your answer.\n",
+	});
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });

@@ -29,9 +29,11 @@ test("filesystem tools (Haiku): write → read → grep across seeded files", as
 	activeHarness = h;
 
 	// Pre-seed grep targets so they don't compete with the write step's output.
-	await h.filesystem.writeTextFile(`${h.cwd}/apple.txt`, "this file has nothing of interest");
-	await h.filesystem.writeTextFile(`${h.cwd}/banana.txt`, "this file mentions banana once");
-	await h.filesystem.writeTextFile(`${h.cwd}/cherry.txt`, "another distractor file");
+	await h.setupFiles({
+		"apple.txt": "this file has nothing of interest",
+		"banana.txt": "this file mentions banana once",
+		"cherry.txt": "another distractor file",
+	});
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });

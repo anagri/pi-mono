@@ -42,12 +42,10 @@ test("scripted skill: /skill:days-since-birthday invokes run_script and reports 
 	activeHarness = h;
 
 	const skillDir = `${h.cwd}/.bodhi-pi/skills/days-since-birthday`;
-	await h.filesystem.mkdir(skillDir, { recursive: true });
-	await h.filesystem.writeTextFile(
-		`${skillDir}/SKILL.md`,
-		`---\ndescription: Compute days between a YYYY-MM-DD birthday and the baseline date.\n---\nYou have a JavaScript helper at ${skillDir}/script.js. Call the run_script tool with:\n\n- path: "${skillDir}/script.js"\n- args: ["<YYYY-MM-DD>"] where the date comes from the user's message.\n\nThe script writes a single integer (number of days) to stdout. Reply with exactly that integer and nothing else.\n`,
-	);
-	await h.filesystem.writeTextFile(`${skillDir}/script.js`, SCRIPT);
+	await h.setupFiles({
+		".bodhi-pi/skills/days-since-birthday/SKILL.md": `---\ndescription: Compute days between a YYYY-MM-DD birthday and the baseline date.\n---\nYou have a JavaScript helper at ${skillDir}/script.js. Call the run_script tool with:\n\n- path: "${skillDir}/script.js"\n- args: ["<YYYY-MM-DD>"] where the date comes from the user's message.\n\nThe script writes a single integer (number of days) to stdout. Reply with exactly that integer and nothing else.\n`,
+		".bodhi-pi/skills/days-since-birthday/script.js": SCRIPT,
+	});
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });

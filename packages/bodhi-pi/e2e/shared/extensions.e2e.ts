@@ -73,8 +73,9 @@ test("redact-secrets with real LLM: API-key in tool output is scrubbed before be
 		bodhiPiFixture: "redact-secrets",
 	});
 	activeHarness = h;
-	await h.filesystem.mkdir(`${h.cwd}/proj`, { recursive: true });
-	await h.filesystem.writeTextFile(`${h.cwd}/proj/leak.txt`, "API_KEY=sk-PLAINTEXTSECRETXYZ123 should not leak");
+	await h.setupFiles({
+		"proj/leak.txt": "API_KEY=sk-PLAINTEXTSECRETXYZ123 should not leak",
+	});
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
 	await h.clientConn.prompt({
