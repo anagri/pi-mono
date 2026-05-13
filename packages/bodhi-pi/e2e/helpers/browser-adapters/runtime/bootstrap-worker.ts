@@ -1,17 +1,22 @@
 // adapted from packages/bodhi-pi-browser/src/runtime/bootstrap-worker.ts —
-// drops sandboxPort + workspaceProviderFromData (the main thread mounts the
-// InMemory ZenFS before posting init; the worker just uses `cwd` directly);
-// extends InitMessage with e2e fields (models / defaultModelId / apiKeys /
-// homeDir) so the harness can drive provider selection per test.
+// main thread mounts the InMemory ZenFS before posting init; the worker just
+// uses `cwd` directly. Extends InitMessage with e2e fields (models /
+// defaultModelId / apiKeys / homeDir) so the harness can drive provider
+// selection per test. Conditionally swaps in sandboxed adapter variants when
+// init carries a `sandboxPort` (test-app-chrome-ext under MV3 CSP); without
+// it (test-app-browser), uses direct AsyncFunction variants.
 
 /// <reference lib="webworker" />
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { configure, InMemory, fs as zenFs, mount as zenMount } from "@zenfs/core";
 import { createBrowserExtensionLoader } from "../extensions/browser-extension-loader.js";
+import { createSandboxedBrowserExtensionLoader } from "../extensions/sandboxed-browser-extension-loader.js";
 import { createZenfsFilesystem } from "../filesystem/zenfs-filesystem.js";
 import { createDexieKvStore } from "../kv/dexie-kv-store.js";
+import { createSandboxBridge } from "../sandbox/sandbox-bridge.js";
 import { createBrowserScriptExecutor } from "../script-executor/browser-script-executor.js";
+import { createSandboxedBrowserScriptExecutor } from "../script-executor/sandboxed-browser-script-executor.js";
 import { createDexieSessionStore } from "../sessions/dexie-session-store.js";
 import { createMessagePortStream } from "../transport/message-port-stream.js";
 import type {
@@ -143,6 +148,7 @@ export function bootstrapAgentWorker(): void {
 			systemPrompt,
 			appendSystemPrompt,
 			homeDir,
+			sandboxPort,
 		} = ev.data;
 
 		void (async () => {
@@ -151,8 +157,13 @@ export function bootstrapAgentWorker(): void {
 			const filesystem = createZenfsFilesystem();
 			const sessionStore = createDexieSessionStore({ dbName: `${dbName}-sessions` });
 			const kvStore = createDexieKvStore({ dbName: `${dbName}-kv` });
-			const scriptExecutor = createBrowserScriptExecutor({ filesystem });
-			const extensionFactories = await createBrowserExtensionLoader({ filesystem, cwd });
+			const bridge = sandboxPort ? createSandboxBridge(sandboxPort) : undefined;
+			const scriptExecutor = bridge
+				? createSandboxedBrowserScriptExecutor({ filesystem, bridge })
+				: createBrowserScriptExecutor({ filesystem });
+			const extensionFactories = bridge
+				? await createSandboxedBrowserExtensionLoader({ filesystem, cwd, bridge })
+				: await createBrowserExtensionLoader({ filesystem, cwd });
 
 			const getApiKey = apiKeys ? (provider: string) => apiKeys[provider] : undefined;
 

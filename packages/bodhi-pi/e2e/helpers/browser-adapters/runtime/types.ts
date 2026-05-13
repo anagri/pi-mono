@@ -1,7 +1,9 @@
 // adapted from packages/bodhi-pi-browser/src/runtime/types.ts —
-// drops sandboxPort + workspace provider (main thread mounts ZenFS directly
-// for e2e), adds e2e-specific fields (models / defaultModelId / apiKeys / cwd
-// / homeDir) that the e2e harness configures per test.
+// main thread mounts ZenFS directly for e2e (no workspace provider), adds
+// e2e-specific fields (models / defaultModelId / apiKeys / cwd / homeDir)
+// that the e2e harness configures per test. `sandboxPort` is optional —
+// test-app-chrome-ext sets it (MV3 CSP forbids unsafe-eval in the worker
+// realm); test-app-browser leaves it undefined and uses direct AsyncFunction.
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 
@@ -18,6 +20,7 @@ export interface InitMessage {
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	homeDir?: string;
+	sandboxPort?: MessagePort;
 }
 
 export interface FsQueryMessage {
