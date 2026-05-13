@@ -1,12 +1,13 @@
 # bodhi-pi/e2e
 
-Real-LLM e2e for bodhi-pi. Same `e2e/shared/*.e2e.ts` files run under three Vitest projects:
+Real-LLM e2e for bodhi-pi. Same `e2e/shared/*.e2e.ts` files run under four Vitest projects:
 
 | Project | Transport | Adapters | What it spawns |
 |---|---|---|---|
 | `in-memory` | in-process ACP pair | in-memory FS/sessions/kv | nothing |
 | `cli` | ACP JSON-RPC over real stdio | inlined Node adapters (real FS + SQLite) | `test-app-cli --rpc` child process |
-| `http` | HTTP+SSE on `/acp` | inlined Node adapters (real FS + SQLite) | one shared `test-app-http` server (spawned in global-setup, shared across all http tests via per-test user tokens) |
+| `http` | HTTP+SSE on `/acp` | inlined Node adapters (real FS + SQLite) | one shared `test-app-http` server (spawned in global-setup, shared across all http tests via per-test user tokens; env: `BODHI_PI_E2E_HTTP_BASE_URL` / `BODHI_PI_E2E_HTTP_DATA_DIR`) |
+| `ws` | ACP JSON-RPC over WebSocket on `/acp-ws` (subprotocol bearer auth, stateful-per-connection agent) | inlined Node adapters (real FS + SQLite) | a second shared `test-app-http` server (same binary, separate port + dataDir; env: `BODHI_PI_E2E_WS_BASE_URL` / `BODHI_PI_E2E_WS_DATA_DIR`) |
 
 `e2e/cli-headless/` runs only under `cli`. Playwright surface tests are NOT run from these Vitest projects — see "Vitest ≠ Playwright" below.
 

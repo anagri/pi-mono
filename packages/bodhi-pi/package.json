@@ -36,11 +36,13 @@
 		"@copilotkit/aimock": "^1.19.0",
 		"@types/node": "^24.3.0",
 		"@types/picomatch": "^4.0.3",
+		"@types/ws": "^8.5.13",
 		"dotenv": "^16.4.5",
 		"jiti": "^2.7.0",
 		"tsc-alias": "^1.8.10",
 		"typescript": "^5.7.3",
-		"vitest": "^3.2.4"
+		"vitest": "^3.2.4",
+		"ws": "^8.18.0"
 	},
 	"engines": {
 		"node": ">=20.0.0"

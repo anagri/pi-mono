@@ -1,4 +1,4 @@
-export type E2ERuntime = "in-memory" | "cli" | "http";
+export type E2ERuntime = "in-memory" | "cli" | "http" | "ws";
 
 interface RuntimeGlobals {
 	__bodhiPiRuntime?: E2ERuntime;

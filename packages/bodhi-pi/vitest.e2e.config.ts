@@ -52,6 +52,16 @@ export default defineConfig({
 					include: ["e2e/shared/**/*.e2e.ts"],
 				},
 			},
+			{
+				plugins: base.plugins,
+				resolve: base.resolve,
+				test: {
+					...sharedProjectTest,
+					name: "ws",
+					setupFiles: ["./e2e/setup/ws.ts"],
+					include: ["e2e/shared/**/*.e2e.ts"],
+				},
+			},
 		],
 	},
 });

@@ -33,19 +33,8 @@ async function waitForListening(child: ChildProcess, timeoutMs: number): Promise
 	});
 }
 
-export async function setup(): Promise<() => Promise<void>> {
-	const missing = REQUIRED_ENV_VARS.filter((k) => !process.env[k]);
-	if (missing.length > 0) {
-		throw new Error(
-			`Missing required env vars for bodhi-pi e2e: ${missing.join(", ")}. ` +
-				`Set them in packages/bodhi-pi/e2e/.env.test (see .env.test.example).`,
-		);
-	}
-
-	// Boot one shared test-app-http for the whole http project run. Per-test
-	// isolation is achieved via per-test user tokens (multi-tenant SQLite gives
-	// each user a fresh workspace under <dataDir>/users/<userId>/workspace/).
-	const dataDir = await mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-http-"));
+async function spawnTestAppHttp(label: string): Promise<{ child: ChildProcess; port: number; dataDir: string }> {
+	const dataDir = await mkdtemp(path.join(os.tmpdir(), `bodhi-pi-e2e-${label}-`));
 	const child = spawn(
 		"node",
 		[
@@ -64,17 +53,42 @@ export async function setup(): Promise<() => Promise<void>> {
 			env: { ...process.env },
 		},
 	);
-
 	const port = await waitForListening(child, 15_000);
-	process.env.BODHI_PI_E2E_HTTP_BASE_URL = `http://localhost:${port}`;
-	process.env.BODHI_PI_E2E_HTTP_DATA_DIR = dataDir;
+	return { child, port, dataDir };
+}
+
+export async function setup(): Promise<() => Promise<void>> {
+	const missing = REQUIRED_ENV_VARS.filter((k) => !process.env[k]);
+	if (missing.length > 0) {
+		throw new Error(
+			`Missing required env vars for bodhi-pi e2e: ${missing.join(", ")}. ` +
+				`Set them in packages/bodhi-pi/e2e/.env.test (see .env.test.example).`,
+		);
+	}
+
+	// Two shared test-app-http instances for the run: one for the |http| project
+	// (per-turn agent rebuild over HTTP+SSE on /acp) and one for the |ws| project
+	// (stateful per-connection agent over WebSocket on /acp-ws). Separate ports +
+	// dataDirs keep the two transports' SQLite/workspace state cleanly isolated.
+	const http = await spawnTestAppHttp("http");
+	process.env.BODHI_PI_E2E_HTTP_BASE_URL = `http://localhost:${http.port}`;
+	process.env.BODHI_PI_E2E_HTTP_DATA_DIR = http.dataDir;
+
+	const ws = await spawnTestAppHttp("ws");
+	process.env.BODHI_PI_E2E_WS_BASE_URL = `http://localhost:${ws.port}`;
+	process.env.BODHI_PI_E2E_WS_DATA_DIR = ws.dataDir;
 
 	return async () => {
-		try {
-			child.kill("SIGTERM");
-		} catch {
-			// already exited
+		for (const inst of [http, ws]) {
+			try {
+				inst.child.kill("SIGTERM");
+			} catch {
+				// already exited
+			}
 		}
-		await rm(dataDir, { recursive: true, force: true });
+		await Promise.all([
+			rm(http.dataDir, { recursive: true, force: true }),
+			rm(ws.dataDir, { recursive: true, force: true }),
+		]);
 	};
 }

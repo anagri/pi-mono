@@ -95,6 +95,7 @@ export async function createE2EHarness(opts: E2EHarnessOptions): Promise<E2EHarn
 	if (runtime === "in-memory") return createInMemoryHarness(opts);
 	if (runtime === "cli") return createCliHarness(opts);
 	if (runtime === "http") return createHttpHarness(opts);
+	if (runtime === "ws") return createWsHarness(opts);
 	throw new Error(`createE2EHarness: runtime '${runtime}' not yet supported`);
 }
 
@@ -299,6 +300,69 @@ async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	return {
 		clientConn,
 		client: createBodhiPiClient(clientConn, { cwd }),
+		updates,
+		events,
+		flushEvents: () => waitForAgentEndBalance(events),
+		filesystem,
+		sessionStore,
+		kvStore,
+		cwd,
+		cleanup,
+	};
+}
+
+async function createWsHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
+	const { createNodeFilesystem } = await import("@e2e/helpers/node-adapters/index.js");
+	const { openWsConnection } = await import("./ws-connection.js");
+	const { mintTestToken } = await import("./auth.js");
+
+	const baseUrl = process.env.BODHI_PI_E2E_WS_BASE_URL;
+	const dataDir = process.env.BODHI_PI_E2E_WS_DATA_DIR;
+	if (!baseUrl || !dataDir) {
+		throw new Error(
+			"ws harness: BODHI_PI_E2E_WS_BASE_URL / BODHI_PI_E2E_WS_DATA_DIR not set. The shared test-app-http (ws spawn) must be spawned by e2e/global-setup.ts before tests run.",
+		);
+	}
+
+	// Per-test user token → multi-tenant SQLite isolates workspaces under
+	// <dataDir>/users/<id>/workspace/. The stateful-per-WS-connection agent
+	// lifecycle means cross-test bleed would be catastrophic if user IDs
+	// collided — random 32-bit id keeps the odds negligible.
+	const userId = Math.floor(Math.random() * 0x7fff_ffff);
+	const token = mintTestToken({ id: userId, email: `test-${userId}@example.com` });
+	const cwd = path.join(dataDir, "users", String(userId), "workspace");
+	await fs.mkdir(cwd, { recursive: true });
+
+	// When the test seeds a fixture, symlink the source `.bodhi-pi/` into the
+	// per-user workspace. wireAgentForWsConnection's extension loader walks the
+	// symlinked snapshot once per connection.
+	if (opts.bodhiPiFixture) {
+		await fs.symlink(fixtureBodhiPiDir(opts.bodhiPiFixture), path.join(cwd, ".bodhi-pi"), "dir");
+	}
+
+	const updates: SessionNotification[] = [];
+	const events: BodhiPiEvent[] = [];
+	const handle = await openWsConnection({
+		baseUrl,
+		token,
+		onUpdate: (n) => updates.push(n),
+		onLifecycleEvent: (e) => events.push(e),
+	});
+
+	const filesystem = createNodeFilesystem({ rootCwd: cwd });
+	const sessionStore = createInMemorySessionStore();
+	const kvStore = createInMemoryKvStore();
+
+	const cleanup = async () => {
+		await handle.close();
+		// Server stays up (global-setup teardown shuts it down). Only the per-user
+		// workspace directory belongs to this test.
+		await fs.rm(cwd, { recursive: true, force: true });
+	};
+
+	return {
+		clientConn: handle.conn,
+		client: createBodhiPiClient(handle.conn, { cwd }),
 		updates,
 		events,
 		flushEvents: () => waitForAgentEndBalance(events),
