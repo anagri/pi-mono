@@ -24,13 +24,15 @@
 		"drizzle-orm": "^0.43.1",
 		"jiti": "^2.7.0",
 		"react": "^19.2.5",
-		"react-dom": "^19.2.5"
+		"react-dom": "^19.2.5",
+		"ws": "^8.18.0"
 	},
 	"devDependencies": {
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24.3.0",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
+		"@types/ws": "^8.5.13",
 		"@vitejs/plugin-react": "^6.0.1",
 		"concurrently": "^9.2.1",
 		"tsc-alias": "^1.8.10",

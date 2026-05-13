@@ -60,6 +60,7 @@ const actualPort = server.port();
 console.log(`bodhi-pi-test-app-http listening on http://localhost:${actualPort}`);
 console.log(`  health:    http://localhost:${actualPort}/healthz`);
 console.log(`  acp:       http://localhost:${actualPort}/acp`);
+console.log(`  acp-ws:    ws://localhost:${actualPort}/acp-ws`);
 console.log(`  data dir:  ${dataDir}`);
 console.log(`  workspace: ${cli.workspace ?? `<per-user under ${dataDir}/users/<id>/workspace/>`}`);
 console.log(

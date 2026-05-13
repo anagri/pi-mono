@@ -1,11 +1,34 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type Database from "better-sqlite3";
+import { type WebSocket, WebSocketServer } from "ws";
 import { createAcpHandler } from "./acp/handler.js";
-import { type Db, openDb } from "./sessions/sqlite-session-store.js";
+import { wireAgentForWsConnection } from "./agent/wire-agent-ws.js";
+import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
+import { type Db, openDb, upsertUser } from "./sessions/sqlite-session-store.js";
 import { createStaticHandler, type StaticHandler } from "./static.js";
+import { wsToStream } from "./transport/ws-stream.js";
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+function setupHeartbeat(ws: WebSocket): void {
+	let alive = true;
+	ws.on("pong", () => {
+		alive = true;
+	});
+	const interval = setInterval(() => {
+		if (!alive) {
+			ws.terminate();
+			return;
+		}
+		alive = false;
+		ws.ping();
+	}, HEARTBEAT_INTERVAL_MS);
+	ws.on("close", () => clearInterval(interval));
+}
 
 export interface BuildServerOptions {
 	port?: number;
@@ -61,6 +84,46 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 		});
 	});
 
+	// WebSocket transport on /acp-ws: per-connection stateful agent lifecycle.
+	// Auth via Sec-WebSocket-Protocol bearer subprotocol; agent stays alive for
+	// the connection. Differs from /acp (HTTP+SSE per-turn rebuild).
+	const wss = new WebSocketServer({
+		noServer: true,
+		handleProtocols: (protocols) => (protocols.has(SUBPROTOCOL) ? SUBPROTOCOL : false),
+	});
+
+	async function bindWsAgent(ws: WebSocket, ctx: UpgradeContext): Promise<void> {
+		upsertUser(db, ctx.user);
+		const stream = wsToStream(ws);
+		const acpStream = ndJsonStream(stream.writable, stream.readable);
+		const wired = await wireAgentForWsConnection({
+			user: ctx.user,
+			dataDir: opts.dataDir,
+			db,
+			...(opts.models !== undefined ? { models: opts.models } : {}),
+			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
+			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
+			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
+			...(opts.workspaceOverride !== undefined ? { workspaceOverride: opts.workspaceOverride } : {}),
+		});
+		new AgentSideConnection(wired.factory, acpStream);
+		setupHeartbeat(ws);
+	}
+
+	httpServer.on("upgrade", (req, socket, head) => {
+		if (req.url !== "/acp-ws") {
+			socket.destroy();
+			return;
+		}
+		handleAgentUpgrade(wss, req, socket, head, (ws, ctx) => {
+			void bindWsAgent(ws, ctx).catch((err) => {
+				console.error("[bodhi-pi-test-app-http ws] failed to bind agent:", err);
+				ws.terminate();
+			});
+		});
+	});
+
 	await new Promise<void>((resolve, reject) => {
 		const onError = (err: Error) => {
 			httpServer.off("listening", onListening);
@@ -84,6 +147,10 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			throw new Error("server not listening");
 		},
 		async close() {
+			for (const ws of wss.clients) {
+				ws.terminate();
+			}
+			wss.close();
 			await new Promise<void>((resolve, reject) => {
 				httpServer.close((err) => (err ? reject(err) : resolve()));
 			});
