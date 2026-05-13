@@ -1,0 +1,16 @@
+{
+	"manifest_version": 3,
+	"name": "bodhi-pi test-app-chrome-ext (e2e)",
+	"version": "0.0.0",
+	"description": "ACP-only test app for bodhi-pi e2e shared suite under MV3",
+	"content_security_policy": {
+		"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+		"sandbox": "sandbox allow-scripts allow-forms; script-src 'self' 'unsafe-eval' 'unsafe-inline' 'wasm-unsafe-eval' data:; script-src-elem 'self' 'unsafe-inline' data:; object-src 'self'"
+	},
+	"sandbox": {
+		"pages": [
+			"sandbox.html"
+		]
+	},
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArg7gk3ABBz16MDEw8L3qXS1zABel1O5ybFE7hAKwXqLiPYRBEmBOwpJtWGyesbEedJvWlFIEaaOwz65agmy0fCs+g6ZG06uRyETe6IXmPutKTOysoV95zLpBWwCrdu5YDC7J7cVV2NE3LOeHWQDu0FLkFMSgFZzPsAwTaIf7zL5Ir/hza8D8Eoc5H34rVcxvnk3wQ+zbt4Ok2aTNDoKdKwUB625DusGLgpFyuW8H6Xp6rwe70E4L30kg4XDRDhzmlymToATDyCqdNK8hz4A5kizZdG8wITENfD7yi399wpZgTN6ZihvKCh8If4zofRvPIWADSwTRDQyvX3XrFz+tMQIDAQAB"
+}
