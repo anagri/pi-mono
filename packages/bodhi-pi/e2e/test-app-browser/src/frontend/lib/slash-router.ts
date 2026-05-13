@@ -1,12 +1,13 @@
 // Page-side slash commands intercept harness requests typed into acp-input
-// before they reach the agent: they read the in-page ZenFS directly and emit
-// a synthetic response frame so the Node-side filesystem proxy can scrape
-// post-prompt readback through the same DOM path as ACP responses.
+// before they reach the agent: they query the worker-side ZenFS (the agent's
+// own filesystem) via the fs bridge and emit a synthetic response frame so
+// the Node-side filesystem proxy can scrape post-prompt readback through the
+// same DOM path as ACP responses.
 //
 // The slash form is the FIRST line of the textarea: "/file <path>" or
 // "/exists <path>". Anything else is treated as a JSON-RPC body.
 
-import { readWorkspaceFile, workspaceFileExists } from "./workspace-mount";
+import { readWorkerFile, workerFileExists } from "./worker-fs-bridge";
 
 export interface SlashResult {
 	method: string;
@@ -22,19 +23,15 @@ export async function tryHandleSlash(raw: string): Promise<SlashResult | null> {
 	switch (cmd) {
 		case "/file": {
 			if (!arg) throw new Error("/file requires a path argument");
-			try {
-				const content = await readWorkspaceFile(arg);
-				return { method: "_test/file/read", result: { ok: true, content } };
-			} catch (err) {
-				return {
-					method: "_test/file/read",
-					result: { ok: false, error: (err as Error).message ?? String(err) },
-				};
-			}
+			const r = await readWorkerFile(arg);
+			return {
+				method: "_test/file/read",
+				result: r.ok ? { ok: true, content: r.content } : { ok: false, error: r.error ?? "not found" },
+			};
 		}
 		case "/exists": {
 			if (!arg) throw new Error("/exists requires a path argument");
-			const exists = await workspaceFileExists(arg);
+			const exists = await workerFileExists(arg);
 			return { method: "_test/file/exists", result: { ok: true, exists } };
 		}
 		default:

@@ -10,6 +10,8 @@ export interface InitMessage {
 	agentPort: MessagePort;
 	cwd: string;
 	dbName: string;
+	mountName: string;
+	seedFiles: Record<string, string>;
 	models?: Model<Api>[];
 	defaultModelId?: string;
 	apiKeys?: Record<string, string>;
@@ -18,17 +20,27 @@ export interface InitMessage {
 	homeDir?: string;
 }
 
+export interface FsQueryMessage {
+	type: "bodhi-pi-fs-query";
+	id: number;
+	op: "read" | "exists";
+	path: string;
+}
+
+export interface FsReplyMessage {
+	type: "bodhi-pi-fs-reply";
+	id: number;
+	ok: boolean;
+	content?: string;
+	exists?: boolean;
+	error?: string;
+}
+
 export interface WorkerEventMessage {
 	type: "bodhi-pi-event";
-	record: {
-		type: string;
-		sessionId?: string;
-		toolName?: string;
-		userPrompt?: string;
-		stopReason?: string;
-		fromModelId?: string | null;
-		toModelId?: string;
-	};
+	// Forward the full event record (structured-cloneable JSON) so e2e tests
+	// can inspect fields like assistantMessageEvent on MessageUpdateEvent.
+	record: Record<string, unknown> & { type: string };
 }
 
 export interface WorkerWireMessage {
@@ -47,4 +59,9 @@ export interface WorkerErrorMessage {
 	message: string;
 }
 
-export type WorkerMessage = WorkerEventMessage | WorkerWireMessage | WorkerReadyMessage | WorkerErrorMessage;
+export type WorkerMessage =
+	| WorkerEventMessage
+	| WorkerWireMessage
+	| WorkerReadyMessage
+	| WorkerErrorMessage
+	| FsReplyMessage;

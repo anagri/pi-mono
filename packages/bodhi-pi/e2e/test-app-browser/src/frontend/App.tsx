@@ -6,7 +6,8 @@ import type { WorkerMessage } from "@e2e/helpers/browser-adapters/runtime/types"
 import type { EventEntry, FrameEntry } from "./lib/frame-log";
 import { parseSeedFiles } from "./lib/seed-parser";
 import { tryHandleSlash } from "./lib/slash-router";
-import { mountWorkspace, WORKSPACE_ROOT } from "./lib/workspace-mount";
+import { WORKSPACE_NAME, WORKSPACE_ROOT } from "./lib/workspace-constants";
+import { bindFsBridge } from "./lib/worker-fs-bridge";
 
 type RootState = "needs-init" | "ready" | "streaming" | "closed" | "error";
 
@@ -110,10 +111,9 @@ export function App() {
 			}
 			try {
 				const seedFiles = parseSeedFiles(seed);
-				await mountWorkspace(seedFiles);
-
 				const worker = workerFactory();
 				workerRef.current = worker;
+				bindFsBridge(worker);
 
 				// Wait for worker ready before opening ACP. Worker posts
 				// "bodhi-pi-ready" once the agent is wired; until then,
@@ -146,6 +146,8 @@ export function App() {
 						agentPort: channel.port2,
 						cwd: WORKSPACE_ROOT,
 						dbName: `bodhi-pi-test-${id}`,
+						mountName: WORKSPACE_NAME,
+						seedFiles,
 						models: config.models,
 						defaultModelId: config.defaultModelId,
 						apiKeys: config.apiKeys,

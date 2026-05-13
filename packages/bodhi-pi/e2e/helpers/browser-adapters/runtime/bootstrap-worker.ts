@@ -7,6 +7,7 @@
 /// <reference lib="webworker" />
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
+import { configure, InMemory, fs as zenFs, mount as zenMount } from "@zenfs/core";
 import { createBrowserExtensionLoader } from "../extensions/browser-extension-loader.js";
 import { createZenfsFilesystem } from "../filesystem/zenfs-filesystem.js";
 import { createDexieKvStore } from "../kv/dexie-kv-store.js";
@@ -14,6 +15,8 @@ import { createBrowserScriptExecutor } from "../script-executor/browser-script-e
 import { createDexieSessionStore } from "../sessions/dexie-session-store.js";
 import { createMessagePortStream } from "../transport/message-port-stream.js";
 import type {
+	FsQueryMessage,
+	FsReplyMessage,
 	InitMessage,
 	WorkerErrorMessage,
 	WorkerEventMessage,
@@ -26,22 +29,7 @@ declare const self: DedicatedWorkerGlobalScope;
 
 function eventForwardingHandlers(): BodhiPiEventHandlers {
 	const post = (event: BodhiPiEvent): undefined => {
-		const record: WorkerEventMessage["record"] = { type: event.type };
-		if ("sessionId" in event) record.sessionId = event.sessionId;
-		if (
-			event.type === "tool_call" ||
-			event.type === "tool_result" ||
-			event.type === "tool_execution_start" ||
-			event.type === "tool_execution_end"
-		) {
-			record.toolName = event.toolName;
-		}
-		if (event.type === "agent_start") record.userPrompt = event.userPrompt;
-		if (event.type === "agent_end" && event.stopReason !== undefined) record.stopReason = event.stopReason;
-		if (event.type === "model_select") {
-			record.fromModelId = event.fromModelId;
-			record.toModelId = event.toModelId;
-		}
+		const record = event as unknown as WorkerEventMessage["record"];
 		const message: WorkerEventMessage = { type: "bodhi-pi-event", record };
 		self.postMessage(message);
 		return undefined;
@@ -79,15 +67,87 @@ function postWireFrame(direction: "in" | "out", line: string): void {
 	self.postMessage(message);
 }
 
+async function mountSeedWorkspace(
+	mountName: string,
+	rootPath: string,
+	seedFiles: Record<string, string>,
+): Promise<void> {
+	await configure({ mounts: {} });
+	zenMount(rootPath, InMemory.create({ label: mountName }));
+	// Ensure the mount root itself exists as a directory so subsequent
+	// reads / list / stat against the root succeed even with no seed files.
+	try {
+		await zenFs.promises.mkdir(rootPath, { recursive: true });
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+	}
+	for (const rel of Object.keys(seedFiles).sort()) {
+		const abs = rel.startsWith("/") ? `${rootPath}${rel}` : `${rootPath}/${rel}`;
+		const slash = abs.lastIndexOf("/");
+		if (slash > rootPath.length) {
+			try {
+				await zenFs.promises.mkdir(abs.slice(0, slash), { recursive: true });
+			} catch (err) {
+				if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+			}
+		}
+		await zenFs.promises.writeFile(abs, seedFiles[rel] ?? "", { encoding: "utf-8" });
+	}
+}
+
+function registerFsQueryHandler(): void {
+	self.addEventListener("message", async (ev: MessageEvent<FsQueryMessage>) => {
+		if (ev.data?.type !== "bodhi-pi-fs-query") return;
+		const { id, op, path } = ev.data;
+		try {
+			if (op === "read") {
+				const content = (await zenFs.promises.readFile(path, "utf-8")) as string;
+				const reply: FsReplyMessage = { type: "bodhi-pi-fs-reply", id, ok: true, content };
+				self.postMessage(reply);
+			} else if (op === "exists") {
+				let exists = true;
+				try {
+					await zenFs.promises.access(path);
+				} catch {
+					exists = false;
+				}
+				const reply: FsReplyMessage = { type: "bodhi-pi-fs-reply", id, ok: true, exists };
+				self.postMessage(reply);
+			}
+		} catch (err) {
+			const reply: FsReplyMessage = {
+				type: "bodhi-pi-fs-reply",
+				id,
+				ok: false,
+				error: (err as Error).message ?? String(err),
+			};
+			self.postMessage(reply);
+		}
+	});
+}
+
 export function bootstrapAgentWorker(): void {
 	self.addEventListener("message", function onInit(ev: MessageEvent<InitMessage>) {
 		if (ev.data?.type !== "init") return;
 		self.removeEventListener("message", onInit);
 
-		const { agentPort, cwd, dbName, models, defaultModelId, apiKeys, systemPrompt, appendSystemPrompt, homeDir } =
-			ev.data;
+		const {
+			agentPort,
+			cwd,
+			dbName,
+			mountName,
+			seedFiles,
+			models,
+			defaultModelId,
+			apiKeys,
+			systemPrompt,
+			appendSystemPrompt,
+			homeDir,
+		} = ev.data;
 
 		void (async () => {
+			await mountSeedWorkspace(mountName, cwd, seedFiles);
+			registerFsQueryHandler();
 			const filesystem = createZenfsFilesystem();
 			const sessionStore = createDexieSessionStore({ dbName: `${dbName}-sessions` });
 			const kvStore = createDexieKvStore({ dbName: `${dbName}-kv` });

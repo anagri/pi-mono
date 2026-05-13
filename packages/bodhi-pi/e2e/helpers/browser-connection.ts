@@ -150,6 +150,12 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 					}
 					continue;
 				}
+				// Skip page-side synthetic frames (slash router emits responses
+				// with data-frame-method="_test/..."). Real ACP JSON-RPC
+				// responses carry no method field — those are ours to consume.
+				if (f.kind === "response" && f.method.startsWith("_test/")) {
+					continue;
+				}
 				if (f.kind === "response") {
 					this.lastFrameSeq = cursor;
 					try {
