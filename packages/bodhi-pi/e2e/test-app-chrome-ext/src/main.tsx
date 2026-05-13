@@ -1,6 +1,11 @@
-// Phase 2 stub — replaced in Phase 3 with the real test-app page.
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { App } from "./App";
 
 const root = document.getElementById("root");
-if (root) {
-	root.textContent = "test-app-chrome-ext stub";
-}
+if (!root) throw new Error("root element missing");
+createRoot(root).render(
+	<StrictMode>
+		<App />
+	</StrictMode>,
+);

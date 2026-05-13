@@ -13,6 +13,7 @@
 		"e2e/test-app-cli/**",
 		"e2e/test-app-http/**",
 		"e2e/test-app-browser/**",
+		"e2e/test-app-chrome-ext/**",
 		"e2e/helpers/browser-adapters/**"
 	]
 }
