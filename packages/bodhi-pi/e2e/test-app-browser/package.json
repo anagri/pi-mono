@@ -1,0 +1,34 @@
+{
+	"name": "@bodhiapp/bodhi-pi-test-app-browser",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Test-app browser for bodhi-pi e2e — minimal Vite+React page that hosts the ACP agent in a Web Worker and surfaces ACP wire frames + lifecycle events as DOM elements for Playwright scraping.",
+	"type": "module",
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"dev": "vite",
+		"build": "vite build",
+		"start": "vite"
+	},
+	"dependencies": {
+		"@agentclientprotocol/sdk": "^0.21.0",
+		"@bodhiapp/bodhi-pi": "^0.0.1",
+		"@earendil-works/pi-ai": "^0.74.0",
+		"@zenfs/core": "^2.5.0",
+		"@zenfs/dom": "^1.2.0",
+		"dexie": "^4.0.11",
+		"react": "^19.2.5",
+		"react-dom": "^19.2.5"
+	},
+	"devDependencies": {
+		"@types/node": "^24.3.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"typescript": "^5.7.3",
+		"vite": "^8.0.10"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}
