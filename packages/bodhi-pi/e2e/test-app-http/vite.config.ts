@@ -17,6 +17,11 @@ export default defineConfig({
 				changeOrigin: false,
 				ws: false,
 			},
+			"/acp-ws": {
+				target: "ws://localhost:3000",
+				changeOrigin: false,
+				ws: true,
+			},
 			"/healthz": {
 				target: "http://localhost:3000",
 				changeOrigin: false,
