@@ -3,11 +3,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser-launch.js";
 
 const REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_HTTP_BIN = path.resolve(here, "test-app-http/dist/test-app-http/src/server/index.js");
+const TEST_APP_BROWSER_DIR = path.resolve(here, "test-app-browser");
+const BROWSER_VITE_PORT = 35273;
 
 const DEFAULT_MODELS = "openai:gpt-4o-mini,openai:gpt-5-mini,anthropic:claude-haiku-4-5";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -31,6 +34,43 @@ async function waitForListening(child: ChildProcess, timeoutMs: number): Promise
 			reject(new Error(`test-app-http exited before binding (code=${code})`));
 		});
 	});
+}
+
+async function waitForViteReady(child: ChildProcess, timeoutMs: number): Promise<void> {
+	return new Promise((resolve, reject) => {
+		let buf = "";
+		const timer = setTimeout(() => reject(new Error(`vite did not become ready within ${timeoutMs}ms`)), timeoutMs);
+		const onData = (chunk: Buffer | string) => {
+			// Strip ANSI escape sequences so the readiness regex isn't broken
+			// by Vite's coloured banner.
+			buf += chunk.toString().replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+			// `vite preview` prints `Local: http://localhost:<port>/` instead of
+			// `ready in NNN ms`; accept either.
+			if (buf.match(/ready in/i) || buf.match(/Local:\s*http:\/\/localhost:/)) {
+				clearTimeout(timer);
+				child.stdout?.off("data", onData);
+				resolve();
+			}
+		};
+		child.stdout?.on("data", onData);
+		child.once("exit", (code) => {
+			clearTimeout(timer);
+			reject(new Error(`vite exited before becoming ready (code=${code})`));
+		});
+	});
+}
+
+async function spawnVitePreview(): Promise<ChildProcess> {
+	// Serve the prebuilt `dist/public/` (built by the test:e2e prepare step)
+	// in production mode. Avoids the dev-mode react-refresh plugin which
+	// trips over the Worker entry under Vite 8/rolldown.
+	const child = spawn("npx", ["vite", "preview", "--port", String(BROWSER_VITE_PORT), "--strictPort"], {
+		cwd: TEST_APP_BROWSER_DIR,
+		stdio: ["ignore", "pipe", "inherit"],
+		env: { ...process.env, FORCE_COLOR: "0" },
+	});
+	await waitForViteReady(child, 30_000);
+	return child;
 }
 
 async function spawnTestAppHttp(label: string): Promise<{ child: ChildProcess; port: number; dataDir: string }> {
@@ -78,6 +118,14 @@ export async function setup(): Promise<() => Promise<void>> {
 	process.env.BODHI_PI_E2E_WS_BASE_URL = `http://localhost:${ws.port}`;
 	process.env.BODHI_PI_E2E_WS_DATA_DIR = ws.dataDir;
 
+	// Vite dev for test-app-browser + headless chromium for the browser
+	// project's harness. Both shared across all browser-runtime harnesses;
+	// per-test isolation comes from browser.newContext() + per-test Dexie
+	// dbName suffix in the page (see e2e/helpers/browser-launch.ts).
+	const viteChild = await spawnVitePreview();
+	process.env.BODHI_PI_E2E_BROWSER_BASE_URL = `http://localhost:${BROWSER_VITE_PORT}`;
+	await ensureSharedBrowser();
+
 	return async () => {
 		for (const inst of [http, ws]) {
 			try {
@@ -86,6 +134,12 @@ export async function setup(): Promise<() => Promise<void>> {
 				// already exited
 			}
 		}
+		try {
+			viteChild.kill("SIGTERM");
+		} catch {
+			// already exited
+		}
+		await closeSharedBrowser();
 		await Promise.all([
 			rm(http.dataDir, { recursive: true, force: true }),
 			rm(ws.dataDir, { recursive: true, force: true }),

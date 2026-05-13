@@ -62,6 +62,16 @@ export default defineConfig({
 					include: ["e2e/shared/**/*.e2e.ts"],
 				},
 			},
+			{
+				plugins: base.plugins,
+				resolve: base.resolve,
+				test: {
+					...sharedProjectTest,
+					name: "browser",
+					setupFiles: ["./e2e/setup/browser.ts"],
+					include: ["e2e/shared/**/*.e2e.ts"],
+				},
+			},
 		],
 	},
 });

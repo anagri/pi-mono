@@ -48,7 +48,6 @@ interface EventSnapshot {
 	payload: string;
 }
 
-const STREAMING_METHODS = new Set(["session/prompt", "session/load", "session/resume"]);
 const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 let nextId = 1;
@@ -108,24 +107,19 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 	}
 
 	private async call(method: string, params: Record<string, unknown>): Promise<unknown> {
+		// id in the body is informational only: the in-page SDK rewrites it.
+		// Correlation is by ordering — requests are sequential through this
+		// connection, so the next response frame after submit IS this call's.
 		const id = nextId++;
 		const body = { jsonrpc: "2.0", id, method, params };
-		// Stamp the frame seq before submit so the poll cursor starts here.
 		const startSeq = this.lastFrameSeq;
 		await this.page.fill('[data-testid="acp-input"]', JSON.stringify(body));
 		await this.page.click('[data-testid="acp-submit"]');
 
-		const isStreaming = STREAMING_METHODS.has(method);
-		const rpcId = String(id);
-		return await this.pollForResponse({ rpcId, method, startSeq, isStreaming });
+		return await this.pollForResponse({ method, startSeq });
 	}
 
-	private async pollForResponse(opts: {
-		rpcId: string;
-		method: string;
-		startSeq: number;
-		isStreaming: boolean;
-	}): Promise<unknown> {
+	private async pollForResponse(opts: { method: string; startSeq: number }): Promise<unknown> {
 		const deadline = Date.now() + 60_000;
 		let cursor = opts.startSeq;
 		while (Date.now() < deadline) {
@@ -143,7 +137,7 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 			for (const f of frames) {
 				cursor = f.seq;
 				if (f.direction !== "in") continue;
-				if (f.kind === "notification" && opts.isStreaming) {
+				if (f.kind === "notification") {
 					try {
 						const body = JSON.parse(f.payload) as { method?: string; params?: unknown };
 						if (body.method === "session/update" && body.params) {
@@ -156,7 +150,8 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 					}
 					continue;
 				}
-				if (f.kind === "response" && f.rpcId === opts.rpcId) {
+				if (f.kind === "response") {
+					this.lastFrameSeq = cursor;
 					try {
 						const body = JSON.parse(f.payload) as {
 							result?: unknown;
@@ -175,7 +170,7 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 			this.lastFrameSeq = cursor;
 			await this.page.waitForTimeout(25);
 		}
-		throw new Error(`browser-connection: timed out waiting for response to ${opts.method} (rpcId=${opts.rpcId})`);
+		throw new Error(`browser-connection: timed out waiting for response to ${opts.method}`);
 	}
 
 	private async readNewFrames(cursor: number): Promise<{ frames: FrameSnapshot[]; events: EventSnapshot[] }> {

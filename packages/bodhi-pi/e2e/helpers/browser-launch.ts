@@ -57,6 +57,23 @@ export async function launchHarnessContext(opts: LaunchHarnessContextOptions): P
 	const browser = await ensureSharedBrowser();
 	const context = await browser.newContext();
 	const page = await context.newPage();
+	// Surface page console + errors to stderr so flaky-page failures don't
+	// hide behind silent test timeouts. The `BODHI_PI_E2E_BROWSER_DEBUG` env
+	// flag toggles routine logs; errors always surface.
+	const debug = process.env.BODHI_PI_E2E_BROWSER_DEBUG === "1";
+	page.on("console", (msg) => {
+		if (debug || msg.type() === "error" || msg.type() === "warning" || msg.type() === "log") {
+			process.stderr.write(`[page ${msg.type()}] ${msg.text()}\n`);
+		}
+	});
+	page.on("pageerror", (err) => {
+		process.stderr.write(`[page error] ${err.message}\n${err.stack ?? ""}\n`);
+	});
+	page.on("response", (res) => {
+		if (res.status() >= 400) {
+			process.stderr.write(`[page response] ${res.status()} ${res.url()}\n`);
+		}
+	});
 	await page.goto(opts.baseUrl, { waitUntil: "domcontentloaded" });
 	await page.waitForSelector('[data-testid="test-app-root"][data-test-state="needs-init"]');
 

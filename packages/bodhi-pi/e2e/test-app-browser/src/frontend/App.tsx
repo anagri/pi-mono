@@ -39,10 +39,7 @@ export function App() {
 	const workerRef = useRef<Worker | null>(null);
 
 	const pushFrame = useCallback((f: Omit<FrameEntry, "seq">) => {
-		setFrames((prev) => {
-			const seq = prev.length + 1;
-			return [...prev, { ...f, seq }];
-		});
+		setFrames((prev) => [...prev, { ...f, seq: prev.length + 1 }]);
 		seqRef.current += 1;
 	}, []);
 
@@ -250,11 +247,43 @@ export function App() {
 			setState("streaming");
 		}
 		try {
-			// Generic dispatch — relies on ACP SDK's `connection.sendRequest` for
-			// any method. The ClientSideConnection exposes typed methods, but
-			// for the harness we want fully-passthrough behavior.
-			// biome-ignore lint/suspicious/noExplicitAny: dispatch shim
-			const result = await (conn as any).sendRequest(method, params ?? null);
+			// Dispatch by method. Use the typed ACP SDK methods for known ones
+			// and `extMethod` for everything else (the bodhi-pi extension space:
+			// `_bodhi-pi/kv/*`, `_bodhi-pi/session/*`, etc.).
+			// biome-ignore lint/suspicious/noExplicitAny: method dispatch
+			const c = conn as any;
+			let result: unknown;
+			switch (method) {
+				case "initialize":
+					result = await c.initialize(params);
+					break;
+				case "session/new":
+					result = await c.newSession(params);
+					break;
+				case "session/load":
+					result = await c.loadSession(params);
+					break;
+				case "session/resume":
+					result = await c.resumeSession(params);
+					break;
+				case "session/list":
+					result = await c.listSessions(params);
+					break;
+				case "session/close":
+					result = await c.closeSession(params);
+					break;
+				case "session/prompt":
+					result = await c.prompt(params);
+					break;
+				case "session/setSessionConfigOption":
+					result = await c.setSessionConfigOption(params);
+					break;
+				case "session/cancel":
+					result = await c.cancel(params);
+					break;
+				default:
+					result = await c.extMethod(method, params ?? {});
+			}
 			// Track active session id from new/load/resume responses.
 			if ((method === "session/new" || method === "session/load" || method === "session/resume") && result && typeof result === "object") {
 				const r = result as { sessionId?: string };
@@ -284,9 +313,8 @@ export function App() {
 		const conn = connRef.current;
 		if (!sessionId || !conn) return;
 		try {
-			// session/cancel is a notification under ACP — fire and forget.
-			// biome-ignore lint/suspicious/noExplicitAny: dispatch shim
-			await (conn as any).sendNotification("session/cancel", { sessionId });
+			// biome-ignore lint/suspicious/noExplicitAny: cancel signature
+			await (conn as any).cancel({ sessionId });
 		} catch {
 			// best-effort
 		}
