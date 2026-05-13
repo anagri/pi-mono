@@ -229,17 +229,17 @@ async function createHttpHarness(_opts: E2EHarnessOptions): Promise<E2EHarness> 
 	await fs.mkdir(cwd, { recursive: true });
 
 	const updates: SessionNotification[] = [];
+	const events: BodhiPiEvent[] = [];
 	const clientConn = new HttpAcpConnection({
 		baseUrl,
 		token,
 		onUpdate: (n) => updates.push(n),
+		onLifecycleEvent: (e) => events.push(e),
 	});
 
 	const filesystem = createNodeFilesystem({ rootCwd: cwd });
 	const sessionStore = createInMemorySessionStore();
 	const kvStore = createInMemoryKvStore();
-
-	const events: BodhiPiEvent[] = [];
 
 	const cleanup = async () => {
 		// Server stays up (global-setup teardown shuts it down). Only the per-user

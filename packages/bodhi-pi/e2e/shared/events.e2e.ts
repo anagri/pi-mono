@@ -14,8 +14,9 @@ import { expectSubsequence } from "../helpers/events-assert.js";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 import { isRuntime } from "../helpers/runtime.js";
 
-// Phase 1: in-memory only. Phase 2 widens to http; phase 3 drops the guard.
-const guard = isRuntime("in-memory");
+// Phase 2: in-memory + http. Phase 3 will drop the guard entirely once cli
+// has a stderr-based event channel.
+const guard = !isRuntime("cli");
 
 let activeHarness: E2EHarness | undefined;
 

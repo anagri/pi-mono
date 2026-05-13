@@ -15,12 +15,16 @@ import type {
 	SetSessionConfigOptionRequest,
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
-import type { BodhiPiAcpConnection } from "@/index.js";
+import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
+
+const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 export interface HttpConnectionOptions {
 	baseUrl: string;
 	token: string;
 	onUpdate: (notif: SessionNotification) => void;
+	/** Receives every `_bodhi-pi/lifecycle/event` notification frame from the SSE stream. */
+	onLifecycleEvent?: (ev: BodhiPiEvent) => void;
 }
 
 const SSE_METHODS = new Set(["session/prompt", "session/load"]);
@@ -33,11 +37,13 @@ export class HttpAcpConnection implements BodhiPiAcpConnection {
 	private readonly baseUrl: string;
 	private readonly token: string;
 	private readonly onUpdate: (notif: SessionNotification) => void;
+	private readonly onLifecycleEvent: ((ev: BodhiPiEvent) => void) | undefined;
 
 	constructor(opts: HttpConnectionOptions) {
 		this.baseUrl = opts.baseUrl;
 		this.token = opts.token;
 		this.onUpdate = opts.onUpdate;
+		this.onLifecycleEvent = opts.onLifecycleEvent;
 	}
 
 	initialize(params: InitializeRequest): Promise<InitializeResponse> {
@@ -114,6 +120,8 @@ export class HttpAcpConnection implements BodhiPiAcpConnection {
 			if (typeof f.method === "string") {
 				if (f.method === "session/update" && f.params) {
 					this.onUpdate(f.params as SessionNotification);
+				} else if (f.method === LIFECYCLE_EVENT_METHOD && f.params && this.onLifecycleEvent) {
+					this.onLifecycleEvent(f.params as BodhiPiEvent);
 				}
 			} else if ("error" in f && f.error) {
 				throw new Error(`RPC error ${f.error.code}: ${f.error.message}`);

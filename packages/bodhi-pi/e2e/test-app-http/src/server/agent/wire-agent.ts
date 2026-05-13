@@ -37,51 +37,20 @@ export interface WireAgentResult {
 /** ACP extension method that forwards bodhi-pi lifecycle events to the client. */
 export const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
-export interface LifecycleEventRecord {
-	type: BodhiPiEvent["type"];
-	sessionId?: string;
-	toolName?: string;
-	userPrompt?: string;
-	stopReason?: string;
-	/** `null` when the previous model was unset; distinct from `undefined` (= field N/A). */
-	fromModelId?: string | null;
-	toModelId?: string;
-}
-
-function recordFor(event: BodhiPiEvent): LifecycleEventRecord {
-	const record: LifecycleEventRecord = { type: event.type };
-	if ("sessionId" in event && event.sessionId) record.sessionId = event.sessionId;
-	if (
-		event.type === "tool_call" ||
-		event.type === "tool_result" ||
-		event.type === "tool_execution_start" ||
-		event.type === "tool_execution_update" ||
-		event.type === "tool_execution_end"
-	) {
-		record.toolName = event.toolName;
-	}
-	if (event.type === "agent_start") record.userPrompt = event.userPrompt;
-	if (event.type === "agent_end" && event.stopReason !== undefined) record.stopReason = event.stopReason;
-	if (event.type === "model_select") {
-		record.fromModelId = event.fromModelId;
-		record.toModelId = event.toModelId;
-	}
-	return record;
-}
-
 /**
- * Forwards every BodhiPiEvent to the client via `extNotification`. Fire-and-forget;
- * lifecycle delivery must never block agent execution.
+ * Forwards every BodhiPiEvent — full payload, all 25 types — to the client via
+ * `extNotification`. Fire-and-forget; lifecycle delivery must never block agent
+ * execution. Returns `undefined` from mutable hooks so the agent keeps its
+ * original payload (the test-app observes; it does not mutate).
  *
- * In the HTTP host, `extNotification` reaches the client only during SSE methods
- * (`session/prompt`, `session/load`) where the response stream is open. JSON-method
- * calls don't emit lifecycle events anyway, so this matches what ws-server does.
+ * Diverges from production `bodhi-pi-http` deliberately: production downsamples
+ * to `LifecycleEventRecord` and only covers 19 of 25 types; the test-app needs
+ * full visibility for e2e assertions (sequence + payload-field correctness).
  */
 function eventForwardingHandlers(conn: AgentSideConnection): BodhiPiEventHandlers {
 	const post = (event: BodhiPiEvent): undefined => {
-		const record = recordFor(event);
-		void conn.extNotification(LIFECYCLE_EVENT_METHOD, record as unknown as Record<string, unknown>).catch((err) => {
-			console.error("[bodhi-pi-http] lifecycle forward failed:", err);
+		void conn.extNotification(LIFECYCLE_EVENT_METHOD, event as unknown as Record<string, unknown>).catch((err) => {
+			console.error("[bodhi-pi-test-app-http] lifecycle forward failed:", err);
 		});
 		return undefined;
 	};
@@ -105,6 +74,14 @@ function eventForwardingHandlers(conn: AgentSideConnection): BodhiPiEventHandler
 		tool_call: [post],
 		tool_result: [post],
 		model_select: [post],
+		auth_change: [post],
+		settings_change: [post],
+		compaction_start: [post],
+		compaction_end: [post],
+		branch_summary_created: [post],
+		session_navigate: [post],
+		session_fork: [post],
+		session_clone: [post],
 	};
 }
 
