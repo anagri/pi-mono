@@ -110,6 +110,7 @@ export async function createE2EHarness(opts: E2EHarnessOptions): Promise<E2EHarn
 	if (runtime === "http") return createHttpHarness(opts);
 	if (runtime === "ws") return createWsHarness(opts);
 	if (runtime === "browser") return createBrowserHarness(opts);
+	if (runtime === "chrome-ext") return createChromeExtHarness(opts);
 	throw new Error(`createE2EHarness: runtime '${runtime}' not yet supported`);
 }
 
@@ -608,6 +609,184 @@ async function createBrowserHarness(opts: E2EHarnessOptions): Promise<E2EHarness
 	// the real backing store lives inside the in-page Dexie. Tests assert at
 	// the protocol level (extMethod for kv, listSessions for sessions), not
 	// against these stubs.
+	const sessionStore = createInMemorySessionStore();
+	const kvStore = createInMemoryKvStore();
+
+	const cleanup = async () => {
+		if (handle) {
+			await handle.close();
+			handle = null;
+		}
+	};
+
+	return {
+		clientConn,
+		client: createBodhiPiClient(clientConn, { cwd }),
+		updates,
+		events,
+		flushEvents: () => waitForAgentEndBalance(events),
+		filesystem,
+		setupFiles,
+		sessionStore,
+		kvStore,
+		cwd,
+		cleanup,
+	};
+}
+
+async function createChromeExtHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
+	const { BrowserAcpConnection } = await import("./browser-connection.js");
+	const { createBrowserFilesystem } = await import("./browser-filesystem.js");
+	const { launchChromeExtHarnessPage } = await import("./chrome-ext-launch.js");
+
+	const baseUrl = process.env.BODHI_PI_E2E_CHROME_EXT_BASE_URL;
+	if (!baseUrl) {
+		throw new Error(
+			"chrome-ext harness: BODHI_PI_E2E_CHROME_EXT_BASE_URL not set. The persistent Chromium context with the unpacked extension must be launched by e2e/global-setup.ts before tests run.",
+		);
+	}
+
+	const userId = String(Math.floor(Math.random() * 0x7fff_ffff));
+	const userEmail = `test-${userId}@example.com`;
+	// Mirrors the browser runtime — `/mnt/test-workspace` is the in-page
+	// InMemory ZenFS mount root. The shared test-app frontend is copied
+	// from test-app-browser, so the workspace path is identical.
+	const cwd = "/mnt/test-workspace";
+
+	const stagedFiles: Record<string, string> = {};
+	if (opts.bodhiPiFixture) {
+		Object.assign(
+			stagedFiles,
+			await loadFixtureSeedFiles(opts.bodhiPiFixture, {
+				...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
+			}),
+		);
+	}
+	const updates: SessionNotification[] = [];
+	const events: BodhiPiEvent[] = [];
+
+	const apiKeys: Record<string, string> = {};
+	if (opts.getApiKey) {
+		const providers = new Set<string>();
+		for (const m of opts.models) providers.add(m.provider);
+		for (const p of providers) {
+			const k = opts.getApiKey(p);
+			if (k) apiKeys[p] = k;
+		}
+	}
+
+	type LaunchHandle = {
+		page: import("playwright").Page;
+		close: () => Promise<void>;
+		conn: InstanceType<typeof BrowserAcpConnection>;
+	};
+	let handle: LaunchHandle | null = null;
+
+	async function ensureLaunched(): Promise<LaunchHandle> {
+		if (handle) return handle;
+		const ctx = await launchChromeExtHarnessPage({
+			baseUrl: baseUrl as string,
+			userId,
+			userEmail,
+			seedFiles: stagedFiles,
+			models: opts.models,
+			defaultModelId: opts.defaultModelId,
+			apiKeys,
+			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
+			...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
+		});
+		const conn = new BrowserAcpConnection({
+			page: ctx.page,
+			onUpdate: (n) => updates.push(n),
+			onLifecycleEvent: (e) => events.push(e),
+		});
+		handle = { page: ctx.page, close: ctx.close, conn };
+		return handle;
+	}
+
+	const clientConn: BodhiPiAcpConnection = {
+		async initialize(params) {
+			const { conn } = await ensureLaunched();
+			return conn.initialize(params);
+		},
+		async newSession(params) {
+			const { conn } = await ensureLaunched();
+			return conn.newSession(params);
+		},
+		async loadSession(params) {
+			const { conn } = await ensureLaunched();
+			return conn.loadSession(params);
+		},
+		async resumeSession(params) {
+			const { conn } = await ensureLaunched();
+			return conn.resumeSession(params);
+		},
+		async listSessions(params) {
+			const { conn } = await ensureLaunched();
+			return conn.listSessions(params);
+		},
+		async closeSession(params) {
+			const { conn } = await ensureLaunched();
+			return conn.closeSession(params);
+		},
+		async setSessionConfigOption(params) {
+			const { conn } = await ensureLaunched();
+			return conn.setSessionConfigOption(params);
+		},
+		async prompt(params) {
+			const { conn } = await ensureLaunched();
+			return conn.prompt(params);
+		},
+		async cancel(params) {
+			const { conn } = await ensureLaunched();
+			return conn.cancel(params);
+		},
+		async extMethod(method, params) {
+			const { conn } = await ensureLaunched();
+			return conn.extMethod(method, params);
+		},
+	};
+
+	const filesystem: Filesystem = {
+		async readTextFile(p) {
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page }).readTextFile(p);
+		},
+		async exists(p) {
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page }).exists(p);
+		},
+		async writeTextFile() {
+			throw new Error(
+				"e2e chrome-ext harness: filesystem.writeTextFile() is disabled. Use h.setupFiles({...}) before clientConn.initialize().",
+			);
+		},
+		async mkdir() {
+			throw new Error(
+				"e2e chrome-ext harness: filesystem.mkdir() is disabled. Use h.setupFiles({...}) before clientConn.initialize().",
+			);
+		},
+		async list() {
+			throw new Error("e2e chrome-ext harness: filesystem.list() is disabled.");
+		},
+		async stat() {
+			throw new Error("e2e chrome-ext harness: filesystem.stat() is disabled.");
+		},
+		async remove() {
+			throw new Error("e2e chrome-ext harness: filesystem.remove() is disabled.");
+		},
+	};
+
+	const setupFiles = async (files: Record<string, string>): Promise<void> => {
+		if (handle) {
+			throw new Error("h.setupFiles must be called BEFORE clientConn.initialize() under the chrome-ext runtime");
+		}
+		for (const [k, v] of Object.entries(files)) {
+			stagedFiles[k] = v;
+		}
+	};
+
 	const sessionStore = createInMemorySessionStore();
 	const kvStore = createInMemoryKvStore();
 
