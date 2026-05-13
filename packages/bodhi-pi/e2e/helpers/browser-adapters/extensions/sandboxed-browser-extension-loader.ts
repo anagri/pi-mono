@@ -1,4 +1,6 @@
-// ported from packages/bodhi-pi-browser/src/extensions/sandboxed-browser-extension-loader.ts
+// ported from packages/bodhi-pi-browser/src/extensions/sandboxed-browser-extension-loader.ts —
+// extended with tools/commands/providers proxies (the e2e variant has a
+// widened sandbox-bridge surface; see sandbox/sandbox-bridge.ts).
 
 import type {
 	BodhiPiEvent,
@@ -8,6 +10,8 @@ import type {
 	Filesystem,
 	RegisteredExtension,
 } from "@bodhiapp/bodhi-pi";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import type { TSchema } from "typebox";
 import type { SandboxBridge } from "../sandbox/sandbox-bridge.js";
 
 export interface SandboxedExtensionLoaderOptions {
@@ -27,12 +31,9 @@ function joinPosix(...parts: string[]): string {
  * Sandbox-bridge counterpart to `createBrowserExtensionLoader`. Reads
  * extension source from the filesystem, ships it to a sandboxed iframe for
  * dynamic evaluation, and returns `RegisteredExtension`s whose factories
- * re-attach `pi.on` handlers that round-trip back to the sandbox.
- *
- * `pi.on` is the only `ExtensionAPI` surface proxied today — the redact-
- * secrets extension and our existing tests need nothing more. Other surfaces
- * (`registerTool`, `registerCommand`, `registerProvider`, `events`, …) throw
- * inside the sandbox so a misuse surfaces during load rather than silently.
+ * re-attach `pi.on` / `pi.registerTool` / `pi.registerCommand` /
+ * `pi.registerProvider` registrations as proxies that round-trip the
+ * callbacks back to the sandbox.
  */
 export async function createSandboxedBrowserExtensionLoader(
 	opts: SandboxedExtensionLoaderOptions,
@@ -67,14 +68,40 @@ export async function createSandboxedBrowserExtensionLoader(
 		const filePath = joinPosix(dir, file.name);
 		try {
 			const source = await opts.filesystem.readTextFile(filePath);
-			const { registrations } = await opts.bridge.loadExtension(source);
+			const load = await opts.bridge.loadExtension(source);
 			seen.add(baseName);
 			const factory: ExtensionFactory = async (pi: ExtensionAPI) => {
-				for (const reg of registrations) {
+				for (const reg of load.registrations) {
 					const eventType = reg.eventType as BodhiPiEventType;
 					pi.on(eventType, async (event: BodhiPiEvent) => {
 						const result = await opts.bridge.invokeHandler(reg.handlerId, sanitizeEvent(event));
 						return result as never;
+					});
+				}
+				for (const tool of load.tools) {
+					pi.registerTool({
+						name: tool.name,
+						description: tool.description,
+						parameters: tool.parameters as TSchema,
+						execute: async (toolCallId, params) => {
+							const r = await opts.bridge.invokeTool(tool.toolId, toolCallId, sanitizeEvent(params));
+							return r as never;
+						},
+					});
+				}
+				for (const cmd of load.commands) {
+					pi.registerCommand(cmd.name, {
+						description: cmd.description,
+						template: cmd.template,
+						...(cmd.argumentHint !== undefined ? { argumentHint: cmd.argumentHint } : {}),
+					});
+				}
+				for (const prov of load.providers) {
+					pi.registerProvider(prov.name, {
+						model: prov.model as Model<Api>,
+						...(prov.hasGetApiKey
+							? { getApiKey: (p: string) => opts.bridge.getProviderApiKey(prov.providerId, p) }
+							: {}),
 					});
 				}
 			};
@@ -89,9 +116,9 @@ export async function createSandboxedBrowserExtensionLoader(
 
 /**
  * Strip non-cloneable members (functions, AbortSignal, etc.) before sending
- * the event to the sandbox via `postMessage`. We pass it through `JSON` to
- * coerce to a structured-cloneable plain shape; extension handlers that
- * stick to data fields (like redact-secrets) work unchanged.
+ * over `postMessage`. We pass through `JSON` to coerce to a structured-
+ * cloneable plain shape; extension handlers/tools that stick to data fields
+ * work unchanged.
  */
 function sanitizeEvent(event: unknown): unknown {
 	try {

@@ -1,10 +1,14 @@
-// ported from packages/bodhi-pi-chrome-ext/src/sandbox/sandbox.ts
+// ported from packages/bodhi-pi-chrome-ext/src/sandbox/sandbox.ts —
+// extended with registerTool / registerCommand / registerProvider proxies
+// (the e2e bridge surface is wider than production chrome-ext today so the
+// shared extensions.e2e.ts suite can run end-to-end under MV3 CSP).
 
 /**
  * Sandbox iframe entrypoint for the chrome-extension host. Receives a
  * MessagePort from the parent and services `load-extension`,
- * `invoke-handler`, and `run-script` requests issued by the agent worker.
- * MV3 extension pages forbid `unsafe-eval`; this sandboxed page does not.
+ * `invoke-handler`, `invoke-tool`, `get-provider-api-key`, and `run-script`
+ * requests issued by the agent worker. MV3 extension pages forbid
+ * `unsafe-eval`; this sandboxed page does not.
  */
 
 interface ConnectMessage {
@@ -29,9 +33,49 @@ const AsyncFunctionCtor = Object.getPrototypeOf(async () => {}).constructor as n
 	...args: string[]
 ) => (...args: unknown[]) => Promise<unknown>;
 
+interface EventReg {
+	handlerId: string;
+	eventType: string;
+}
+
+interface ToolReg {
+	toolId: string;
+	name: string;
+	description: string;
+	parameters: unknown;
+}
+
+interface CommandReg {
+	commandId: string;
+	name: string;
+	description: string;
+	argumentHint?: string;
+	template: string;
+}
+
+interface ProviderReg {
+	providerId: string;
+	name: string;
+	model: unknown;
+	hasGetApiKey: boolean;
+}
+
+interface ToolDef {
+	execute: (toolCallId: string, params: unknown) => unknown | Promise<unknown>;
+}
+
+interface ProviderDef {
+	getApiKey?: (provider: string) => string | undefined | Promise<string | undefined>;
+}
+
 let port: MessagePort | null = null;
 const handlers = new Map<string, (event: unknown) => unknown | Promise<unknown>>();
+const tools = new Map<string, ToolDef>();
+const providers = new Map<string, ProviderDef>();
 let nextHandlerId = 1;
+let nextToolId = 1;
+let nextCommandId = 1;
+let nextProviderId = 1;
 
 window.addEventListener("message", (ev: MessageEvent<ConnectMessage>) => {
 	if (ev.data?.type !== "connect") return;
@@ -58,24 +102,66 @@ function fmt(value: unknown): string {
 	}
 }
 
-function makePiProxy(registrations: { handlerId: string; eventType: string }[]) {
+interface CollectedRegistrations {
+	events: EventReg[];
+	tools: ToolReg[];
+	commands: CommandReg[];
+	providers: ProviderReg[];
+}
+
+function makePiProxy(collected: CollectedRegistrations) {
 	return {
 		on(type: string, handler: (event: unknown) => unknown | Promise<unknown>) {
 			const handlerId = `h${nextHandlerId++}`;
 			handlers.set(handlerId, handler);
-			registrations.push({ handlerId, eventType: type });
+			collected.events.push({ handlerId, eventType: type });
 			return () => {
 				handlers.delete(handlerId);
 			};
 		},
-		registerTool(): () => void {
-			throw new Error("registerTool is not supported in MV3 sandbox extensions yet");
+		registerTool(def: {
+			name: string;
+			description: string;
+			parameters: unknown;
+			execute: (toolCallId: string, params: unknown) => unknown | Promise<unknown>;
+		}): () => void {
+			const toolId = `t${nextToolId++}`;
+			tools.set(toolId, { execute: def.execute });
+			collected.tools.push({
+				toolId,
+				name: def.name,
+				description: def.description,
+				parameters: def.parameters,
+			});
+			return () => {
+				tools.delete(toolId);
+			};
 		},
-		registerCommand(): () => void {
-			throw new Error("registerCommand is not supported in MV3 sandbox extensions yet");
+		registerCommand(name: string, def: { description: string; argumentHint?: string; template: string }): () => void {
+			const commandId = `c${nextCommandId++}`;
+			collected.commands.push({
+				commandId,
+				name,
+				description: def.description,
+				...(def.argumentHint !== undefined ? { argumentHint: def.argumentHint } : {}),
+				template: def.template,
+			});
+			return () => {
+				// no-op: the worker side owns the registry; un-register is best-effort
+			};
 		},
-		registerProvider(): () => void {
-			throw new Error("registerProvider is not supported in MV3 sandbox extensions yet");
+		registerProvider(name: string, config: { model: unknown; getApiKey?: (p: string) => unknown }): () => void {
+			const providerId = `p${nextProviderId++}`;
+			providers.set(providerId, { getApiKey: config.getApiKey as ProviderDef["getApiKey"] });
+			collected.providers.push({
+				providerId,
+				name,
+				model: config.model,
+				hasGetApiKey: typeof config.getApiKey === "function",
+			});
+			return () => {
+				providers.delete(providerId);
+			};
 		},
 		events: {
 			emit() {},
@@ -85,6 +171,7 @@ function makePiProxy(registrations: { handlerId: string; eventType: string }[]) 
 		},
 		appendEntry: async () => {},
 		sendMessage: async () => {},
+		requestSlashableRefresh: async () => {},
 	};
 }
 
@@ -104,9 +191,18 @@ async function onPortMessage(ev: MessageEvent<RpcRequest>): Promise<void> {
 				send({ id: msg.id, ok: false, error: "default export is not a function" });
 				return;
 			}
-			const registrations: { handlerId: string; eventType: string }[] = [];
-			await (factory as (pi: unknown) => unknown)(makePiProxy(registrations));
-			send({ id: msg.id, ok: true, result: { registrations } });
+			const collected: CollectedRegistrations = { events: [], tools: [], commands: [], providers: [] };
+			await (factory as (pi: unknown) => unknown)(makePiProxy(collected));
+			send({
+				id: msg.id,
+				ok: true,
+				result: {
+					registrations: collected.events,
+					tools: collected.tools,
+					commands: collected.commands,
+					providers: collected.providers,
+				},
+			});
 		} catch (err) {
 			send({ id: msg.id, ok: false, error: errorString(err) });
 		}
@@ -124,6 +220,41 @@ async function onPortMessage(ev: MessageEvent<RpcRequest>): Promise<void> {
 		try {
 			const result = await handler(event);
 			send({ id: msg.id, ok: true, result });
+		} catch (err) {
+			send({ id: msg.id, ok: false, error: errorString(err) });
+		}
+		return;
+	}
+
+	if (msg.type === "invoke-tool") {
+		const toolId = msg.toolId as string;
+		const callId = msg.callId as string;
+		const params = msg.params;
+		const tool = tools.get(toolId);
+		if (!tool) {
+			send({ id: msg.id, ok: false, error: `unknown toolId ${toolId}` });
+			return;
+		}
+		try {
+			const result = await tool.execute(callId, params);
+			send({ id: msg.id, ok: true, result });
+		} catch (err) {
+			send({ id: msg.id, ok: false, error: errorString(err) });
+		}
+		return;
+	}
+
+	if (msg.type === "get-provider-api-key") {
+		const providerId = msg.providerId as string;
+		const provider = msg.provider as string;
+		const prov = providers.get(providerId);
+		if (!prov || !prov.getApiKey) {
+			send({ id: msg.id, ok: true, result: undefined });
+			return;
+		}
+		try {
+			const key = await prov.getApiKey(provider);
+			send({ id: msg.id, ok: true, result: key });
 		} catch (err) {
 			send({ id: msg.id, ok: false, error: errorString(err) });
 		}

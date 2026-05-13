@@ -1,4 +1,8 @@
-// ported from packages/bodhi-pi-browser/src/sandbox/sandbox-bridge.ts
+// ported from packages/bodhi-pi-browser/src/sandbox/sandbox-bridge.ts —
+// extended (vs production) with tools/commands/providers RPC surfaces so the
+// shared extensions.e2e.ts test (which exercises registerTool + register-
+// Provider) can run under chrome-ext. Production bodhi-pi-chrome-ext only
+// proxies pi.on today; the e2e port widens the surface.
 
 /**
  * Request/reply RPC over a `MessagePort` connecting the bodhi-pi worker to a
@@ -7,14 +11,11 @@
  *
  * Wire shape (worker → sandbox):
  *   { id, type: "load-extension", code }
- *     → { id, ok: true,  result: { registrations: [{ handlerId, eventType }] } }
- *     | { id, ok: false, error }
+ *     → { id, ok, result: { registrations, tools, commands, providers } }
  *   { id, type: "invoke-handler", handlerId, event }
- *     → { id, ok: true,  result }
- *     | { id, ok: false, error }
+ *   { id, type: "invoke-tool", toolId, callId, params }
+ *   { id, type: "get-provider-api-key", providerId, provider }
  *   { id, type: "run-script", code, args, cwd, timeout }
- *     → { id, ok: true,  result: { stdout, stderr, exitCode } }
- *     | { id, ok: false, error }
  */
 
 export interface ExtensionRegistration {
@@ -22,8 +23,33 @@ export interface ExtensionRegistration {
 	eventType: string;
 }
 
+export interface ToolRegistration {
+	toolId: string;
+	name: string;
+	description: string;
+	parameters: unknown;
+}
+
+export interface CommandRegistration {
+	commandId: string;
+	name: string;
+	description: string;
+	argumentHint?: string;
+	template: string;
+}
+
+export interface ProviderRegistration {
+	providerId: string;
+	name: string;
+	model: unknown;
+	hasGetApiKey: boolean;
+}
+
 export interface ExtensionLoadResult {
 	registrations: ExtensionRegistration[];
+	tools: ToolRegistration[];
+	commands: CommandRegistration[];
+	providers: ProviderRegistration[];
 }
 
 export interface ScriptResult {
@@ -35,6 +61,8 @@ export interface ScriptResult {
 export interface SandboxBridge {
 	loadExtension(code: string): Promise<ExtensionLoadResult>;
 	invokeHandler(handlerId: string, event: unknown): Promise<unknown>;
+	invokeTool(toolId: string, callId: string, params: unknown): Promise<unknown>;
+	getProviderApiKey(providerId: string, provider: string): Promise<string | undefined>;
 	runScript(req: { code: string; args: string[]; cwd: string; timeout?: number }): Promise<ScriptResult>;
 	dispose(): void;
 }
@@ -73,6 +101,12 @@ export function createSandboxBridge(port: MessagePort): SandboxBridge {
 		},
 		invokeHandler(handlerId, event) {
 			return call<unknown>("invoke-handler", { handlerId, event });
+		},
+		invokeTool(toolId, callId, params) {
+			return call<unknown>("invoke-tool", { toolId, callId, params });
+		},
+		getProviderApiKey(providerId, provider) {
+			return call<string | undefined>("get-provider-api-key", { providerId, provider });
 		},
 		runScript(req) {
 			return call<ScriptResult>("run-script", {
