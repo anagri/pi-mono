@@ -21,6 +21,14 @@ export default defineConfig({
 	plugins: base.plugins,
 	resolve: base.resolve,
 	test: {
+		// Cap parallel test files across all 6 projects. Each fork can hit
+		// Anthropic Haiku (chat / fs / sessions / extensions / compaction);
+		// the org rate limit is 50,000 input tokens/min. With 6 projects the
+		// default fork count overruns that limit. 3 keeps us safely under
+		// while preserving most of the parallelism win.
+		poolOptions: {
+			forks: { maxForks: 3, minForks: 1 },
+		},
 		projects: [
 			{
 				plugins: base.plugins,
