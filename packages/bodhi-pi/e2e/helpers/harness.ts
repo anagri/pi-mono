@@ -2,6 +2,7 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import readline from "node:readline";
 import type { Readable as NodeReadable, Writable as NodeWritable } from "node:stream";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -156,14 +157,37 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	];
 	if (modelsArg) args.push("--models", modelsArg);
 
-	const child: ChildProcessByStdio<NodeWritable, NodeReadable, null> = spawn("node", args, {
-		stdio: ["pipe", "pipe", "inherit"],
+	const child: ChildProcessByStdio<NodeWritable, NodeReadable, NodeReadable> = spawn("node", args, {
+		stdio: ["pipe", "pipe", "pipe"],
 		env: { ...process.env, HOME: homeDir },
 	});
 
 	const input = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
 	const output = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
 	const stream: Stream = ndJsonStream(input, output);
+
+	// Stderr is the event channel under --rpc: one JSON-RPC notification per
+	// line (`_bodhi-pi/lifecycle/event`). Non-matching lines are forwarded so
+	// genuine diagnostic output still surfaces in the test runner.
+	const events: BodhiPiEvent[] = [];
+	const stderrReader = readline.createInterface({ input: child.stderr });
+	stderrReader.on("line", (line) => {
+		const trimmed = line.trim();
+		if (!trimmed.startsWith("{")) {
+			if (trimmed.length > 0) process.stderr.write(`${line}\n`);
+			return;
+		}
+		try {
+			const frame = JSON.parse(trimmed) as { method?: string; params?: unknown };
+			if (frame.method === "_bodhi-pi/lifecycle/event" && frame.params && typeof frame.params === "object") {
+				events.push(frame.params as BodhiPiEvent);
+				return;
+			}
+		} catch {
+			// Not a JSON-RPC frame — fall through and forward verbatim.
+		}
+		process.stderr.write(`${line}\n`);
+	});
 
 	const updates: SessionNotification[] = [];
 	const clientConn = new ClientSideConnection(
@@ -182,9 +206,8 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	void kvDir;
 	void dbPath;
 
-	const events: BodhiPiEvent[] = [];
-
 	const cleanup = async () => {
+		stderrReader.close();
 		try {
 			child.kill("SIGTERM");
 		} catch {

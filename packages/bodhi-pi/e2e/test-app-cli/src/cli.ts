@@ -2,12 +2,62 @@
 import os from "node:os";
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
 import { createNodeExtensionLoader } from "@e2e/helpers/node-adapters/index.js";
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";
 import { runHeadless } from "./repl/headless.js";
 import { runRepl } from "./repl/repl.js";
+
+const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
+const ALL_EVENT_TYPES = [
+	"session_start",
+	"session_shutdown",
+	"agent_start",
+	"agent_end",
+	"turn_start",
+	"turn_end",
+	"message_start",
+	"message_update",
+	"message_end",
+	"tool_execution_start",
+	"tool_execution_update",
+	"tool_execution_end",
+	"input",
+	"before_agent_start",
+	"before_provider_request",
+	"after_provider_response",
+	"tool_call",
+	"tool_result",
+	"model_select",
+	"auth_change",
+	"settings_change",
+	"compaction_start",
+	"compaction_end",
+	"branch_summary_created",
+	"session_navigate",
+	"session_fork",
+	"session_clone",
+] as const;
+
+/**
+ * In `--rpc` mode the spawning harness pipes stderr and parses it as the event
+ * channel. Stdout stays pure ACP. Each event is one JSON-RPC notification per
+ * line — same frame shape as the http SSE channel — so the harness uses one
+ * canonical parser per channel.
+ */
+function buildStderrEventHandlers(): BodhiPiEventHandlers {
+	const post = (event: BodhiPiEvent): undefined => {
+		process.stderr.write(`${JSON.stringify({ jsonrpc: "2.0", method: LIFECYCLE_EVENT_METHOD, params: event })}\n`);
+		return undefined;
+	};
+	const handlers: BodhiPiEventHandlers = {};
+	for (const t of ALL_EVENT_TYPES) {
+		(handlers as Record<string, Array<(e: BodhiPiEvent) => undefined>>)[t] = [post];
+	}
+	return handlers;
+}
 
 const argv = process.argv.slice(2);
 const isRpc = argv.includes("--rpc");
@@ -71,6 +121,11 @@ const cwd = cfg.cwd;
 
 const extensionFactories = cfg.loadExtensions ? await createNodeExtensionLoader({ cwd }) : [];
 
+// In --rpc mode the harness drives this binary over stdio and treats stderr as
+// the event channel; install the stderr writer unless the user explicitly
+// opted in to --debug-events for human-readable diagnostics.
+const eventHandlers = cfg.eventHandlers ?? (isRpc ? buildStderrEventHandlers() : undefined);
+
 const agent = createCliAgent({
 	cwd,
 	dbPath: cfg.dbPath,
@@ -80,7 +135,7 @@ const agent = createCliAgent({
 	...(defaultModelArg !== undefined ? { defaultModelId: defaultModelArg } : {}),
 	...(cfg.systemPrompt !== undefined ? { systemPrompt: cfg.systemPrompt } : {}),
 	...(cfg.appendSystemPrompt !== undefined ? { appendSystemPrompt: cfg.appendSystemPrompt } : {}),
-	...(cfg.eventHandlers ? { eventHandlers: cfg.eventHandlers } : {}),
+	...(eventHandlers ? { eventHandlers } : {}),
 	...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 });
 

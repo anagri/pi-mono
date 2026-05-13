@@ -12,11 +12,6 @@ import type {
 } from "@/index.js";
 import { expectSubsequence } from "../helpers/events-assert.js";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
-import { isRuntime } from "../helpers/runtime.js";
-
-// Phase 2: in-memory + http. Phase 3 will drop the guard entirely once cli
-// has a stderr-based event channel.
-const guard = !isRuntime("cli");
 
 let activeHarness: E2EHarness | undefined;
 
@@ -27,7 +22,7 @@ afterEach(async () => {
 	}
 });
 
-test.runIf(guard)("real LLM (gpt-4o-mini) fires the full event sequence around a single text turn", async () => {
+test("real LLM (gpt-4o-mini) fires the full event sequence around a single text turn", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
@@ -81,7 +76,7 @@ test.runIf(guard)("real LLM (gpt-4o-mini) fires the full event sequence around a
 	expect(res?.status).toBe(200);
 });
 
-test.runIf(guard)("real LLM tool turn (gpt-4o-mini) fires tool_call + tool_execution_* + tool_result", async () => {
+test("real LLM tool turn (gpt-4o-mini) fires tool_call + tool_execution_* + tool_result", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
 	const h = await createE2EHarness({
