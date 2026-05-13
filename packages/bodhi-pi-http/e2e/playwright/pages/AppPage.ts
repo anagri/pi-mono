@@ -106,7 +106,7 @@ export class AppPage {
 
 	async login(provider: string, apiKey: string) {
 		const before = await this.systemMessages().count();
-		await this.send(`/login ${provider} ${apiKey}`);
+		await this.send(`/login ${provider} api_key="${apiKey}"`);
 		await expect(this.systemMessages()).toHaveCount(before + 1);
 		await expect(this.systemMessages().nth(before)).toContainText(`stored auth for ${provider}`);
 	}

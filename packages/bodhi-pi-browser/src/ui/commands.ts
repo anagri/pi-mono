@@ -1,5 +1,5 @@
 import type { AvailableCommand } from "@agentclientprotocol/sdk";
-import type { BodhiPiClient, ModelOption } from "@bodhiapp/bodhi-pi";
+import { type BodhiPiClient, formatProviderAuth, type ModelOption, parseLoginArgs } from "@bodhiapp/bodhi-pi";
 import type { ChatState } from "../store/chatStore";
 
 /**
@@ -79,8 +79,8 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /settings get <key>     [--global|--project|--session]",
 				"  /settings set <key> <value>  [--global|--project|--session]   (default --session)",
 				"  /settings unset <key>   [--global|--project|--session]",
-				"  /login <provider> <api-key>   store an API key (secret)",
-				"  /logout <provider>            remove a stored API key",
+				'  /login <provider> [api_key="..."] [base_url="..."]   store provider auth',
+				"  /logout <provider>            remove stored auth",
 				"  /logins                       list providers with stored auth (masked)",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -467,16 +467,14 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		}
 
 		case "/login": {
-			const provider = parts[1];
-			const apiKey = parts.slice(2).join(" ").trim();
-			if (!provider || !apiKey) {
-				ctx.addSystemMessage("usage: /login <provider> <api-key>");
+			const parsed = parseLoginArgs(parts.slice(1).join(" "));
+			if ("error" in parsed) {
+				ctx.addSystemMessage(parsed.error);
 				return true;
 			}
 			try {
-				await ctx.client.addProvider(provider, apiKey, { sessionId: ctx.state.sessionId });
-				// Picker state refresh arrives via `config_option_update` sessionUpdate.
-				ctx.addSystemMessage(`stored auth for ${provider}`);
+				await ctx.client.addProvider(parsed.provider, parsed.config, { sessionId: ctx.state.sessionId });
+				ctx.addSystemMessage(`stored auth for ${parsed.provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}
@@ -505,7 +503,7 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				if (providers.length === 0) {
 					ctx.addSystemMessage("(no stored auth)");
 				} else {
-					const lines = providers.map((entry) => `  ${entry.provider}: ${entry.value}`);
+					const lines = providers.map((entry) => `  ${entry.provider}: ${formatProviderAuth(entry.config)}`);
 					ctx.addSystemMessage(["stored auth:", ...lines].join("\n"));
 				}
 			} catch (err) {

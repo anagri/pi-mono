@@ -1,5 +1,12 @@
 import type { AvailableCommand, SessionConfigOption } from "@agentclientprotocol/sdk";
-import { type BodhiPiClient, type ModelOption, modelConfigFromOptions, type SessionStore } from "@bodhiapp/bodhi-pi";
+import {
+	type BodhiPiClient,
+	formatProviderAuth,
+	type ModelOption,
+	modelConfigFromOptions,
+	parseLoginArgs,
+	type SessionStore,
+} from "@bodhiapp/bodhi-pi";
 import type { Renderer } from "./render.js";
 
 export interface ReplState {
@@ -82,8 +89,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /settings get <key>     [--global|--project|--session]",
 				"  /settings set <key> <value>  [--global|--project|--session]   (default --session)",
 				"  /settings unset <key>   [--global|--project|--session]",
-				"  /login <provider> <api-key>   store an API key (secret)",
-				"  /logout <provider>            remove a stored API key",
+				'  /login <provider> [api_key="..."] [base_url="..."]   store provider auth',
+				"  /logout <provider>            remove stored auth",
 				"  /logins                       list providers with stored auth (masked)",
 				"  /quit              exit",
 			];
@@ -474,16 +481,14 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 		}
 
 		case "/login": {
-			const provider = parts[1];
-			const apiKey = parts.slice(2).join(" ").trim();
-			if (!provider || !apiKey) {
-				process.stdout.write("usage: /login <provider> <api-key>\n");
+			const parsed = parseLoginArgs(parts.slice(1).join(" "));
+			if ("error" in parsed) {
+				process.stdout.write(`${parsed.error}\n`);
 				return false;
 			}
 			try {
-				await ctx.client.addProvider(provider, apiKey, { sessionId: ctx.state.sessionId });
-				// Picker state refresh arrives via `config_option_update` sessionUpdate.
-				process.stdout.write(`stored auth for ${provider}\n`);
+				await ctx.client.addProvider(parsed.provider, parsed.config, { sessionId: ctx.state.sessionId });
+				process.stdout.write(`stored auth for ${parsed.provider}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}
@@ -513,7 +518,7 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 					process.stdout.write("  (no stored auth)\n");
 				} else {
 					for (const entry of providers) {
-						process.stdout.write(`  ${entry.provider}: ${entry.value}\n`);
+						process.stdout.write(`  ${entry.provider}: ${formatProviderAuth(entry.config)}\n`);
 					}
 				}
 			} catch (err) {

@@ -1,3 +1,4 @@
+import { formatProviderAuth, type ProviderAuth, parseLoginArgs } from "@bodhiapp/bodhi-pi";
 import type { AvailableCommand } from "../hooks/useChat.ts";
 import type { AcpHttpClient } from "../lib/acp-http-client.ts";
 
@@ -78,8 +79,8 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /settings get <key>     [--global|--project|--session]",
 				"  /settings set <key> <value>  [--global|--project|--session]   (default --session)",
 				"  /settings unset <key>   [--global|--project|--session]",
-				"  /login <provider> <api-key>   store an API key (secret)",
-				"  /logout <provider>            remove a stored API key",
+				'  /login <provider> [api_key="..."] [base_url="..."]   store provider auth',
+				"  /logout <provider>            remove stored auth",
 				"  /logins                       list providers with stored auth (masked)",
 			];
 			if (ctx.availableCommands.length > 0) {
@@ -506,21 +507,18 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		}
 
 		case "/login": {
-			const provider = parts[1];
-			const apiKey = parts.slice(2).join(" ").trim();
-			if (!provider || !apiKey) {
-				ctx.addSystemMessage("usage: /login <provider> <api-key>");
+			const parsed = parseLoginArgs(parts.slice(1).join(" "));
+			if ("error" in parsed) {
+				ctx.addSystemMessage(parsed.error);
 				return true;
 			}
 			try {
 				await ctx.client.extMethod(EXT_KV_SET, {
 					sessionId: ctx.sessionId,
-					key: `${AUTH_PREFIX}${provider}`,
-					value: apiKey,
-					secret: true,
+					key: `${AUTH_PREFIX}${parsed.provider}`,
+					value: providerAuthToJson(parsed.config),
 				});
-				// Picker state refresh arrives via `config_option_update` sessionUpdate.
-				ctx.addSystemMessage(`stored auth for ${provider}`);
+				ctx.addSystemMessage(`stored auth for ${parsed.provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}
@@ -549,14 +547,14 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		case "/logins": {
 			try {
 				const result = await ctx.client.extMethod<{
-					entries: Array<{ key: string; value: string; secret: boolean }>;
+					entries: Array<{ key: string; value: unknown }>;
 				}>(EXT_KV_LIST, { prefix: AUTH_PREFIX });
 				if (result.entries.length === 0) {
 					ctx.addSystemMessage("(no stored auth)");
 				} else {
 					const lines = result.entries.map((e) => {
 						const provider = e.key.startsWith(AUTH_PREFIX) ? e.key.slice(AUTH_PREFIX.length) : e.key;
-						return `  ${provider}: ${e.value}`;
+						return `  ${provider}: ${formatProviderAuth(jsonToProviderAuth(e.value))}`;
 					});
 					ctx.addSystemMessage(["stored auth:", ...lines].join("\n"));
 				}
@@ -569,6 +567,26 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		default:
 			return false;
 	}
+}
+
+function providerAuthToJson(config: ProviderAuth): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	if (config.api_key !== undefined) out.api_key = { value: config.api_key.value, secret: true };
+	if (config.base_url !== undefined) out.base_url = config.base_url;
+	return out;
+}
+
+function jsonToProviderAuth(value: unknown): ProviderAuth {
+	const out: ProviderAuth = {};
+	if (value === null || typeof value !== "object") return out;
+	const obj = value as Record<string, unknown>;
+	const ak = obj.api_key;
+	if (ak !== null && typeof ak === "object") {
+		const inner = ak as Record<string, unknown>;
+		if (typeof inner.value === "string") out.api_key = { value: inner.value, secret: true };
+	}
+	if (typeof obj.base_url === "string") out.base_url = obj.base_url;
+	return out;
 }
 
 function formatAge(raw: string | number | undefined): string {

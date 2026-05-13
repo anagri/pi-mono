@@ -24,6 +24,6 @@ export interface SeedAuthOptions {
  */
 export async function seedAuth(opts: SeedAuthOptions): Promise<void> {
 	const client = createBodhiPiClient(opts.clientConn);
-	await client.addProvider(opts.provider, opts.apiKey, { sessionId: opts.sessionId });
+	await client.addProvider(opts.provider, { api_key: { value: opts.apiKey } }, { sessionId: opts.sessionId });
 	await client.model(opts.modelId, { sessionId: opts.sessionId });
 }

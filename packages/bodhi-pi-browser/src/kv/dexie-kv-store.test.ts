@@ -13,46 +13,44 @@ describe("createDexieKvStore", () => {
 		await resetDb(dbName);
 	});
 
-	test("set + get round-trip", async () => {
+	test("set + get round-trip for plain string", async () => {
 		const kv = createDexieKvStore({ dbName });
 		await kv.set("auth/openai", "sk-1");
 		expect(await kv.get("auth/openai")).toBe("sk-1");
 	});
 
-	test("secret entries land in kv_secret table; meta reflects this", async () => {
+	test("set + get round-trip for JSON object with secret marker", async () => {
 		const kv = createDexieKvStore({ dbName });
-		await kv.set("auth/openai", "sk-1", { secret: true });
-		await kv.set("public/k", "value", { secret: false });
-		const meta = await kv.getWithMeta("auth/openai");
-		expect(meta).toEqual({ value: "sk-1", secret: true });
-		const pubMeta = await kv.getWithMeta("public/k");
-		expect(pubMeta).toEqual({ value: "value", secret: false });
+		await kv.set("auth/openai", { api_key: { value: "sk-1", secret: true }, base_url: "http://h" });
+		expect(await kv.get("auth/openai")).toEqual({
+			api_key: { value: "sk-1", secret: true },
+			base_url: "http://h",
+		});
 	});
 
-	test("re-setting an existing key migrates between tables", async () => {
+	test("re-setting an existing key overwrites", async () => {
 		const kv = createDexieKvStore({ dbName });
-		await kv.set("foo", "v1", { secret: false });
-		await kv.set("foo", "v2", { secret: true });
-		const meta = await kv.getWithMeta("foo");
-		expect(meta).toEqual({ value: "v2", secret: true });
-		// Only one entry should be observable.
-		const all = await kv.listWithMeta();
-		expect(all.filter((e: { key: string }) => e.key === "foo")).toHaveLength(1);
+		await kv.set("foo", "v1");
+		await kv.set("foo", { x: 1 });
+		expect(await kv.get("foo")).toEqual({ x: 1 });
+		const all = await kv.list();
+		expect(all.filter((e) => e.key === "foo")).toHaveLength(1);
 	});
 
-	test("listWithMeta with prefix filters across both tables", async () => {
+	test("list with prefix filters", async () => {
 		const kv = createDexieKvStore({ dbName });
-		await kv.set("auth/openai", "a", { secret: true });
-		await kv.set("auth/anthropic", "b", { secret: true });
+		await kv.set("auth/openai", { api_key: { value: "a", secret: true } });
+		await kv.set("auth/anthropic", { api_key: { value: "b", secret: true } });
 		await kv.set("other/k", "c");
-		const auth = await kv.listWithMeta("auth/");
-		expect(auth.map((e: { key: string }) => e.key).sort()).toEqual(["auth/anthropic", "auth/openai"]);
-		expect(auth.every((e: { secret: boolean }) => e.secret)).toBe(true);
+		const auth = await kv.list("auth/");
+		expect(auth.map((e) => e.key).sort()).toEqual(["auth/anthropic", "auth/openai"]);
+		const byKey = Object.fromEntries(auth.map((e) => [e.key, e.value]));
+		expect(byKey["auth/openai"]).toEqual({ api_key: { value: "a", secret: true } });
 	});
 
-	test("remove clears both tables", async () => {
+	test("remove clears the entry", async () => {
 		const kv = createDexieKvStore({ dbName });
-		await kv.set("foo", "v1", { secret: true });
+		await kv.set("foo", { v: 1 });
 		await kv.remove("foo");
 		expect(await kv.get("foo")).toBeUndefined();
 	});
@@ -60,6 +58,5 @@ describe("createDexieKvStore", () => {
 	test("get on missing key returns undefined", async () => {
 		const kv = createDexieKvStore({ dbName });
 		expect(await kv.get("missing")).toBeUndefined();
-		expect(await kv.getWithMeta("missing")).toBeUndefined();
 	});
 });

@@ -214,11 +214,3 @@ test("thinking level: setSessionConfigOption('thinking') persists as a ThinkingC
 	const change = tree.nodes.find((n) => n.type === "thinking_change");
 	expect.soft(change, "expected thinking_change entry in session tree").toBeDefined();
 });
-
-// Token-limit / stopReason="max_tokens" coverage: bodhi-pi does not expose
-// `max_tokens` (or a per-call output-token cap) at the ACP boundary today.
-// The faux provider can produce a `max_tokens` stop reason synthetically
-// (in-memory only), but that effectively retests the faux contract, not the
-// agent's stop-reason mapping under a real provider. Park as a known gap;
-// revisit if/when an ACP knob lands.
-test.skip("stopReason='max_tokens' — no ACP knob to set per-call output cap; revisit", () => {});

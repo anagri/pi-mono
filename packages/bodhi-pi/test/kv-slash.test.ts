@@ -37,7 +37,7 @@ function newFaux(): Model<Api> {
 	return faux.getModel() as Model<Api>;
 }
 
-test("kv/set marked secret returns *** from kv/get; internal read is unmasked", async () => {
+test("kv/set with a {value, secret:true} field masks the value on kv/get; internal read is unmasked", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({
 		models: [model],
@@ -49,39 +49,48 @@ test("kv/set marked secret returns *** from kv/get; internal read is unmasked", 
 
 	await harness.clientConn.extMethod(EXT_KV_SET, {
 		key: `${AUTH_PREFIX}${model.provider}`,
-		value: "sk-XYZ",
-		secret: true,
+		value: { api_key: { value: "sk-XYZ", secret: true } },
 	});
 
 	const got = (await harness.clientConn.extMethod(EXT_KV_GET, {
 		key: `${AUTH_PREFIX}${model.provider}`,
-	})) as { value: string | null; secret: boolean };
-	expect(got).toEqual({ key: `${AUTH_PREFIX}${model.provider}`, value: "***", secret: true });
+	})) as { key: string; value: { api_key: { value: string; secret: boolean } } | null };
+	expect(got).toEqual({
+		key: `${AUTH_PREFIX}${model.provider}`,
+		value: { api_key: { value: "***", secret: true } },
+	});
 
-	// Internal resolution still sees the real value.
 	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 	expect(observedApiKey).toBe("sk-XYZ");
 });
 
-test("kv/list masks secret values to ***; non-secret entries return real values", async () => {
+test("kv/list masks secret nodes recursively; non-secret entries return real values", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
 	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
 
-	await harness.clientConn.extMethod(EXT_KV_SET, { key: `${AUTH_PREFIX}openai`, value: "sk-1", secret: true });
-	await harness.clientConn.extMethod(EXT_KV_SET, { key: "public/k", value: "value", secret: false });
+	await harness.clientConn.extMethod(EXT_KV_SET, {
+		key: `${AUTH_PREFIX}openai`,
+		value: { api_key: { value: "sk-1", secret: true }, base_url: "http://h" },
+	});
+	await harness.clientConn.extMethod(EXT_KV_SET, { key: "public/k", value: "value" });
 
 	const listed = (await harness.clientConn.extMethod(EXT_KV_LIST, { prefix: AUTH_PREFIX })) as {
-		entries: Array<{ key: string; value: string; secret: boolean }>;
+		entries: Array<{ key: string; value: unknown }>;
 	};
-	expect(listed.entries).toEqual([{ key: `${AUTH_PREFIX}openai`, value: "***", secret: true }]);
+	expect(listed.entries).toEqual([
+		{
+			key: `${AUTH_PREFIX}openai`,
+			value: { api_key: { value: "***", secret: true }, base_url: "http://h" },
+		},
+	]);
 
 	const listedAll = (await harness.clientConn.extMethod(EXT_KV_LIST, {})) as {
-		entries: Array<{ key: string; value: string; secret: boolean }>;
+		entries: Array<{ key: string; value: unknown }>;
 	};
-	const byKey = Object.fromEntries(listedAll.entries.map((e) => [e.key, e]));
-	expect(byKey["public/k"]).toEqual({ key: "public/k", value: "value", secret: false });
+	const byKey = Object.fromEntries(listedAll.entries.map((e) => [e.key, e.value]));
+	expect(byKey["public/k"]).toBe("value");
 });
 
 test("kv/remove clears the entry; subsequent get returns value: null", async () => {
@@ -93,7 +102,7 @@ test("kv/remove clears the entry; subsequent get returns value: null", async () 
 	await harness.clientConn.extMethod(EXT_KV_SET, { key: "foo", value: "bar" });
 	await harness.clientConn.extMethod(EXT_KV_REMOVE, { key: "foo" });
 	const got = (await harness.clientConn.extMethod(EXT_KV_GET, { key: "foo" })) as {
-		value: string | null;
+		value: unknown | null;
 	};
 	expect(got.value).toBeNull();
 });
@@ -108,8 +117,7 @@ test("kv/set with auth/* key emits config_option_update sessionUpdate", async ()
 	const result = (await harness.clientConn.extMethod(EXT_KV_SET, {
 		sessionId,
 		key: `${AUTH_PREFIX}${model.provider}`,
-		value: "sk-XYZ",
-		secret: true,
+		value: { api_key: { value: "sk-XYZ", secret: true } },
 	})) as Record<string, unknown>;
 	expect(result).not.toHaveProperty("configOptions");
 
@@ -142,8 +150,7 @@ test("kv/remove with auth/* key emits config_option_update sessionUpdate", async
 
 	await harness.clientConn.extMethod(EXT_KV_SET, {
 		key: `${AUTH_PREFIX}${model.provider}`,
-		value: "sk-XYZ",
-		secret: true,
+		value: { api_key: { value: "sk-XYZ", secret: true } },
 	});
 	harness.updates.length = 0;
 	const result = (await harness.clientConn.extMethod(EXT_KV_REMOVE, {
@@ -158,7 +165,6 @@ test("kv/remove with auth/* key emits config_option_update sessionUpdate", async
 
 test("kv handlers throw -32601 when kvStore is not configured", async () => {
 	const model = newFaux();
-	// Build a bespoke harness without kvStore — bypass `createTestHarness` default.
 	const updates: unknown[] = [];
 	const { clientConn } = createInProcessAcpPair(
 		createBodhiPiAgent({
@@ -167,7 +173,6 @@ test("kv handlers throw -32601 when kvStore is not configured", async () => {
 			getApiKey: () => undefined,
 			sessionStore: createInMemorySessionStore(),
 			filesystem: createInMemoryFilesystem(),
-			// kvStore intentionally omitted
 		}),
 		() => ({
 			sessionUpdate: async (params: unknown) => {

@@ -1,7 +1,7 @@
 import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { KvStore, KvStoreEntry, KvStoreSetOptions } from "@bodhiapp/bodhi-pi";
+import { containsSecret, type JsonValue, type KvStore } from "@bodhiapp/bodhi-pi";
 import { decodeKey, encodeKey } from "./key-encoding.js";
 
 export interface NodeKvStoreOptions {
@@ -16,7 +16,7 @@ function entryPath(dir: string, key: string): string {
 	return path.join(dir, `${encodeKey(key)}.json`);
 }
 
-async function readEntry(filePath: string): Promise<KvStoreEntry | undefined> {
+async function readValue(filePath: string): Promise<JsonValue | undefined> {
 	let raw: string;
 	try {
 		raw = await readFile(filePath, { encoding: "utf8" });
@@ -24,14 +24,10 @@ async function readEntry(filePath: string): Promise<KvStoreEntry | undefined> {
 		if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
 		throw e;
 	}
-	const parsed = JSON.parse(raw) as { value: unknown; secret: unknown };
-	if (typeof parsed.value !== "string" || typeof parsed.secret !== "boolean") {
-		throw new Error(`malformed KV entry at ${filePath}`);
-	}
-	return { value: parsed.value, secret: parsed.secret };
+	return JSON.parse(raw) as JsonValue;
 }
 
-// File-backed KvStore. One JSON file per key. Secret entries: 0o600. Dir: 0o700.
+// File-backed KvStore. Mirror of @bodhiapp/bodhi-pi-node/src/kv/node-kv-store.ts; keep in lockstep.
 export function createNodeKvStore(opts: NodeKvStoreOptions = {}): KvStore {
 	const dir = opts.dir ?? defaultKvDir();
 	let initialized = false;
@@ -53,40 +49,30 @@ export function createNodeKvStore(opts: NodeKvStoreOptions = {}): KvStore {
 	}
 
 	return {
-		async get(key: string): Promise<string | undefined> {
+		async get(key: string): Promise<JsonValue | undefined> {
 			await init();
-			const entry = await readEntry(entryPath(dir, key));
-			return entry?.value;
+			return await readValue(entryPath(dir, key));
 		},
-		async getWithMeta(key: string): Promise<KvStoreEntry | undefined> {
+		async set(key: string, value: JsonValue): Promise<void> {
 			await init();
-			return await readEntry(entryPath(dir, key));
-		},
-		async list(prefix?: string): Promise<string[]> {
-			const files = await listFiles();
-			const keys = files.map((f) => decodeKey(f.replace(/\.json$/, "")));
-			return prefix ? keys.filter((k) => k.startsWith(prefix)) : keys;
-		},
-		async listWithMeta(prefix?: string): Promise<Array<{ key: string } & KvStoreEntry>> {
-			const files = await listFiles();
-			const out: Array<{ key: string } & KvStoreEntry> = [];
-			for (const f of files) {
-				const key = decodeKey(f.replace(/\.json$/, ""));
-				if (prefix && !key.startsWith(prefix)) continue;
-				const entry = await readEntry(path.join(dir, f));
-				if (entry) out.push({ key, ...entry });
-			}
-			return out;
-		},
-		async set(key: string, value: string, opts?: KvStoreSetOptions): Promise<void> {
-			await init();
-			const secret = opts?.secret === true;
+			const secret = containsSecret(value);
 			const filePath = entryPath(dir, key);
 			const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-			const payload = JSON.stringify({ value, secret });
+			const payload = JSON.stringify(value);
 			await writeFile(tmpPath, payload, { mode: secret ? 0o600 : 0o644 });
 			await rename(tmpPath, filePath);
 			if (secret) await chmod(filePath, 0o600);
+		},
+		async list(prefix?: string): Promise<Array<{ key: string; value: JsonValue }>> {
+			const files = await listFiles();
+			const out: Array<{ key: string; value: JsonValue }> = [];
+			for (const f of files) {
+				const key = decodeKey(f.replace(/\.json$/, ""));
+				if (prefix && !key.startsWith(prefix)) continue;
+				const value = await readValue(path.join(dir, f));
+				if (value !== undefined) out.push({ key, value });
+			}
+			return out;
 		},
 		async remove(key: string): Promise<void> {
 			await init();

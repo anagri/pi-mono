@@ -24,7 +24,7 @@ console.log(`  health:    http://localhost:${actualPort}/healthz`);
 console.log(`  acp:       http://localhost:${actualPort}/acp`);
 console.log(`  data dir:  ${dataDir}`);
 console.log(`  workspace: ${cli.workspace ?? `<per-user under ${dataDir}/users/<id>/workspace/>`}`);
-console.log(`  models:    auto-derived from stored auth (use /login <provider> <key> from a client)`);
+console.log(`  models:    auto-derived from stored auth (use /login <provider> api_key="..." from a client)`);
 
 const shutdown = async (signal: string) => {
 	console.log(`\nreceived ${signal}, shutting down`);

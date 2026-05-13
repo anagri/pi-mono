@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { createNodePackageExtensionLoader } from "@e2e/helpers/extension-loaders/index.js";
@@ -92,7 +93,10 @@ export async function wireAgentForWsConnection(opts: WireAgentWsOptions): Promis
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
 	const extensionFactories = await createNodePackageExtensionLoader({ cwd });
 	const scriptExecutor = createNodeScriptExecutor();
-	const kvStore = createNodeKvStore(opts.kvStoreDir ? { dir: opts.kvStoreDir } : {});
+	// Per-user kv dir matches per-user sessions/workspace; without it, every
+	// connecting user shares one auth/* namespace which breaks parallel e2e.
+	const kvDir = opts.kvStoreDir ? path.join(opts.kvStoreDir, String(opts.user.id)) : undefined;
+	const kvStore = createNodeKvStore(kvDir ? { dir: kvDir } : {});
 
 	const factory: AgentFactory = (conn) => {
 		const innerFactory = createBodhiPiAgent({

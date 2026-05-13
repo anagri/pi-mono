@@ -94,7 +94,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 		const hint =
 			derivedModels.length > 0
 				? `pick one with /model <id>  (${derivedModels.map((m) => m.id).join(", ")})`
-				: "configure provider auth with /login <provider> <api-key>";
+				: 'configure provider auth with /login <provider> api_key="..."';
 		process.stdout.write(chalk.yellow(`[no model selected] ${hint}\n`));
 	}
 	process.stdout.write("\n");

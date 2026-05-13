@@ -124,11 +124,11 @@ test("/login + /logins + /logout round-trip persists across process via NodeKvSt
 	const { client, state, agent } = await setup({ homeDir });
 	const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-	await handleCommand("/login openai sk-XYZ", makeCtx(client, state, agent));
+	await handleCommand('/login openai api_key="sk-XYZ"', makeCtx(client, state, agent));
 	writeSpy.mockClear();
 	await handleCommand("/logins", makeCtx(client, state, agent));
 	const list1 = writeSpy.mock.calls.map((c) => String(c[0])).join("");
-	expect(list1).toMatch(/openai: \*\*\*/);
+	expect(list1).toMatch(/openai: api_key=\*\*\*/);
 
 	writeSpy.mockClear();
 	await handleCommand("/logout openai", makeCtx(client, state, agent));

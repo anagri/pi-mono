@@ -75,7 +75,7 @@ import { mergeCommands, mergeTools } from "@/extensions/merge.js";
 import { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
-import { AUTH_PREFIX, type KvStore, type KvStoreEntry } from "@/kv/kv-store.js";
+import { AUTH_PREFIX, type JsonValue, type KvStore, maskSecrets } from "@/kv/kv-store.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { detectCrossBranch, runBranchSummary } from "@/sessions/branch-summary.js";
 import { buildSessionContext, walkPath } from "@/sessions/build-context.js";
@@ -221,6 +221,20 @@ interface ResolvedRetryOptions {
 	maxRetries?: number;
 	timeoutMs?: number;
 	maxRetryDelayMs?: number;
+}
+
+function extractAuthApiKey(auth: JsonValue): string | undefined {
+	if (auth === null || typeof auth !== "object" || Array.isArray(auth)) return undefined;
+	const apiKey = (auth as { [k: string]: JsonValue }).api_key;
+	if (apiKey === null || typeof apiKey !== "object" || Array.isArray(apiKey)) return undefined;
+	const value = (apiKey as { [k: string]: JsonValue }).value;
+	return typeof value === "string" ? value : undefined;
+}
+
+function extractAuthBaseUrl(auth: JsonValue): string | undefined {
+	if (auth === null || typeof auth !== "object" || Array.isArray(auth)) return undefined;
+	const baseUrl = (auth as { [k: string]: JsonValue }).base_url;
+	return typeof baseUrl === "string" ? baseUrl : undefined;
 }
 
 function resolveProviderStreamOptions(provider: string, merged: BodhiPiProjectSettings): ResolvedRetryOptions {
@@ -797,15 +811,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private async handleKvSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_SET);
 		const key = params.key;
-		const value = params.value;
 		if (typeof key !== "string" || key.length === 0) {
 			throw new RequestError(-32602, `${EXT_KV_SET}: key must be a non-empty string`);
 		}
-		if (typeof value !== "string") {
-			throw new RequestError(-32602, `${EXT_KV_SET}: value must be a string`);
+		if (!("value" in params)) {
+			throw new RequestError(-32602, `${EXT_KV_SET}: value is required`);
 		}
-		const secret = params.secret === true;
-		await kv.set(key, value, { secret });
+		const value = params.value as JsonValue;
+		await kv.set(key, value);
 		if (key.startsWith(AUTH_PREFIX)) {
 			await this.events.emit({
 				type: "auth_change",
@@ -814,11 +827,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				action: "login",
 			});
 		}
-		return { key, secret };
-	}
-
-	private maskEntry(entry: KvStoreEntry): { value: string; secret: boolean } {
-		return { value: entry.secret ? "***" : entry.value, secret: entry.secret };
+		return { key };
 	}
 
 	private async handleKvGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -827,9 +836,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (typeof key !== "string" || key.length === 0) {
 			throw new RequestError(-32602, `${EXT_KV_GET}: key must be a non-empty string`);
 		}
-		const entry = await kv.getWithMeta(key);
-		if (!entry) return { key, value: null, secret: false };
-		return { key, ...this.maskEntry(entry) };
+		const value = await kv.get(key);
+		if (value === undefined) return { key, value: null };
+		return { key, value: maskSecrets(value) };
 	}
 
 	private async handleKvList(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -838,9 +847,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (prefix !== undefined && typeof prefix !== "string") {
 			throw new RequestError(-32602, `${EXT_KV_LIST}: prefix must be a string`);
 		}
-		const entries = await kv.listWithMeta(prefix);
+		const entries = await kv.list(prefix);
 		return {
-			entries: entries.map((e) => ({ key: e.key, ...this.maskEntry(e) })),
+			entries: entries.map((e) => ({ key: e.key, value: maskSecrets(e.value) })),
 		};
 	}
 
@@ -1232,14 +1241,30 @@ class BodhiPiAcpAgent implements AcpAgent {
 		};
 	}
 
+	private async resolveProviderAuth(provider: string): Promise<JsonValue | undefined> {
+		return await this.config.kvStore?.get(AUTH_PREFIX + provider);
+	}
+
 	private async resolveProviderApiKey(provider: string): Promise<string | undefined> {
 		// Order: kvStore (set by /login) > BodhiPiConfig.getApiKey > extension fallback.
-		const kvKey = await this.config.kvStore?.get(AUTH_PREFIX + provider);
-		if (kvKey !== undefined) return kvKey;
+		// Keyless case: kvStore has auth/<provider> with base_url but no api_key → return
+		// "mock" sentinel so pi-ai's unconditional Bearer header is non-empty (aimock /
+		// Ollama / llama.cpp ignore it).
+		const auth = await this.resolveProviderAuth(provider);
+		if (auth !== undefined) {
+			const apiKey = extractAuthApiKey(auth);
+			if (apiKey !== undefined) return apiKey;
+			if (extractAuthBaseUrl(auth) !== undefined) return "mock";
+		}
 		const hostKey = this.config.getApiKey?.(provider);
 		if (hostKey !== undefined) return hostKey;
 		const ext = await this.extensionRunner?.resolveProviderKey(provider);
 		return ext ?? undefined;
+	}
+
+	private async resolveProviderBaseUrl(provider: string): Promise<string | undefined> {
+		const auth = await this.resolveProviderAuth(provider);
+		return auth === undefined ? undefined : extractAuthBaseUrl(auth);
 	}
 
 	private async resolveApiKeyForCompaction(provider: string): Promise<string | undefined> {
@@ -1662,22 +1687,28 @@ class BodhiPiAcpAgent implements AcpAgent {
 		};
 		// Host-supplied models win — if the host listed ANY model for a provider,
 		// pi-ai's catalog is suppressed for that provider (the host knows best,
-		// including custom baseUrls for tests / local LLMs).
+		// including custom baseUrls for tests / local LLMs). A KV-stored base_url
+		// (set via /login) still overrides the host's default when present.
 		for (const m of this.config.models ?? []) {
-			push(m);
+			const baseUrl = await this.resolveProviderBaseUrl(m.provider);
+			push(baseUrl ? { ...m, baseUrl } : m);
 			hostProviders.add(m.provider);
 		}
 		for (const m of this.extensionRunner?.getProviderModels() ?? []) {
-			push(m);
+			const baseUrl = await this.resolveProviderBaseUrl(m.provider);
+			push(baseUrl ? { ...m, baseUrl } : m);
 			hostProviders.add(m.provider);
 		}
 		// pi-ai catalog filtered by stored auth, skipping provider names the host
-		// already supplied.
+		// already supplied. A stored base_url overrides each model's default endpoint.
 		for (const provider of getProviders()) {
 			if (hostProviders.has(provider)) continue;
 			const key = await this.resolveProviderApiKey(provider);
 			if (!key) continue;
-			for (const m of getModels(provider as KnownProvider) as Model<Api>[]) push(m);
+			const baseUrl = await this.resolveProviderBaseUrl(provider);
+			for (const m of getModels(provider as KnownProvider) as Model<Api>[]) {
+				push(baseUrl ? { ...m, baseUrl } : m);
+			}
 		}
 		return out;
 	}
@@ -1688,7 +1719,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!m) {
 			throw new RequestError(
 				-32602,
-				`unknown or unavailable model id: "${id}" — run /login <provider> <api-key> first`,
+				`unknown or unavailable model id: "${id}" — run /login <provider> api_key="..." first`,
 			);
 		}
 		return m;

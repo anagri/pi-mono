@@ -1,69 +1,80 @@
-import { type Api, fauxAssistantMessage, getModel, type Model, registerFauxProvider } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { afterEach, expect, test } from "vitest";
+import { type AimockFixture, startAimockProvider } from "../helpers/aimock-fixture.js";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
-import { isRuntime } from "../helpers/runtime.js";
 
 // Cancellation produces `stopReason: "cancelled"` regardless of transport.
-// Two complementary tests:
-//   * Test A (in-memory only, faux provider): deterministic mid-stream cancel
-//     using pi-ai's `registerFauxProvider` with throttled streaming. The faux
-//     is registered globally in the test process, so it only reaches the
-//     agent under in-memory; cli/http spawn a separate process.
-//   * Test B (all runtimes, real LLM): runs a long-streaming prompt against
-//     gpt-4o-mini and cancels at ~400ms. Robust to per-runtime cancel paths
-//     (in-process abort vs ACP `session/cancel` over stdio vs HTTP cancel
-//     translated into the SSE controller's abort).
+// Two complementary tests, both running across all four runtimes via aimock:
+//   * Test A (deterministic): aimock streams a long mocked response at a known
+//     tokens/second cadence so we can land a cancel mid-stream. Provider is
+//     configured over the ACP wire via `_bodhi-pi/kv/set` (auth/openai with
+//     base_url only — keyless), so the agent's existing OpenAI catalog model
+//     gets its baseUrl rewritten to the aimock URL.
+//   * Test B (real LLM): runs the same flow against gpt-4o-mini and cancels at
+//     ~600ms. Robust to per-runtime cancel paths (in-process abort vs ACP
+//     `session/cancel` over stdio vs HTTP SSE controller abort vs WS frame).
 
 let activeHarness: E2EHarness | undefined;
+let activeMock: AimockFixture | undefined;
 
 afterEach(async () => {
+	// Best-effort cleanup of auth/openai — http's test-app shares one on-disk KV
+	// across all tests, so a leaked override here breaks every subsequent test
+	// that expects pi-ai's default openai endpoint.
 	if (activeHarness) {
+		try {
+			await activeHarness.clientConn.extMethod("_bodhi-pi/kv/remove", { key: "auth/openai" });
+		} catch {
+			// connection may already be torn down; ignore
+		}
 		await activeHarness.cleanup();
 		activeHarness = undefined;
 	}
+	if (activeMock) {
+		await activeMock.cleanup();
+		activeMock = undefined;
+	}
 });
 
-test.runIf(isRuntime("in-memory"))(
-	"cancel (faux): mid-stream cancel resolves prompt with stopReason='cancelled'",
-	async () => {
-		const faux = registerFauxProvider({ tokensPerSecond: 4, tokenSize: { min: 1, max: 1 } });
-		try {
-			faux.setResponses([
-				fauxAssistantMessage(
-					"zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty",
-				),
-			]);
+test("cancel (aimock): mid-stream cancel resolves prompt with stopReason='cancelled'", async () => {
+	const mock = await startAimockProvider();
+	activeMock = mock;
+	mock.mock.onMessage(
+		/.*/,
+		{
+			content:
+				"zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six twenty-seven twenty-eight twenty-nine thirty",
+		},
+		{ streamingProfile: { tps: 4 } },
+	);
 
-			const model = faux.getModel() as Model<Api>;
-			const h = await createE2EHarness({
-				models: [model],
-				defaultModelId: model.id,
-				getApiKey: () => "faux-key",
-			});
-			activeHarness = h;
+	const model = getModel("openai", "gpt-4o-mini");
+	const h = await createE2EHarness({
+		models: [model],
+		defaultModelId: model.id,
+		getApiKey: () => undefined,
+	});
+	activeHarness = h;
 
-			await h.clientConn.initialize(stdInitParams);
-			const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await h.clientConn.initialize(stdInitParams);
+	// Provider auth must land BEFORE newSession — the agent resolves model.baseUrl
+	// (overridden via auth/<provider>.base_url) at session bootstrap.
+	await h.clientConn.extMethod("_bodhi-pi/kv/set", {
+		key: "auth/openai",
+		value: mock.providerValue,
+	});
+	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
-			const promptP = h.clientConn.prompt({
-				sessionId,
-				prompt: [{ type: "text", text: "Count up." }],
-			});
-			// Give the faux a chance to emit a couple of chunks before cancelling.
-			await new Promise((r) => setTimeout(r, 500));
-			await h.clientConn.cancel({ sessionId });
-			const result = await promptP;
-			expect(result.stopReason).toBe("cancelled");
-
-			await h.flushEvents();
-			const messageUpdates = h.events.filter((e) => e.type === "message_update");
-			expect.soft(messageUpdates.length, "expected some streamed chunks before cancel").toBeGreaterThan(0);
-		} finally {
-			faux.unregister();
-		}
-	},
-);
+	const promptP = h.clientConn.prompt({
+		sessionId,
+		prompt: [{ type: "text", text: "Count up." }],
+	});
+	await new Promise((r) => setTimeout(r, 600));
+	await h.clientConn.cancel({ sessionId });
+	const result = await promptP;
+	expect(result.stopReason).toBe("cancelled");
+});
 
 test("cancel (real LLM): mid-stream cancel resolves prompt with stopReason='cancelled'", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
@@ -87,7 +98,7 @@ test("cancel (real LLM): mid-stream cancel resolves prompt with stopReason='canc
 		],
 	});
 	// 600ms in is plenty of margin: first chunk under all 3 runtimes typically
-	// arrives by ~200ms, full response takes 10s+. Cancelling mid-stream.
+	// arrives by ~200ms, full response takes 10s+.
 	await new Promise((r) => setTimeout(r, 600));
 	await h.clientConn.cancel({ sessionId });
 	const result = await promptP;

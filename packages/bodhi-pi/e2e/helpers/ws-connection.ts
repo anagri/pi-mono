@@ -26,7 +26,7 @@ export interface WsConnectionHandle {
  * stays alive for the lifetime of the WS (vs HTTP+SSE's per-turn rebuild).
  */
 export async function openWsConnection(opts: WsConnectionOptions): Promise<WsConnectionHandle> {
-	const url = opts.baseUrl.replace(/^http/, "ws") + "/acp-ws";
+	const url = `${opts.baseUrl.replace(/^http/, "ws")}/acp-ws`;
 	const ws = new WebSocket(url, [SUBPROTOCOL, `bearer.${opts.token}`]);
 
 	await new Promise<void>((resolve, reject) => {

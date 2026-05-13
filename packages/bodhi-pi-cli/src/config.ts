@@ -149,8 +149,8 @@ REPL commands:
   /close            Close the current session (data persists)
   /delete <id>      Permanently delete a session
   /model <id>       Switch model for current session
-  /login <provider> <api-key>   Store an API key (secret) for a provider
-  /logout <provider>            Remove a stored API key
+  /login <provider> [api_key="..."] [base_url="..."]  Store provider auth
+  /logout <provider>            Remove stored auth
   /logins           List providers with stored auth (masked)
   /settings list|get|set|unset <key> <value> [--global|--project|--session]
   /quit             Exit

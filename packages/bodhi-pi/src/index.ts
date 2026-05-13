@@ -43,7 +43,9 @@ export type {
 	ModelOption,
 	NavigateSessionParams,
 	NavigateSessionResult,
+	ProviderApiKey,
 	ProviderAuth,
+	ProviderAuthEntry,
 	RemoveProviderOptions,
 	SessionConfigResult,
 	SessionEntriesResult,
@@ -62,6 +64,14 @@ export type {
 	SettingsUnsetParams,
 	SettingsUnsetResult,
 } from "./client/types.js";
+export {
+	formatProviderAuth,
+	KEYLESS_PROVIDER_DEFAULTS,
+	type LoginParseResult,
+	parseLoginArgs,
+	parseSlashArgs,
+	type SlashArgs,
+} from "./commands/slash-args.js";
 export {
 	type BodhiPiProjectSettings,
 	GLOBAL_SETTINGS_PATH,
@@ -123,7 +133,13 @@ export type {
 export type { DirEntry, FileStat, Filesystem } from "./filesystem/filesystem.js";
 export { createInMemoryFilesystem } from "./filesystem/in-memory-filesystem.js";
 export { createInMemoryKvStore } from "./kv/in-memory-kv-store.js";
-export { AUTH_PREFIX, type KvStore, type KvStoreEntry, type KvStoreSetOptions } from "./kv/kv-store.js";
+export {
+	AUTH_PREFIX,
+	containsSecret,
+	type JsonValue,
+	type KvStore,
+	maskSecrets,
+} from "./kv/kv-store.js";
 export type {
 	ScriptExecuteParams,
 	ScriptExecuteResult,

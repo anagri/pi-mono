@@ -88,6 +88,24 @@ test("appendSystemPrompt: project settings supplies value when host omits it", a
 	expect(captured[0]).toContain("PROJECT-APPEND");
 });
 
+test("systemPrompt: full override replaces the built-in base prompt", async () => {
+	const { model, captured } = capturingFaux();
+	const harness = createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		systemPrompt: "ONLY-THIS-OVERRIDE",
+	});
+
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	await harness.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
+
+	const sp = captured[0] ?? "";
+	expect(sp).toContain("ONLY-THIS-OVERRIDE");
+	// Built-in base prompt's hallmark sections must be absent when overridden.
+	expect(sp).not.toContain("Available tools:");
+});
+
 test("appendSystemPrompt: host-explicit beats project settings on collision", async () => {
 	const { model, captured } = capturingFaux();
 	const filesystem = createInMemoryFilesystem();

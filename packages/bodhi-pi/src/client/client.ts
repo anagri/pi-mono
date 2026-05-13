@@ -31,7 +31,7 @@ import {
 	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
 } from "@/acp/constants.js";
-import { AUTH_PREFIX } from "@/kv/kv-store.js";
+import { AUTH_PREFIX, type JsonValue } from "@/kv/kv-store.js";
 import { modelConfigFromOptions } from "./config-options.js";
 import type {
 	AddProviderOptions,
@@ -51,6 +51,7 @@ import type {
 	NavigateSessionParams,
 	NavigateSessionResult,
 	ProviderAuth,
+	ProviderAuthEntry,
 	RemoveProviderOptions,
 	SessionConfigResult,
 	SessionEntriesResult,
@@ -88,6 +89,32 @@ function providerFromKey(key: string): string {
 function requireString(value: string | undefined, message: string): string {
 	if (!value) throw new Error(message);
 	return value;
+}
+
+function normalizeProviderAuth(config: ProviderAuth): JsonValue {
+	const out: { [k: string]: JsonValue } = {};
+	if (config.api_key !== undefined) {
+		out.api_key = { value: config.api_key.value, secret: true };
+	}
+	if (config.base_url !== undefined) {
+		out.base_url = config.base_url;
+	}
+	return out;
+}
+
+function parseProviderAuth(value: JsonValue | null): ProviderAuth | null {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const obj = value as { [k: string]: JsonValue };
+	const config: ProviderAuth = {};
+	const apiKey = obj.api_key;
+	if (apiKey !== undefined && apiKey !== null && typeof apiKey === "object" && !Array.isArray(apiKey)) {
+		const inner = apiKey as { [k: string]: JsonValue };
+		if (typeof inner.value === "string") {
+			config.api_key = { value: inner.value, secret: true };
+		}
+	}
+	if (typeof obj.base_url === "string") config.base_url = obj.base_url;
+	return config;
 }
 
 export class BodhiPiClient {
@@ -231,12 +258,11 @@ export class BodhiPiClient {
 		return this.acp.extMethod(method, params) as Promise<T>;
 	}
 
-	async addProvider(provider: string, apiKey: string, opts: AddProviderOptions = {}): Promise<KvSetResult> {
+	async addProvider(provider: string, config: ProviderAuth, opts: AddProviderOptions = {}): Promise<KvSetResult> {
 		return this.ext<KvSetResult>(EXT_KV_SET, {
 			...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : this.optionalActiveSession()),
 			key: providerKey(provider),
-			value: apiKey,
-			secret: opts.secret ?? true,
+			value: normalizeProviderAuth(config),
 		});
 	}
 
@@ -247,18 +273,20 @@ export class BodhiPiClient {
 		});
 	}
 
-	async getProvider(provider: string): Promise<ProviderAuth> {
+	async getProvider(provider: string): Promise<ProviderAuthEntry | null> {
 		const result = await this.ext<KvGetResult>(EXT_KV_GET, { key: providerKey(provider) });
-		return { provider, value: result.value, secret: result.secret };
+		const config = parseProviderAuth(result.value);
+		return config ? { provider, config } : null;
 	}
 
-	async listProviders(): Promise<ProviderAuth[]> {
+	async listProviders(): Promise<ProviderAuthEntry[]> {
 		const result = await this.ext<KvListResult>(EXT_KV_LIST, { prefix: AUTH_PREFIX });
-		return result.entries.map((entry) => ({
-			provider: providerFromKey(entry.key),
-			value: entry.value,
-			secret: entry.secret,
-		}));
+		const out: ProviderAuthEntry[] = [];
+		for (const entry of result.entries) {
+			const config = parseProviderAuth(entry.value);
+			if (config) out.push({ provider: providerFromKey(entry.key), config });
+		}
+		return out;
 	}
 
 	deleteSession(params: { sessionId: string }) {

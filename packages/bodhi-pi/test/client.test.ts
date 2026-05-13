@@ -27,18 +27,31 @@ test("BodhiPiClient stores, lists, reads, and removes provider auth", async () =
 	await client.initialize(stdInitParams);
 	await client.newSession();
 
-	const added = await client.addProvider("openai", "sk-test");
-	expect(added).toEqual({ key: "auth/openai", secret: true });
+	const added = await client.addProvider("openai", {
+		api_key: { value: "sk-test" },
+		base_url: "http://localhost:1234/v1",
+	});
+	expect(added).toEqual({ key: "auth/openai" });
 
 	await expect(client.getProvider("openai")).resolves.toEqual({
 		provider: "openai",
-		value: "***",
-		secret: true,
+		config: {
+			api_key: { value: "***", secret: true },
+			base_url: "http://localhost:1234/v1",
+		},
 	});
-	await expect(client.listProviders()).resolves.toEqual([{ provider: "openai", value: "***", secret: true }]);
+	await expect(client.listProviders()).resolves.toEqual([
+		{
+			provider: "openai",
+			config: {
+				api_key: { value: "***", secret: true },
+				base_url: "http://localhost:1234/v1",
+			},
+		},
+	]);
 
 	await expect(client.removeProvider("openai")).resolves.toEqual({ key: "auth/openai" });
-	await expect(client.getProvider("openai")).resolves.toEqual({ provider: "openai", value: null, secret: false });
+	await expect(client.getProvider("openai")).resolves.toBeNull();
 });
 
 test("BodhiPiClient switches model through ACP config options", async () => {

@@ -16,6 +16,7 @@ import type {
 	SetSessionConfigOptionRequest,
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
+import type { JsonValue } from "@/kv/kv-store.js";
 
 export interface BodhiPiAcpConnection {
 	initialize(params: InitializeRequest): Promise<InitializeResponse>;
@@ -52,32 +53,37 @@ export interface ModelConfigState {
 
 export interface KvSetResult {
 	key: string;
-	secret: boolean;
 }
 
 export interface KvGetResult {
 	key: string;
-	value: string | null;
-	secret: boolean;
+	value: JsonValue | null;
 }
 
 export interface KvListResult {
-	entries: Array<{ key: string; value: string; secret: boolean }>;
+	entries: Array<{ key: string; value: JsonValue }>;
 }
 
 export interface KvRemoveResult {
 	key: string;
 }
 
-export interface ProviderAuth {
-	provider: string;
-	value: string | null;
-	secret: boolean;
+export interface ProviderApiKey {
+	value: string;
+	secret?: true;
 }
 
-export interface AddProviderOptions extends SessionRef {
-	secret?: boolean;
+export interface ProviderAuth {
+	api_key?: ProviderApiKey;
+	base_url?: string;
 }
+
+export interface ProviderAuthEntry {
+	provider: string;
+	config: ProviderAuth;
+}
+
+export type AddProviderOptions = SessionRef;
 
 export type RemoveProviderOptions = SessionRef;
 

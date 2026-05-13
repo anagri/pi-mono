@@ -79,6 +79,6 @@ Options:
 Environment:
   PORT                          Same as --port.
 
-Auth: clients populate the server's KvStore via /login <provider> <api-key>.
+Auth: clients populate the server's KvStore via /login <provider> [api_key="..."] [base_url="..."].
 `;
 }

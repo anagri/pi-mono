@@ -78,8 +78,8 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 				"  /settings get <key>     [--global|--project|--session]",
 				"  /settings set <key> <value>  [--global|--project|--session]   (default --session)",
 				"  /settings unset <key>   [--global|--project|--session]",
-				"  /login <provider> <api-key>   store an API key (secret)",
-				"  /logout <provider>            remove a stored API key",
+				'  /login <provider> [api_key="..."] [base_url="..."]   store provider auth',
+				"  /logout <provider>            remove stored auth",
 				"  /logins                       list providers with stored auth (masked)",
 			];
 			if (ctx.availableCommands.length > 0) {
@@ -506,21 +506,18 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		}
 
 		case "/login": {
-			const provider = parts[1];
-			const apiKey = parts.slice(2).join(" ").trim();
-			if (!provider || !apiKey) {
-				ctx.addSystemMessage("usage: /login <provider> <api-key>");
+			const parsed = parseLoginArgsLocal(parts.slice(1).join(" "));
+			if ("error" in parsed) {
+				ctx.addSystemMessage(parsed.error);
 				return true;
 			}
 			try {
 				await ctx.client.extMethod(EXT_KV_SET, {
 					sessionId: ctx.sessionId,
-					key: `${AUTH_PREFIX}${provider}`,
-					value: apiKey,
-					secret: true,
+					key: `${AUTH_PREFIX}${parsed.provider}`,
+					value: parsed.value,
 				});
-				// Picker state refresh arrives via `config_option_update` sessionUpdate.
-				ctx.addSystemMessage(`stored auth for ${provider}`);
+				ctx.addSystemMessage(`stored auth for ${parsed.provider}`);
 			} catch (err) {
 				ctx.addSystemMessage(`error: ${String(err)}`);
 			}
@@ -549,14 +546,14 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		case "/logins": {
 			try {
 				const result = await ctx.client.extMethod<{
-					entries: Array<{ key: string; value: string; secret: boolean }>;
+					entries: Array<{ key: string; value: unknown }>;
 				}>(EXT_KV_LIST, { prefix: AUTH_PREFIX });
 				if (result.entries.length === 0) {
 					ctx.addSystemMessage("(no stored auth)");
 				} else {
 					const lines = result.entries.map((e) => {
 						const provider = e.key.startsWith(AUTH_PREFIX) ? e.key.slice(AUTH_PREFIX.length) : e.key;
-						return `  ${provider}: ${e.value}`;
+						return `  ${provider}: ${formatProviderAuthLocal(e.value)}`;
 					});
 					ctx.addSystemMessage(["stored auth:", ...lines].join("\n"));
 				}
@@ -569,6 +566,76 @@ export async function handleCommand(line: string, ctx: UiCommandContext): Promis
 		default:
 			return false;
 	}
+}
+
+const KEYLESS_DEFAULTS: Record<string, string> = { ollama: "http://localhost:11434/v1" };
+
+// Local copy: bodhi-pi-http frontend cannot import @bodhiapp/bodhi-pi (no-agent rule).
+function parseLoginArgsLocal(input: string): { provider: string; value: Record<string, unknown> } | { error: string } {
+	const positionals: string[] = [];
+	const kwargs: Record<string, string> = {};
+	let i = 0;
+	const s = input;
+	const isSpace = (ch: string): boolean => ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
+	while (i < s.length) {
+		while (i < s.length && isSpace(s[i])) i++;
+		if (i >= s.length) break;
+		const tokenStart = i;
+		while (i < s.length && !isSpace(s[i]) && s[i] !== "=" && s[i] !== '"' && s[i] !== "'") i++;
+		const beforeEq = s.slice(tokenStart, i);
+		let key: string | null = null;
+		if (i < s.length && s[i] === "=") {
+			key = beforeEq;
+			i++;
+		}
+		let value: string;
+		if (i < s.length && (s[i] === '"' || s[i] === "'")) {
+			const quote = s[i];
+			i++;
+			let v = "";
+			while (i < s.length && s[i] !== quote) {
+				if (s[i] === "\\" && i + 1 < s.length && s[i + 1] === quote) {
+					v += quote;
+					i += 2;
+				} else {
+					v += s[i];
+					i++;
+				}
+			}
+			if (i >= s.length) return { error: "unterminated quoted value" };
+			i++;
+			value = v;
+		} else {
+			const valueStart = i;
+			while (i < s.length && !isSpace(s[i])) i++;
+			value = s.slice(valueStart, i);
+		}
+		if (key === null) positionals.push(beforeEq);
+		else if (!key) return { error: "empty key in key=value pair" };
+		else kwargs[key] = value;
+	}
+	const provider = positionals[0];
+	if (!provider) return { error: 'usage: /login <provider> [api_key="..."] [base_url="..."]' };
+	const value: Record<string, unknown> = {};
+	if (kwargs.api_key !== undefined) value.api_key = { value: kwargs.api_key, secret: true };
+	if (kwargs.base_url !== undefined) value.base_url = kwargs.base_url;
+	if (!value.api_key && !value.base_url) {
+		const def = KEYLESS_DEFAULTS[provider];
+		if (def) value.base_url = def;
+		else return { error: `usage: /login ${provider} api_key="..." [base_url="..."]` };
+	}
+	return { provider, value };
+}
+
+function formatProviderAuthLocal(value: unknown): string {
+	const parts: string[] = [];
+	if (value !== null && typeof value === "object") {
+		const obj = value as Record<string, unknown>;
+		const ak = obj.api_key as { value?: unknown } | undefined;
+		if (ak && typeof ak.value === "string") parts.push(`api_key=${ak.value}`);
+		if (typeof obj.base_url === "string") parts.push(`base_url=${obj.base_url}`);
+	}
+	return parts.join(" ") || "(no fields)";
 }
 
 function formatAge(raw: string | number | undefined): string {
