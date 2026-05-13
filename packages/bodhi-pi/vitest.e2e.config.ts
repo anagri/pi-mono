@@ -72,6 +72,16 @@ export default defineConfig({
 					include: ["e2e/shared/**/*.e2e.ts"],
 				},
 			},
+			{
+				plugins: base.plugins,
+				resolve: base.resolve,
+				test: {
+					...sharedProjectTest,
+					name: "chrome-ext",
+					setupFiles: ["./e2e/setup/chrome-ext.ts"],
+					include: ["e2e/shared/**/*.e2e.ts"],
+				},
+			},
 		],
 	},
 });

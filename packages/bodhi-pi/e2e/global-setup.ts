@@ -4,6 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser-launch.js";
+import {
+	chromeExtBaseUrl,
+	closeSharedChromeExtContext,
+	ensureSharedChromeExtContext,
+} from "./helpers/chrome-ext-launch.js";
 
 const REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 
@@ -135,6 +140,12 @@ export async function setup(): Promise<() => Promise<void>> {
 	process.env.BODHI_PI_E2E_BROWSER_BASE_URL = `http://localhost:${BROWSER_VITE_PORT}`;
 	await ensureSharedBrowser();
 
+	// Persistent chromium context for the chrome-ext project — loads the
+	// unpacked test-app-chrome-ext dist/ via --load-extension. Sibling to the
+	// browser project's regular chromium singleton (different launch mode).
+	await ensureSharedChromeExtContext();
+	process.env.BODHI_PI_E2E_CHROME_EXT_BASE_URL = chromeExtBaseUrl();
+
 	return async () => {
 		for (const inst of [http, ws]) {
 			try {
@@ -149,6 +160,7 @@ export async function setup(): Promise<() => Promise<void>> {
 			// already exited
 		}
 		await closeSharedBrowser();
+		await closeSharedChromeExtContext();
 		await Promise.all([
 			rm(http.dataDir, { recursive: true, force: true }),
 			rm(ws.dataDir, { recursive: true, force: true }),
