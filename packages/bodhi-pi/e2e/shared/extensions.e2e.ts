@@ -95,6 +95,22 @@ test("redact-secrets with real LLM: API-key in tool output is scrubbed before be
 	expect(flat).not.toContain("sk-PLAINTEXTSECRETXYZ123");
 });
 
+test("register-command extension: custom slash command expands and reaches the model", async () => {
+	const model = getModel("openai", "gpt-4o-mini");
+	const apiKey = process.env.OPENAI_API_KEY!;
+	const h = await createE2EHarness({
+		models: [model],
+		defaultModelId: model.id,
+		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
+		bodhiPiFixture: "register-command",
+	});
+	activeHarness = h;
+	await h.clientConn.initialize(stdInitParams);
+	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await h.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "/ext-greet" }] });
+	expect(chunkedAgentText(h.updates).toLowerCase()).toContain("hi");
+});
+
 test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const apiKey = process.env.OPENAI_API_KEY!;
