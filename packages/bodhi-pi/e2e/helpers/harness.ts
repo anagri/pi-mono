@@ -36,6 +36,7 @@ import {
 } from "@/index.js";
 import { waitForAgentEndBalance } from "./events-assert.js";
 import { getRuntime } from "./runtime.js";
+import { loadFixtureFactoriesFromSource } from "./seed-bodhi-pi.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_CLI_BIN = path.resolve(here, "../test-app-cli/dist/test-app-cli/src/cli.js");
@@ -54,6 +55,13 @@ export interface E2EHarnessOptions {
 	kvStore?: KvStore;
 	scriptExecutor?: ScriptExecutor;
 	extensionFactories?: RegisteredExtension[];
+	/**
+	 * Name of a folder under `packages/bodhi-pi/e2e/data/<name>/.bodhi-pi/` whose
+	 * contents seed the agent's project-rooted config (extensions, commands,
+	 * skills, settings). Per-runtime dispatch lives in the harness branches.
+	 * Phase 1: in-memory only; phases 2–3 widen to cli/http.
+	 */
+	bodhiPiFixture?: string;
 	compaction?: Partial<CompactionSettings>;
 }
 
@@ -99,6 +107,8 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 	// Node executor via their respective hosts.
 	const scriptExecutor = opts.scriptExecutor ?? createTestScriptExecutor(filesystem);
 	const { log: events, handlers } = recorder();
+	const fixtureFactories = opts.bodhiPiFixture ? await loadFixtureFactoriesFromSource(opts.bodhiPiFixture) : [];
+	const extensionFactories = [...(opts.extensionFactories ?? []), ...fixtureFactories];
 	const inner = createTestHarness({
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,
@@ -110,7 +120,7 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 		...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
 		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
-		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
+		...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 		...(opts.compaction ? { compaction: opts.compaction } : {}),
 		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
 	});

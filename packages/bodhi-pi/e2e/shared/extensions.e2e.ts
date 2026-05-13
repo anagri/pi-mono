@@ -1,22 +1,16 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import {
-	asRegistered,
-	dynamicTools,
-	inputTransform,
-	makeRegisterProviderFactory,
-	pirate,
-	redactSecrets,
-} from "@test/helpers/extension-fixtures.js";
+import { asRegistered, makeRegisterProviderFactory } from "@test/helpers/extension-fixtures.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 import { isRuntime } from "../helpers/runtime.js";
 
-// Extension-factory tests pass JS factory functions into the agent in-process.
-// They can't translate over the cli stdio boundary, so they run under
-// in-memory only. The cli runtime auto-loads extensions from disk via
-// `.bodhi-pi/extensions/*.{js,mjs,cjs}` — a different surface, tested separately.
+// Extension fixtures live as real files under `e2e/data/<slug>/.bodhi-pi/extensions/`
+// and the harness materializes them per-runtime via `bodhiPiFixture`. The 4
+// simple fixtures use flat `.js` and run under all 3 runtimes; `register-provider`
+// is still on the legacy `extensionFactories` path (rich Node-package loader
+// lands in phase 4) and stays in-memory-only until then.
 
 let activeHarness: E2EHarness | undefined;
 
@@ -34,7 +28,7 @@ test.runIf(isRuntime("in-memory"))("input-transform with real LLM: ?quick prefix
 		models: [model],
 		defaultModelId: model.id,
 		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		extensionFactories: [asRegistered("input-transform", inputTransform)],
+		bodhiPiFixture: "input-transform",
 	});
 	activeHarness = h;
 	await h.clientConn.initialize(stdInitParams);
@@ -57,7 +51,7 @@ test.runIf(isRuntime("in-memory"))("pirate with real LLM: response uses pirate-s
 		models: [model],
 		defaultModelId: model.id,
 		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		extensionFactories: [asRegistered("pirate", pirate)],
+		bodhiPiFixture: "pirate",
 	});
 	activeHarness = h;
 	await h.clientConn.initialize(stdInitParams);
@@ -79,7 +73,7 @@ test.runIf(isRuntime("in-memory"))(
 			models: [model],
 			defaultModelId: model.id,
 			getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-			extensionFactories: [asRegistered("redact-secrets", redactSecrets)],
+			bodhiPiFixture: "redact-secrets",
 		});
 		activeHarness = h;
 		await h.filesystem.mkdir(`${h.cwd}/proj`, { recursive: true });
@@ -112,7 +106,7 @@ test.runIf(isRuntime("in-memory"))("dynamic-tools with real LLM: model picks up 
 		models: [model],
 		defaultModelId: model.id,
 		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		extensionFactories: [asRegistered("dynamic-tools", dynamicTools)],
+		bodhiPiFixture: "dynamic-tools",
 	});
 	activeHarness = h;
 	await h.clientConn.initialize(stdInitParams);
