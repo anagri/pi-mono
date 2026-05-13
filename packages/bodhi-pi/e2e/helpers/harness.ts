@@ -30,7 +30,6 @@ import {
 	createInMemorySessionStore,
 	type Filesystem,
 	type KvStore,
-	type RegisteredExtension,
 	type ScriptExecutor,
 	type SessionStore,
 } from "@/index.js";
@@ -54,12 +53,13 @@ export interface E2EHarnessOptions {
 	sessionStore?: SessionStore;
 	kvStore?: KvStore;
 	scriptExecutor?: ScriptExecutor;
-	extensionFactories?: RegisteredExtension[];
 	/**
-	 * Name of a folder under `packages/bodhi-pi/e2e/data/<name>/.bodhi-pi/` whose
-	 * contents seed the agent's project-rooted config (extensions, commands,
-	 * skills, settings). Per-runtime dispatch lives in the harness branches.
-	 * Phase 1: in-memory only; phases 2–3 widen to cli/http.
+	 * Name of a folder under `packages/bodhi-pi/e2e/data/<name>/.bodhi-pi/`
+	 * whose contents seed the agent's project-rooted config (extensions,
+	 * commands, skills, settings). Per-runtime dispatch lives in the harness
+	 * branches: in-memory loads via the rich loader (jiti) from the source
+	 * path; cli/http symlink the source folder into the spawned process's cwd
+	 * and let the agent's existing loader pick it up.
 	 */
 	bodhiPiFixture?: string;
 	compaction?: Partial<CompactionSettings>;
@@ -107,8 +107,7 @@ async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarnes
 	// Node executor via their respective hosts.
 	const scriptExecutor = opts.scriptExecutor ?? createTestScriptExecutor(filesystem);
 	const { log: events, handlers } = recorder();
-	const fixtureFactories = opts.bodhiPiFixture ? await loadFixtureFactoriesFromSource(opts.bodhiPiFixture) : [];
-	const extensionFactories = [...(opts.extensionFactories ?? []), ...fixtureFactories];
+	const extensionFactories = opts.bodhiPiFixture ? await loadFixtureFactoriesFromSource(opts.bodhiPiFixture) : [];
 	const inner = createTestHarness({
 		models: opts.models,
 		defaultModelId: opts.defaultModelId,

@@ -1,16 +1,16 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { asRegistered, makeRegisterProviderFactory } from "@test/helpers/extension-fixtures.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 import { isRuntime } from "../helpers/runtime.js";
 
 // Extension fixtures live as real files under `e2e/data/<slug>/.bodhi-pi/extensions/`
-// and the harness materializes them per-runtime via `bodhiPiFixture`. The 4
-// simple fixtures use flat `.js` and run under all 3 runtimes; `register-provider`
-// is still on the legacy `extensionFactories` path (rich Node-package loader
-// lands in phase 4) and stays in-memory-only until then.
+// and the harness materializes them per-runtime via `bodhiPiFixture`. Simple
+// fixtures use flat `.js`; `register-provider` is a Node package with a
+// `package.json` declaring `pi.extensions` — loaded by the rich extension
+// loader. Phase 4 wires the rich loader for in-memory only; phase 5 widens to
+// cli + http.
 
 let activeHarness: E2EHarness | undefined;
 
@@ -129,7 +129,6 @@ test.runIf(isRuntime("in-memory"))(
 	"registerProvider with real Anthropic: switching to extension-supplied model routes to Claude",
 	async () => {
 		const openaiKey = process.env.OPENAI_API_KEY!;
-		const anthropicKey = process.env.ANTHROPIC_API_KEY!;
 		const openai = getModel("openai", "gpt-4o-mini");
 		const claude = getModel("anthropic", "claude-haiku-4-5");
 
@@ -137,16 +136,7 @@ test.runIf(isRuntime("in-memory"))(
 			models: [openai],
 			defaultModelId: openai.id,
 			getApiKey: (p) => (p === "openai" ? openaiKey : undefined),
-			extensionFactories: [
-				asRegistered(
-					"register-provider",
-					makeRegisterProviderFactory({
-						registrationName: "ext-anthropic",
-						model: claude,
-						apiKey: anthropicKey,
-					}),
-				),
-			],
+			bodhiPiFixture: "register-provider",
 		});
 		activeHarness = h;
 		await h.clientConn.initialize(stdInitParams);
