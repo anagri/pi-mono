@@ -1,4 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { type Agent, type Client, ClientSideConnection, ndJsonStream, type SessionNotification } from "@agentclientprotocol/sdk";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createMessagePortStream } from "@e2e/helpers/browser-adapters/transport/message-port-stream";
+import type { WorkerMessage } from "@e2e/helpers/browser-adapters/runtime/types";
 import type { EventEntry, FrameEntry } from "./lib/frame-log";
 import { parseSeedFiles } from "./lib/seed-parser";
 import { tryHandleSlash } from "./lib/slash-router";
@@ -6,29 +10,78 @@ import { mountWorkspace, WORKSPACE_ROOT } from "./lib/workspace-mount";
 
 type RootState = "needs-init" | "ready" | "streaming" | "closed" | "error";
 
-interface SetupData {
-	userId: string;
-	userEmail: string;
+interface PageConfig {
+	models?: Model<Api>[];
+	defaultModelId?: string;
+	apiKeys?: Record<string, string>;
+	systemPrompt?: string;
+	appendSystemPrompt?: string;
+	homeDir?: string;
+}
+
+const STREAMING_METHODS = new Set(["session/prompt", "session/load", "session/resume"]);
+
+function workerFactory(): Worker {
+	return new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
 }
 
 export function App() {
 	const [state, setState] = useState<RootState>("needs-init");
 	const [errorMsg, setErrorMsg] = useState<string>("");
-	const [setupData, setSetupData] = useState<SetupData | null>(null);
 	const [frames, setFrames] = useState<FrameEntry[]>([]);
-	const [events] = useState<EventEntry[]>([]);
+	const [events, setEvents] = useState<EventEntry[]>([]);
 	const [acpInput, setAcpInput] = useState<string>("");
 	const seqRef = useRef(0);
+	const eventSeqRef = useRef(0);
 	const activeSessionRef = useRef<string | null>(null);
-
-	const nextSeq = () => {
-		seqRef.current += 1;
-		return seqRef.current;
-	};
+	const inFlightStreamingRef = useRef<Set<string>>(new Set());
+	const connRef = useRef<ClientSideConnection | null>(null);
+	const workerRef = useRef<Worker | null>(null);
 
 	const pushFrame = useCallback((f: Omit<FrameEntry, "seq">) => {
-		setFrames((prev) => [...prev, { ...f, seq: prev.length + 1 }]);
+		setFrames((prev) => {
+			const seq = prev.length + 1;
+			return [...prev, { ...f, seq }];
+		});
+		seqRef.current += 1;
 	}, []);
+
+	const pushEvent = useCallback((type: string, payload: string) => {
+		eventSeqRef.current += 1;
+		const seq = eventSeqRef.current;
+		setEvents((prev) => [...prev, { seq, type, payload }]);
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			workerRef.current?.terminate();
+			workerRef.current = null;
+		};
+	}, []);
+
+	const recordWireFrame = useCallback(
+		(direction: "in" | "out", line: string) => {
+			let parsed: { method?: string; id?: string | number; result?: unknown; error?: unknown; params?: unknown };
+			try {
+				parsed = JSON.parse(line);
+			} catch {
+				parsed = {};
+			}
+			const method = typeof parsed.method === "string" ? parsed.method : "";
+			const rpcId = parsed.id !== undefined ? String(parsed.id) : "";
+			const isNotification = !!parsed.method && parsed.id === undefined;
+			const isResponse = parsed.id !== undefined && (parsed.result !== undefined || parsed.error !== undefined);
+			const kind: FrameEntry["kind"] = isNotification ? "notification" : isResponse ? "response" : "request";
+			pushFrame({
+				direction,
+				kind,
+				method,
+				rpcId,
+				payload: line,
+			});
+		},
+		[pushFrame],
+	);
 
 	const onSetupSubmit = useCallback(
 		async (e: React.FormEvent) => {
@@ -37,6 +90,7 @@ export function App() {
 			const id = String(form.get("user-id") ?? "").trim();
 			const email = String(form.get("user-email") ?? "").trim();
 			const seed = String(form.get("seed-files") ?? "");
+			const configRaw = String(form.get("config") ?? "").trim();
 			if (!id) {
 				setErrorMsg("user-id is required");
 				setState("error");
@@ -47,17 +101,104 @@ export function App() {
 				setState("error");
 				return;
 			}
+			let config: PageConfig = {};
+			if (configRaw.length > 0) {
+				try {
+					config = JSON.parse(configRaw) as PageConfig;
+				} catch (err) {
+					setErrorMsg(`invalid config JSON: ${(err as Error).message}`);
+					setState("error");
+					return;
+				}
+			}
 			try {
 				const seedFiles = parseSeedFiles(seed);
 				await mountWorkspace(seedFiles);
-				setSetupData({ userId: id, userEmail: email });
+
+				const worker = workerFactory();
+				workerRef.current = worker;
+
+				// Wait for worker ready before opening ACP. Worker posts
+				// "bodhi-pi-ready" once the agent is wired; until then,
+				// `initialize` would race the worker's adapter bootstrap.
+				const readyPromise = new Promise<void>((resolve, reject) => {
+					const onMessage = (ev: MessageEvent<WorkerMessage>) => {
+						if (!ev.data) return;
+						if (ev.data.type === "bodhi-pi-ready") {
+							worker.removeEventListener("message", onMessage);
+							resolve();
+						} else if (ev.data.type === "bodhi-pi-error") {
+							worker.removeEventListener("message", onMessage);
+							reject(new Error(ev.data.message));
+						}
+					};
+					worker.addEventListener("message", onMessage);
+				});
+
+				worker.addEventListener("message", (ev: MessageEvent<WorkerMessage>) => {
+					if (!ev.data) return;
+					if (ev.data.type === "bodhi-pi-event") {
+						pushEvent(ev.data.record.type, JSON.stringify(ev.data.record));
+					}
+				});
+
+				const channel = new MessageChannel();
+				worker.postMessage(
+					{
+						type: "init",
+						agentPort: channel.port2,
+						cwd: WORKSPACE_ROOT,
+						dbName: `bodhi-pi-test-${id}`,
+						models: config.models,
+						defaultModelId: config.defaultModelId,
+						apiKeys: config.apiKeys,
+						systemPrompt: config.systemPrompt,
+						appendSystemPrompt: config.appendSystemPrompt,
+						homeDir: config.homeDir,
+					},
+					[channel.port2],
+				);
+
+				await readyPromise;
+
+				const { readable, writable } = createMessagePortStream(channel.port1);
+				const teedReadable = new TransformStream<Uint8Array, Uint8Array>({
+					transform(chunk, ctl) {
+						const text = new TextDecoder("utf-8").decode(chunk);
+						for (const line of text.split("\n")) {
+							if (line.trim()) recordWireFrame("in", line);
+						}
+						ctl.enqueue(chunk);
+					},
+				});
+				const teedWritable = new TransformStream<Uint8Array, Uint8Array>({
+					transform(chunk, ctl) {
+						const text = new TextDecoder("utf-8").decode(chunk);
+						for (const line of text.split("\n")) {
+							if (line.trim()) recordWireFrame("out", line);
+						}
+						ctl.enqueue(chunk);
+					},
+				});
+				teedWritable.readable.pipeTo(writable).catch(() => {});
+				const stream = ndJsonStream(teedWritable.writable, readable.pipeThrough(teedReadable));
+
+				const client: Client = {
+					sessionUpdate: async (_params: SessionNotification) => {
+						// Notifications already surface in the frame log via the
+						// readable tap; harness reads from there.
+					},
+					requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+				};
+				const conn = new ClientSideConnection((_agent: Agent): Client => client, stream);
+				connRef.current = conn;
 				setState("ready");
 			} catch (err) {
 				setErrorMsg((err as Error).message ?? String(err));
 				setState("error");
 			}
 		},
-		[],
+		[pushEvent, recordWireFrame],
 	);
 
 	const onAcpSubmit = useCallback(async () => {
@@ -65,7 +206,7 @@ export function App() {
 		setAcpInput("");
 		const slashResult = await tryHandleSlash(raw);
 		if (slashResult) {
-			const synthId = `slash-${nextSeq()}`;
+			const synthId = `slash-${seqRef.current + 1}`;
 			pushFrame({
 				direction: "out",
 				kind: "request",
@@ -82,6 +223,12 @@ export function App() {
 			});
 			return;
 		}
+		const conn = connRef.current;
+		if (!conn) {
+			setErrorMsg("connection not ready");
+			setState("error");
+			return;
+		}
 		let body: { id?: string | number; method?: string; params?: unknown };
 		try {
 			body = JSON.parse(raw);
@@ -95,43 +242,55 @@ export function App() {
 			});
 			return;
 		}
-		const rpcId = String(body.id ?? "0");
 		const method = String(body.method ?? "");
-		pushFrame({
-			direction: "out",
-			kind: "request",
-			method,
-			rpcId,
-			payload: JSON.stringify(body),
-		});
-		// Phase 2: echo handler — replaced by real worker dispatch in Phase 3.
-		const echoResult = { echo: body.params ?? null };
-		pushFrame({
-			direction: "in",
-			kind: "response",
-			method,
-			rpcId,
-			payload: JSON.stringify({ jsonrpc: "2.0", id: body.id, result: echoResult }),
-		});
-		if (method === "session/new" || method === "session/load" || method === "session/resume") {
-			const params = body.params as { sessionId?: string } | undefined;
-			if (params?.sessionId) activeSessionRef.current = params.sessionId;
-			else activeSessionRef.current = `echo-session-${nextSeq()}`;
+		const params = body.params as Record<string, unknown> | undefined;
+		const isStreaming = STREAMING_METHODS.has(method);
+		if (isStreaming) {
+			inFlightStreamingRef.current.add(method);
+			setState("streaming");
+		}
+		try {
+			// Generic dispatch — relies on ACP SDK's `connection.sendRequest` for
+			// any method. The ClientSideConnection exposes typed methods, but
+			// for the harness we want fully-passthrough behavior.
+			// biome-ignore lint/suspicious/noExplicitAny: dispatch shim
+			const result = await (conn as any).sendRequest(method, params ?? null);
+			// Track active session id from new/load/resume responses.
+			if ((method === "session/new" || method === "session/load" || method === "session/resume") && result && typeof result === "object") {
+				const r = result as { sessionId?: string };
+				if (typeof r.sessionId === "string") activeSessionRef.current = r.sessionId;
+				else if (params && typeof params === "object" && typeof (params as { sessionId?: string }).sessionId === "string") {
+					activeSessionRef.current = (params as { sessionId: string }).sessionId;
+				}
+			}
+		} catch (err) {
+			pushFrame({
+				direction: "in",
+				kind: "response",
+				method: `${method}/error`,
+				rpcId: String(body.id ?? "0"),
+				payload: JSON.stringify({ error: { message: (err as Error).message ?? String(err) } }),
+			});
+		} finally {
+			if (isStreaming) {
+				inFlightStreamingRef.current.delete(method);
+				if (inFlightStreamingRef.current.size === 0) setState("ready");
+			}
 		}
 	}, [acpInput, pushFrame]);
 
-	const onCancelClick = useCallback(() => {
+	const onCancelClick = useCallback(async () => {
 		const sessionId = activeSessionRef.current;
-		if (!sessionId) return;
-		const rpcId = `cancel-${nextSeq()}`;
-		pushFrame({
-			direction: "out",
-			kind: "notification",
-			method: "session/cancel",
-			rpcId,
-			payload: JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId } }),
-		});
-	}, [pushFrame]);
+		const conn = connRef.current;
+		if (!sessionId || !conn) return;
+		try {
+			// session/cancel is a notification under ACP — fire and forget.
+			// biome-ignore lint/suspicious/noExplicitAny: dispatch shim
+			await (conn as any).sendNotification("session/cancel", { sessionId });
+		} catch {
+			// best-effort
+		}
+	}, []);
 
 	return (
 		<main data-testid="test-app-root" data-test-state={state}>
@@ -155,6 +314,10 @@ export function App() {
 						seed-files
 						<textarea data-testid="seed-files" name="seed-files" rows={8} cols={60} />
 					</label>
+					<label>
+						config
+						<textarea data-testid="config" name="config" rows={8} cols={60} />
+					</label>
 					<button data-testid="setup-submit" type="submit">
 						setup
 					</button>
@@ -163,9 +326,6 @@ export function App() {
 			{(state === "ready" || state === "streaming") && (
 				<section data-testid="acp-io">
 					<p data-testid="workspace-root">{WORKSPACE_ROOT}</p>
-					<p data-testid="user-info">
-						{setupData?.userId} / {setupData?.userEmail}
-					</p>
 					<textarea
 						data-testid="acp-input"
 						value={acpInput}
