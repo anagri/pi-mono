@@ -3,7 +3,6 @@ import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { afterEach, expect, test } from "vitest";
 import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
-import { isRuntime } from "../helpers/runtime.js";
 
 // Extension fixtures live as real files under `e2e/data/<slug>/.bodhi-pi/extensions/`
 // and the harness materializes them per-runtime via `bodhiPiFixture`. Simple
@@ -125,36 +124,33 @@ test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async
 	expect(flat).toContain("echoed: integration-ok");
 });
 
-test.runIf(isRuntime("in-memory"))(
-	"registerProvider with real Anthropic: switching to extension-supplied model routes to Claude",
-	async () => {
-		const openaiKey = process.env.OPENAI_API_KEY!;
-		const openai = getModel("openai", "gpt-4o-mini");
-		const claude = getModel("anthropic", "claude-haiku-4-5");
+test("registerProvider with real Anthropic: switching to extension-supplied model routes to Claude", async () => {
+	const openaiKey = process.env.OPENAI_API_KEY!;
+	const openai = getModel("openai", "gpt-4o-mini");
+	const claude = getModel("anthropic", "claude-haiku-4-5");
 
-		const h = await createE2EHarness({
-			models: [openai],
-			defaultModelId: openai.id,
-			getApiKey: (p) => (p === "openai" ? openaiKey : undefined),
-			bodhiPiFixture: "register-provider",
-		});
-		activeHarness = h;
-		await h.clientConn.initialize(stdInitParams);
-		const newSess = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
-		const sid = newSess.sessionId;
+	const h = await createE2EHarness({
+		models: [openai],
+		defaultModelId: openai.id,
+		getApiKey: (p) => (p === "openai" ? openaiKey : undefined),
+		bodhiPiFixture: "register-provider",
+	});
+	activeHarness = h;
+	await h.clientConn.initialize(stdInitParams);
+	const newSess = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const sid = newSess.sessionId;
 
-		const opt = newSess.configOptions?.[0];
-		if (!opt || opt.type !== "select") throw new Error("expected select option");
-		const ids = (opt.options as Array<{ value: string }>).map((o) => o.value);
-		expect(ids).toContain(claude.id);
+	const opt = newSess.configOptions?.[0];
+	if (!opt || opt.type !== "select") throw new Error("expected select option");
+	const ids = (opt.options as Array<{ value: string }>).map((o) => o.value);
+	expect(ids).toContain(claude.id);
 
-		await h.clientConn.setSessionConfigOption({ sessionId: sid, configId: "model", value: claude.id });
-		const result = await h.clientConn.prompt({
-			sessionId: sid,
-			prompt: [{ type: "text", text: "Reply with the single word: ping" }],
-		});
+	await h.clientConn.setSessionConfigOption({ sessionId: sid, configId: "model", value: claude.id });
+	const result = await h.clientConn.prompt({
+		sessionId: sid,
+		prompt: [{ type: "text", text: "Reply with the single word: ping" }],
+	});
 
-		expect(result.stopReason).toBe("end_turn");
-		expect(chunkedAgentText(h.updates).toLowerCase()).toContain("ping");
-	},
-);
+	expect(result.stopReason).toBe("end_turn");
+	expect(chunkedAgentText(h.updates).toLowerCase()).toContain("ping");
+});

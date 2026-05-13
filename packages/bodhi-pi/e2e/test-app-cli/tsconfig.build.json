@@ -8,6 +8,6 @@
 			"@e2e/*": ["../*"]
 		}
 	},
-	"include": ["src/**/*.ts", "../helpers/node-adapters/**/*.ts"],
+	"include": ["src/**/*.ts", "../helpers/node-adapters/**/*.ts", "../helpers/extension-loaders/**/*.ts"],
 	"exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.e2e.ts", "**/*.d.ts"]
 }

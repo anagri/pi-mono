@@ -7,5 +7,5 @@
 			"@e2e/*": ["../*"]
 		}
 	},
-	"include": ["src/**/*.ts", "../helpers/node-adapters/**/*.ts"]
+	"include": ["src/**/*.ts", "../helpers/node-adapters/**/*.ts", "../helpers/extension-loaders/**/*.ts"]
 }

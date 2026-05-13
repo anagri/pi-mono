@@ -3,7 +3,7 @@ import os from "node:os";
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
-import { createNodeExtensionLoader } from "@e2e/helpers/node-adapters/index.js";
+import { createNodePackageExtensionLoader } from "@e2e/helpers/extension-loaders/index.js";
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";
@@ -119,7 +119,7 @@ function envGetApiKey(provider: string): string | undefined {
 const cfg = resolveConfig(rest);
 const cwd = cfg.cwd;
 
-const extensionFactories = cfg.loadExtensions ? await createNodeExtensionLoader({ cwd }) : [];
+const extensionFactories = cfg.loadExtensions ? await createNodePackageExtensionLoader({ cwd }) : [];
 
 // In --rpc mode the harness drives this binary over stdio and treats stderr as
 // the event channel; install the stderr writer unless the user explicitly

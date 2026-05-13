@@ -1,11 +1,7 @@
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
-import {
-	createNodeExtensionLoader,
-	createNodeFilesystem,
-	createNodeKvStore,
-	createNodeScriptExecutor,
-} from "@e2e/helpers/node-adapters/index.js";
+import { createNodePackageExtensionLoader } from "@e2e/helpers/extension-loaders/index.js";
+import { createNodeFilesystem, createNodeKvStore, createNodeScriptExecutor } from "@e2e/helpers/node-adapters/index.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
@@ -109,7 +105,7 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 	});
 	const filesystem = createNodeFilesystem({ rootCwd: cwd });
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
-	const extensionFactories = await createNodeExtensionLoader({ cwd });
+	const extensionFactories = await createNodePackageExtensionLoader({ cwd });
 	const scriptExecutor = createNodeScriptExecutor();
 	const kvStore = createNodeKvStore(opts.kvStoreDir ? { dir: opts.kvStoreDir } : {});
 

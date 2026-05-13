@@ -22,6 +22,7 @@
 		"@earendil-works/pi-ai": "^0.74.0",
 		"better-sqlite3": "^11.10.0",
 		"drizzle-orm": "^0.43.1",
+		"jiti": "^2.7.0",
 		"react": "^19.2.5",
 		"react-dom": "^19.2.5"
 	},

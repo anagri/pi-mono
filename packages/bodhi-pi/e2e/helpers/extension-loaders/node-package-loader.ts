@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import type { ExtensionFactory, RegisteredExtension } from "@bodhiapp/bodhi-pi";
 import { createJiti } from "jiti";
-import type { ExtensionFactory, RegisteredExtension } from "@/index.js";
 
 /**
  * Rich e2e extension loader. Walks `<cwd>/<extensionsDir>/` and accepts either:
@@ -116,13 +116,18 @@ async function loadModuleDefault(
 	jiti?: ReturnType<typeof createJiti>,
 ): Promise<ExtensionFactory | undefined> {
 	const ext = path.extname(filePath).toLowerCase();
+	// Resolve symlinks so Node's CJS resolver (used by jiti and native import)
+	// walks node_modules from the real location of the file, not the symlinked
+	// path. Without this, an extension that lives under a symlinked `.bodhi-pi/`
+	// can't `import` from npm packages.
+	const realPath = await fs.realpath(filePath);
 	try {
 		let mod: unknown;
 		if (ext === ".ts" || ext === ".tsx") {
 			if (!jiti) throw new Error("ts entry requires jiti");
-			mod = await jiti.import(filePath, { default: true });
+			mod = await jiti.import(realPath, { default: true });
 		} else {
-			const imported = (await import(pathToFileURL(filePath).href)) as { default?: unknown };
+			const imported = (await import(pathToFileURL(realPath).href)) as { default?: unknown };
 			mod = imported.default ?? imported;
 		}
 		if (typeof mod !== "function") {
