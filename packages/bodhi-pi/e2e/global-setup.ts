@@ -106,6 +106,15 @@ export async function setup(): Promise<() => Promise<void>> {
 		);
 	}
 
+	// Vitest's projects mode invokes each project's globalSetup independently;
+	// the same env vars + spawned processes would race across projects. Bail
+	// out if a prior project's setup has already populated the env so the
+	// shared test-app instances (test-app-http × 2, vite preview, chromium)
+	// boot once for the entire run.
+	if (process.env.BODHI_PI_E2E_BROWSER_BASE_URL) {
+		return async () => {};
+	}
+
 	// Two shared test-app-http instances for the run: one for the |http| project
 	// (per-turn agent rebuild over HTTP+SSE on /acp) and one for the |ws| project
 	// (stateful per-connection agent over WebSocket on /acp-ws). Separate ports +
@@ -118,10 +127,10 @@ export async function setup(): Promise<() => Promise<void>> {
 	process.env.BODHI_PI_E2E_WS_BASE_URL = `http://localhost:${ws.port}`;
 	process.env.BODHI_PI_E2E_WS_DATA_DIR = ws.dataDir;
 
-	// Vite dev for test-app-browser + headless chromium for the browser
-	// project's harness. Both shared across all browser-runtime harnesses;
-	// per-test isolation comes from browser.newContext() + per-test Dexie
-	// dbName suffix in the page (see e2e/helpers/browser-launch.ts).
+	// Vite preview for the prebuilt test-app-browser + headless chromium for
+	// the browser project's harness. Both shared across all browser-runtime
+	// harnesses; per-test isolation comes from browser.newContext() +
+	// per-test Dexie dbName suffix in the page.
 	const viteChild = await spawnVitePreview();
 	process.env.BODHI_PI_E2E_BROWSER_BASE_URL = `http://localhost:${BROWSER_VITE_PORT}`;
 	await ensureSharedBrowser();
