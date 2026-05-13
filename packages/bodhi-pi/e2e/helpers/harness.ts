@@ -36,7 +36,7 @@ import {
 } from "@/index.js";
 import { waitForAgentEndBalance } from "./events-assert.js";
 import { getRuntime } from "./runtime.js";
-import { loadFixtureFactoriesFromSource } from "./seed-bodhi-pi.js";
+import { fixtureBodhiPiDir, loadFixtureFactoriesFromSource } from "./seed-bodhi-pi.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_CLI_BIN = path.resolve(here, "../test-app-cli/dist/test-app-cli/src/cli.js");
@@ -154,6 +154,15 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 
 	const modelsArg = opts.models.map((m) => `${m.provider}:${m.id}`).join(",");
 
+	// When the test seeds a fixture, symlink the source `.bodhi-pi/` into the
+	// spawned child's cwd. Following the symlink, Node walks back to the
+	// monorepo node_modules so package-mode extensions can `import` from npm.
+	// Without a fixture, keep `--no-extensions` so other shared tests stay
+	// isolated from each other.
+	if (opts.bodhiPiFixture) {
+		await fs.symlink(fixtureBodhiPiDir(opts.bodhiPiFixture), path.join(tmpDir, ".bodhi-pi"), "dir");
+	}
+
 	const args = [
 		TEST_APP_CLI_BIN,
 		"--rpc",
@@ -161,7 +170,7 @@ async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 		tmpDir,
 		"--db",
 		dbPath,
-		"--no-extensions",
+		...(opts.bodhiPiFixture ? [] : ["--no-extensions"]),
 		"--default-model",
 		opts.defaultModelId,
 	];
