@@ -26,7 +26,7 @@ export interface SlashContext {
 	conn: ClientSideConnection;
 	cwd: string;
 	state: SlashState;
-	pushSystemMessage(text: string): void;
+	pushSystemMessage(text: string, dataAttrs?: Record<string, string>): void;
 	setSessionId(id: string): void;
 	setCurrentModel(id: string): void;
 }
@@ -137,7 +137,10 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 				ctx.setSessionId(targetId);
 				const m = extractModelFromConfigOptions(result.configOptions);
 				if (m) ctx.setCurrentModel(m);
-				ctx.pushSystemMessage(`resumed session: ${targetId}`);
+				ctx.pushSystemMessage(`resumed session: ${targetId}`, {
+					"data-session-event": "resumed",
+					"data-session-id": targetId,
+				});
 			} catch (err) {
 				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
 			}
@@ -147,7 +150,10 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 		case "/close": {
 			try {
 				await ctx.conn.closeSession({ sessionId: ctx.state.sessionId });
-				ctx.pushSystemMessage(`closed session: ${ctx.state.sessionId}`);
+				ctx.pushSystemMessage(`closed session: ${ctx.state.sessionId}`, {
+					"data-session-event": "closed",
+					"data-session-id": ctx.state.sessionId,
+				});
 			} catch (err) {
 				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
 			}
@@ -178,7 +184,10 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 				const result = (await ctx.conn.extMethod(EXT_SESSION_CLONE, {
 					sessionId: ctx.state.sessionId,
 				})) as { newSessionId?: string };
-				ctx.pushSystemMessage(`cloned: ${result.newSessionId ?? ""}`);
+				ctx.pushSystemMessage(`cloned: ${result.newSessionId ?? ""}`, {
+					"data-session-event": "cloned",
+					"data-session-id": result.newSessionId ?? "",
+				});
 			} catch (err) {
 				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
 			}

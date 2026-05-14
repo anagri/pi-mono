@@ -1,12 +1,7 @@
 import { expect, test } from "../fixtures.ts";
 
-test("terminal: agent invokes bash tool", async ({ gotoStart, setup, chat, uniqueUserId, configJson }) => {
-	await gotoStart();
-	await setup.fillAndSubmit({
-		userId: uniqueUserId,
-		email: `${uniqueUserId}@e2e-ui.test`,
-		configJson,
-	});
+test("terminal: agent invokes bash tool", async ({ startApp, chat }) => {
+	await startApp();
 
 	await chat.send("Use the bash tool to run `echo hello-from-bash` and tell me the output.");
 	await chat.waitForIdle();

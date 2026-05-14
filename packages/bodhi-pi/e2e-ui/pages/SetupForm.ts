@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 export interface FillOptions {
 	userId: string;
@@ -22,7 +22,7 @@ export class SetupFormPage {
 
 	async submit(): Promise<void> {
 		await this.page.click('[data-testid="setup-submit"]');
-		await this.page.waitForSelector('[data-testid="test-app-root"][data-test-state="ready"]');
+		await expect(this.page.locator('[data-testid="test-app-root"][data-test-state="ready"]')).toBeVisible();
 	}
 
 	async fillAndSubmit(opts: FillOptions): Promise<void> {

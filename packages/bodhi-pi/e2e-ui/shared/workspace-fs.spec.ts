@@ -1,14 +1,8 @@
 import { expect, test } from "../fixtures.ts";
 import { scenarioSeedXml } from "../helpers/scenario.ts";
 
-test("workspace-fs: agent lists workspace files", async ({ gotoStart, setup, chat, uniqueUserId, configJson }) => {
-	await gotoStart();
-	await setup.fillAndSubmit({
-		userId: uniqueUserId,
-		email: `${uniqueUserId}@e2e-ui.test`,
-		seedXml: scenarioSeedXml("default"),
-		configJson,
-	});
+test("workspace-fs: agent lists workspace files", async ({ startApp, chat }) => {
+	await startApp({ seedXml: scenarioSeedXml("default") });
 
 	await chat.send("Use the ls tool to list files in the current workspace.");
 	await chat.waitForIdle();

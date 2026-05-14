@@ -1,20 +1,8 @@
 import { expect, test } from "../fixtures.ts";
 import { PROMPT_DAY_AFTER_MONDAY } from "../helpers/prompts.ts";
 
-test("simple chat: assistant replies with tuesday", async ({
-	gotoStart,
-	setup,
-	chat,
-	wire,
-	uniqueUserId,
-	configJson,
-}) => {
-	await gotoStart();
-	await setup.fillAndSubmit({
-		userId: uniqueUserId,
-		email: `${uniqueUserId}@e2e-ui.test`,
-		configJson,
-	});
+test("simple chat: assistant replies with tuesday", async ({ startApp, chat, wire }) => {
+	await startApp();
 
 	await chat.send(PROMPT_DAY_AFTER_MONDAY);
 	await chat.waitForIdle();

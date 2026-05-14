@@ -18,12 +18,15 @@ export class ChatPanelPage {
 		await this.page.click('[data-testid="composer-send"][data-mode="stop"]');
 	}
 
+	// 60s default exceeds the global 30s expect budget because waitForIdle
+	// brackets a full real-LLM turn — same rationale as the 60s overrides in
+	// packages/bodhi-pi/e2e/CLAUDE.md "Timeouts" section.
 	async waitForIdle(timeout = 60_000): Promise<void> {
 		await expect(this.root).toHaveAttribute("data-test-state", "idle", { timeout });
 	}
 
-	async waitForStreaming(timeout = 30_000): Promise<void> {
-		await expect(this.root).toHaveAttribute("data-test-state", "streaming", { timeout });
+	async waitForStreaming(): Promise<void> {
+		await expect(this.root).toHaveAttribute("data-test-state", "streaming");
 	}
 
 	messages(role: "user" | "assistant" | "system"): Locator {

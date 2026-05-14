@@ -292,10 +292,10 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		]);
 	}, []);
 
-	const pushSystemMessage = useCallback((text: string) => {
+	const pushSystemMessage = useCallback((text: string, dataAttrs?: Record<string, string>) => {
 		setChatMessages((prev) => [
 			...prev,
-			{ id: `system-${prev.length}`, role: "system", text, toolCalls: [] },
+			{ id: `system-${prev.length}`, role: "system", text, toolCalls: [], ...(dataAttrs ? { dataAttrs } : {}) },
 		]);
 	}, []);
 

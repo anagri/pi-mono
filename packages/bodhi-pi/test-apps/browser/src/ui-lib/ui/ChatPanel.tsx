@@ -9,6 +9,7 @@ export interface ChatMessage {
 	role: "user" | "assistant" | "system";
 	text: string;
 	toolCalls: ChatToolCall[];
+	dataAttrs?: Record<string, string>;
 }
 
 export type ChatPanelState = "idle" | "streaming";
@@ -44,7 +45,7 @@ export function ChatPanel({
 		>
 			<div data-testid="chat-messages">
 				{messages.map((m) => (
-					<div key={m.id} data-testid="chat-message" data-message-role={m.role}>
+					<div key={m.id} data-testid="chat-message" data-message-role={m.role} {...(m.dataAttrs ?? {})}>
 						{m.text && <pre>{m.text}</pre>}
 						{m.toolCalls.map((tc) => (
 							<div

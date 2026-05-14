@@ -2,27 +2,14 @@ import { expect, test } from "../fixtures.ts";
 import { loadScenario } from "../helpers/load-scenario.ts";
 import { buildSeedXml } from "../helpers/seed-xml.ts";
 
-test("commands-extensions-skills: /say-tuesday, /skill:say-hello, redact-secrets", async ({
-	gotoStart,
-	setup,
-	chat,
-	uniqueUserId,
-	configJson,
-}) => {
-	await gotoStart();
-
+test("commands-extensions-skills: /say-tuesday, /skill:say-hello, redact-secrets", async ({ startApp, chat, wire }) => {
 	const files = {
 		...loadScenario("commands-say-tuesday"),
 		...loadScenario("skills-say-hello"),
 		...loadScenario("extensions-redact-secrets"),
 	};
 
-	await setup.fillAndSubmit({
-		userId: uniqueUserId,
-		email: `${uniqueUserId}@e2e-ui.test`,
-		seedXml: buildSeedXml(files),
-		configJson,
-	});
+	await startApp({ seedXml: buildSeedXml(files) });
 
 	// Project command — listed in availableCommands, so the local dispatcher
 	// falls through and the agent expands the template before the LLM sees it.
@@ -38,11 +25,13 @@ test("commands-extensions-skills: /say-tuesday, /skill:say-hello, redact-secrets
 	expect(helloReply).toContain("world");
 
 	// Extension hooks tool_result and redacts `sk-...` secrets before the model
-	// observes them. The assistant should echo the file content with [REDACTED]
-	// substituted; the raw secret must never make it to assistant text.
+	// observes them. Assert at the wire boundary (what the model sees) rather
+	// than on the assistant's text — the model may or may not echo file content
+	// verbatim, but the tool_result update is the redaction contract.
 	await chat.send("Read the file leak.txt and tell me what it contains verbatim.");
 	await chat.waitForIdle();
-	const assistantText = await chat.lastMessage("assistant").innerText();
-	expect(assistantText).toContain("[REDACTED]");
-	expect(assistantText).not.toContain("sk-PLAINTEXTSECRETXYZ123");
+	const toolUpdates = wire.rows({ direction: "in", method: "session/update" });
+	const updatesText = (await toolUpdates.allInnerTexts()).join("\n");
+	expect(updatesText).toContain("[REDACTED]");
+	expect(updatesText).not.toContain("sk-PLAINTEXTSECRETXYZ123");
 });

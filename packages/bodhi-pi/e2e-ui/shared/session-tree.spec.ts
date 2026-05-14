@@ -1,19 +1,8 @@
 import { expect, test } from "../fixtures.ts";
 import { PROMPT_DAY_AFTER_MONDAY } from "../helpers/prompts.ts";
 
-test("session-tree: /sessions, /clone, /new, /resume, /close", async ({
-	gotoStart,
-	setup,
-	chat,
-	uniqueUserId,
-	configJson,
-}) => {
-	await gotoStart();
-	await setup.fillAndSubmit({
-		userId: uniqueUserId,
-		email: `${uniqueUserId}@e2e-ui.test`,
-		configJson,
-	});
+test("session-tree: /sessions, /clone, /new, /resume, /close", async ({ startApp, chat }) => {
+	await startApp();
 
 	// Step 1: seed a real turn so the session DAG has an entry.
 	await chat.send(PROMPT_DAY_AFTER_MONDAY);
@@ -28,18 +17,18 @@ test("session-tree: /sessions, /clone, /new, /resume, /close", async ({
 	await expect(chat.lastMessage("system")).toContainText(/sessions:/);
 	await expect(chat.lastMessage("system")).toContainText(sessionA);
 
-	// Step 3: /clone returns a fresh session id distinct from A.
+	// Step 3: /clone — read the cloned id off the system message's data-session-id
+	// attribute rather than regex-parsing its text.
 	await chat.send("/clone");
-	await expect(chat.lastMessage("system")).toContainText(/cloned:/);
-	const clonedText = await chat.lastMessage("system").innerText();
-	const clonedMatch = clonedText.match(/cloned:\s*([0-9a-f-]{8,})/i);
-	expect(clonedMatch, `expected a uuid in: ${clonedText}`).not.toBeNull();
-	const sessionClone = clonedMatch![1]!;
+	const clonedMsg = chat.lastMessage("system");
+	await expect(clonedMsg).toHaveAttribute("data-session-event", "cloned");
+	const sessionClone = (await clonedMsg.getAttribute("data-session-id")) ?? "";
+	expect(sessionClone).not.toBe("");
 	expect(sessionClone).not.toBe(sessionA);
 
 	// Step 4: /new flips data-session-id to a fresh id, distinct from A.
 	await chat.send("/new");
-	await expect.poll(async () => (await chat.sessionId()) !== sessionA, { timeout: 10_000 }).toBe(true);
+	await expect.poll(async () => (await chat.sessionId()) !== sessionA).toBe(true);
 	const sessionB = await chat.sessionId();
 	expect(sessionB).not.toBe(sessionA);
 	expect(sessionB).not.toBe("");
@@ -51,10 +40,11 @@ test("session-tree: /sessions, /clone, /new, /resume, /close", async ({
 
 	// Step 5: /resume A flips data-session-id back to A.
 	await chat.send(`/resume ${sessionA}`);
-	await expect.poll(() => chat.sessionId(), { timeout: 10_000 }).toBe(sessionA);
-	await expect(chat.lastMessage("system")).toContainText(/resumed session:/);
+	await expect.poll(() => chat.sessionId()).toBe(sessionA);
+	await expect(chat.lastMessage("system")).toHaveAttribute("data-session-event", "resumed");
+	await expect(chat.lastMessage("system")).toHaveAttribute("data-session-id", sessionA);
 
 	// Step 6: /close prints a confirmation system message.
 	await chat.send("/close");
-	await expect(chat.lastMessage("system")).toContainText(/closed session:/);
+	await expect(chat.lastMessage("system")).toHaveAttribute("data-session-event", "closed");
 });

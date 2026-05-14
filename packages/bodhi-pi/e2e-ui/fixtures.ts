@@ -13,6 +13,7 @@ interface Fixtures {
 	uniqueUserId: string;
 	gotoStart: () => Promise<void>;
 	configJson: string;
+	startApp: (opts?: { seedXml?: string }) => Promise<void>;
 }
 
 export const test = base.extend<Fixtures>({
@@ -54,12 +55,9 @@ export const test = base.extend<Fixtures>({
 			await page.goto(transportPath);
 		});
 	},
-	configJson: async ({ page: _page }, use, testInfo) => {
-		const inProcess = testInfo.project.metadata?.inProcessAgent === true;
-		if (!inProcess) {
-			await use("");
-			return;
-		}
+	configJson: async ({ page: _page }, use) => {
+		// Build the config unconditionally. Split-host test-apps (http, ws)
+		// ignore it; in-process hosts (browser, chrome-ext) consume it.
 		const config = {
 			defaultModelId: "gpt-4o-mini",
 			apiKeys: {
@@ -68,6 +66,17 @@ export const test = base.extend<Fixtures>({
 			},
 		};
 		await use(JSON.stringify(config));
+	},
+	startApp: async ({ gotoStart, setup, uniqueUserId, configJson }, use) => {
+		await use(async (opts) => {
+			await gotoStart();
+			await setup.fillAndSubmit({
+				userId: uniqueUserId,
+				email: `${uniqueUserId}@e2e-ui.test`,
+				...(opts?.seedXml !== undefined ? { seedXml: opts.seedXml } : {}),
+				configJson,
+			});
+		});
 	},
 });
 
