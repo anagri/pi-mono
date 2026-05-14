@@ -1,3 +1,4 @@
+import { WIRE_ROW_ATTRS } from "@bodhiapp/bodhi-pi";
 import type { FrameEntry } from "../lib/frame-log.ts";
 
 export interface WirePanelProps {
@@ -12,11 +13,13 @@ export function WirePanel({ frames }: WirePanelProps) {
 					<div
 						key={f.seq}
 						data-testid="frame"
-						data-frame-direction={f.direction}
-						data-frame-kind={f.kind}
-						data-frame-method={f.method}
-						data-frame-rpc-id={f.rpcId}
-						data-frame-seq={f.seq}
+						{...{
+							[WIRE_ROW_ATTRS.direction]: f.direction,
+							[WIRE_ROW_ATTRS.kind]: f.kind,
+							[WIRE_ROW_ATTRS.method]: f.method,
+							[WIRE_ROW_ATTRS.rpcId]: f.rpcId,
+							[WIRE_ROW_ATTRS.seq]: f.seq,
+						}}
 					>
 						<pre>{f.payload}</pre>
 					</div>

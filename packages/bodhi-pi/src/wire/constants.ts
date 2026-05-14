@@ -1,6 +1,21 @@
 /** ACP `SessionConfigOption.id` for the model selector advertised on `session/new`. */
 export const MODEL_CONFIG_ID = "model";
 
+/**
+ * `data-*` attribute names used by browser-side test-apps to surface
+ * ACP wire frames in the DOM. Single source of truth shared by:
+ *   - test-apps/browser/src/ui-lib/ui/WirePanel.tsx (emitter)
+ *   - bodhi-pi/e2e/helpers/browser/page-frame-reader.ts (e2e reader)
+ *   - bodhi-pi/e2e-ui/pages/WirePanel.ts (Playwright reader)
+ */
+export const WIRE_ROW_ATTRS = {
+	direction: "data-frame-direction",
+	kind: "data-frame-kind",
+	method: "data-frame-method",
+	rpcId: "data-frame-rpc-id",
+	seq: "data-frame-seq",
+} as const;
+
 /** ACP `SessionConfigOption.id` for the reasoning/thinking-level select. Omitted from configOptions when the active model has no thinking support. */
 export const THINKING_CONFIG_ID = "thinking";
 

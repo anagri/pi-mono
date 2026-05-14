@@ -5,7 +5,9 @@ import type { Page } from "playwright";
 // (`data-testid="frame"` + `data-frame-*`, `data-testid="event"` +
 // `data-event-*`). Read in a single `page.evaluate(...)` so high-frequency
 // streaming polls stay cheap — one CDP round-trip per tick instead of one
-// per element.
+// per element. The `data-frame-*` names below MUST match
+// `WIRE_ROW_ATTRS` in `packages/bodhi-pi/src/wire/constants.ts` —
+// `page.evaluate` runs in browser realm, so the names cannot be imported.
 
 export interface FrameSnapshot {
 	seq: number;

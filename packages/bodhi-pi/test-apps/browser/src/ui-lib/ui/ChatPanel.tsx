@@ -44,21 +44,31 @@ export function ChatPanel({
 			data-session-id={sessionId}
 		>
 			<div data-testid="chat-messages">
-				{messages.map((m) => (
-					<div key={m.id} data-testid="chat-message" data-message-role={m.role} {...(m.dataAttrs ?? {})}>
-						{m.text && <pre>{m.text}</pre>}
+				{messages.map((m, idx) => {
+					const isLastAssistant = m.role === "assistant" && idx === messages.length - 1;
+					const messageState = isLastAssistant && streaming ? "streaming" : "done";
+					return (
+						<div
+							key={m.id}
+							data-testid="chat-message"
+							data-message-role={m.role}
+							data-test-state={messageState}
+							{...(m.dataAttrs ?? {})}
+						>
+							{m.text && <pre>{m.text}</pre>}
 						{m.toolCalls.map((tc) => (
-							<div
-								key={tc.id}
-								data-testid="tool-call"
-								data-tool-name={tc.name}
-								data-tool-status={tc.status}
-							>
-								{tc.name} [{tc.status}]
-							</div>
-						))}
-					</div>
-				))}
+								<div
+									key={tc.id}
+									data-testid="tool-call"
+									data-tool-name={tc.name}
+									data-tool-status={tc.status}
+								>
+									{tc.name} [{tc.status}]
+								</div>
+							))}
+						</div>
+					);
+				})}
 			</div>
 			<div data-testid="composer">
 				<textarea

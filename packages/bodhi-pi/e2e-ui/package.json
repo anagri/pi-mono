@@ -12,6 +12,7 @@
 		"test:chrome-ext": "playwright test --project=chrome-ext"
 	},
 	"devDependencies": {
+		"@bodhiapp/bodhi-pi": "^0.0.1",
 		"@playwright/test": "^1.49.0",
 		"@types/node": "^24.3.0",
 		"dotenv": "^16.4.5",

@@ -1,3 +1,4 @@
+import { WIRE_ROW_ATTRS } from "@bodhiapp/bodhi-pi";
 import type { Locator, Page } from "@playwright/test";
 
 export class WirePanelPage {
@@ -16,10 +17,10 @@ export class WirePanelPage {
 		} = {},
 	): Locator {
 		let sel = '[data-testid="frame"]';
-		if (filter.direction) sel += `[data-frame-direction="${filter.direction}"]`;
-		if (filter.kind) sel += `[data-frame-kind="${filter.kind}"]`;
-		if (filter.method) sel += `[data-frame-method="${filter.method}"]`;
-		if (filter.rpcId) sel += `[data-frame-rpc-id="${filter.rpcId}"]`;
+		if (filter.direction) sel += `[${WIRE_ROW_ATTRS.direction}="${filter.direction}"]`;
+		if (filter.kind) sel += `[${WIRE_ROW_ATTRS.kind}="${filter.kind}"]`;
+		if (filter.method) sel += `[${WIRE_ROW_ATTRS.method}="${filter.method}"]`;
+		if (filter.rpcId) sel += `[${WIRE_ROW_ATTRS.rpcId}="${filter.rpcId}"]`;
 		return this.root.locator(sel);
 	}
 }

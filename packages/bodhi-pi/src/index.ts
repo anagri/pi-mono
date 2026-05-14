@@ -183,4 +183,5 @@ export {
 	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
 	THINKING_CONFIG_ID,
+	WIRE_ROW_ATTRS,
 } from "./wire/constants.js";

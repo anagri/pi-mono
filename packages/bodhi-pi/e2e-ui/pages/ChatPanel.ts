@@ -37,6 +37,12 @@ export class ChatPanelPage {
 		return this.messages(role).last();
 	}
 
+	lastDoneMessage(role: "user" | "assistant" | "system"): Locator {
+		return this.root
+			.locator(`[data-testid="chat-message"][data-message-role="${role}"][data-test-state="done"]`)
+			.last();
+	}
+
 	toolCalls(filter: { name?: string; status?: "running" | "completed" | "failed" } = {}): Locator {
 		let sel = '[data-testid="tool-call"]';
 		if (filter.name) sel += `[data-tool-name="${filter.name}"]`;
