@@ -76,16 +76,6 @@ export {
 	parseSlashArgs,
 	type SlashArgs,
 } from "./commands/slash-args.js";
-export {
-	type BodhiPiProjectSettings,
-	GLOBAL_SETTINGS_PATH,
-	loadProjectSettings,
-	type ProviderOptionsEntry,
-	type RetrySettings,
-	SETTINGS_PATH,
-} from "./core/settings.js";
-export { loadGlobalSettings } from "./core/settings-global.js";
-export { mergeSettings } from "./core/settings-merge.js";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,
@@ -174,3 +164,13 @@ export type {
 	SessionRecord,
 	SessionStore,
 } from "./sessions/session-store.js";
+export {
+	type BodhiPiProjectSettings,
+	GLOBAL_SETTINGS_PATH,
+	loadProjectSettings,
+	type ProviderOptionsEntry,
+	type RetrySettings,
+	SETTINGS_PATH,
+} from "./settings/settings.js";
+export { loadGlobalSettings } from "./settings/settings-global.js";
+export { mergeSettings } from "./settings/settings-merge.js";
