@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
 import App from "./App.tsx";
-import WsApp from "./pages/WsApp.tsx";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root not found");
@@ -12,8 +11,7 @@ createRoot(root).render(
 		<BrowserRouter>
 			<Routes>
 				<Route path="/" element={<Navigate to="/http" replace />} />
-				<Route path="/http" element={<App />} />
-				<Route path="/ws" element={<WsApp />} />
+				<Route path="*" element={<App />} />
 			</Routes>
 		</BrowserRouter>
 	</StrictMode>,
