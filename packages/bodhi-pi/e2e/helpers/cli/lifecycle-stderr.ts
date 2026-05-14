@@ -1,8 +1,6 @@
 import readline from "node:readline";
 import type { Readable } from "node:stream";
-import type { BodhiPiEvent } from "@/index.js";
-
-const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
+import { type BodhiPiEvent, LIFECYCLE_EVENT_METHOD } from "@/index.js";
 
 /**
  * Parse one ndjson stderr line from a cli child spawned with `--rpc`. Returns

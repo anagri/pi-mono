@@ -15,10 +15,8 @@ import type {
 	SetSessionConfigOptionRequest,
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
-import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
+import { type BodhiPiAcpConnection, type BodhiPiEvent, LIFECYCLE_EVENT_METHOD } from "@/index.js";
 import { parseSse } from "./sse-parser.js";
-
-const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 export interface HttpConnectionOptions {
 	baseUrl: string;

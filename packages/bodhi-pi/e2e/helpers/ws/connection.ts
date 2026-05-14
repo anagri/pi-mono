@@ -1,10 +1,9 @@
 import type { Agent, Client, SessionNotification } from "@agentclientprotocol/sdk";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { WebSocket } from "ws";
-import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
+import { type BodhiPiAcpConnection, type BodhiPiEvent, LIFECYCLE_EVENT_METHOD } from "@/index.js";
 
 const SUBPROTOCOL = "bodhi-pi.v1";
-const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 export interface WsConnectionOptions {
 	baseUrl: string;

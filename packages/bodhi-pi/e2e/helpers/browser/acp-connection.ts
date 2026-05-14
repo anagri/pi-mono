@@ -16,7 +16,7 @@ import type {
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
 import type { Page } from "playwright";
-import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
+import { type BodhiPiAcpConnection, type BodhiPiEvent, LIFECYCLE_EVENT_METHOD } from "@/index.js";
 import { readNewFramesAndEvents } from "./page-frame-reader.js";
 
 // ACP transport over a Playwright-driven page. Each call writes a JSON-RPC
@@ -32,8 +32,6 @@ export interface BrowserConnectionOptions {
 	onUpdate: (notif: SessionNotification) => void;
 	onLifecycleEvent?: (ev: BodhiPiEvent) => void;
 }
-
-const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 export class BrowserAcpConnection implements BodhiPiAcpConnection {
 	private readonly page: Page;

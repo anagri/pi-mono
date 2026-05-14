@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
-import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
+import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent, LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
 import {
 	createNodeFilesystem,
 	createNodeKvStore,
@@ -39,8 +39,6 @@ export interface WireAgentWsResult {
 	factory: AgentFactory;
 }
 
-/** ACP extension method that forwards bodhi-pi lifecycle events to the client. */
-export const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 // Forwards every BodhiPiEvent — full payload, all 25 types — to the client via
 // extNotification. Matches test-app-http's HTTP path so e2e tests assert the same

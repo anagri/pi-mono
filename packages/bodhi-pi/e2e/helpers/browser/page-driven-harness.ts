@@ -137,40 +137,41 @@ export async function createPageDrivenHarness(
 		},
 	});
 
-	// Read-only Filesystem proxy over the in-page ZenFS mount. Writes are
-	// disabled — tests must seed via h.setupFiles BEFORE clientConn.initialize().
+	// Read-only Filesystem proxy over the in-page ZenFS mount, lazily delegated
+	// to createBrowserFilesystem once the page is launched. Writes throw with
+	// cfg.label baked in.
 	const filesystem: Filesystem = {
 		async readTextFile(p) {
 			const { page } = await ensureLaunched();
-			return createBrowserFilesystem({ page }).readTextFile(p);
+			return createBrowserFilesystem({ page, label: cfg.label }).readTextFile(p);
 		},
 		async exists(p) {
 			const { page } = await ensureLaunched();
-			return createBrowserFilesystem({ page }).exists(p);
+			return createBrowserFilesystem({ page, label: cfg.label }).exists(p);
 		},
 		async writeTextFile() {
-			throw new Error(
-				`${cfg.label}: filesystem.writeTextFile() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
-			);
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page, label: cfg.label }).writeTextFile("", "");
 		},
 		async appendTextFile() {
-			throw new Error(
-				`${cfg.label}: filesystem.appendTextFile() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
-			);
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page, label: cfg.label }).appendTextFile("", "");
 		},
 		async mkdir() {
-			throw new Error(
-				`${cfg.label}: filesystem.mkdir() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
-			);
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page, label: cfg.label }).mkdir("");
 		},
 		async list() {
-			throw new Error(`${cfg.label}: filesystem.list() is disabled.`);
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page, label: cfg.label }).list("");
 		},
 		async stat() {
-			throw new Error(`${cfg.label}: filesystem.stat() is disabled.`);
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page, label: cfg.label }).stat("");
 		},
 		async remove() {
-			throw new Error(`${cfg.label}: filesystem.remove() is disabled.`);
+			const { page } = await ensureLaunched();
+			return createBrowserFilesystem({ page, label: cfg.label }).remove("");
 		},
 	};
 

@@ -58,9 +58,9 @@ interface JsonRpcError {
 	error: { code: number; message: string; data?: unknown };
 }
 
-let nextId = 1;
+import { LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
 
-const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
+let nextId = 1;
 
 export class AcpHttpClient {
 	private readonly baseUrl: string;

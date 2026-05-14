@@ -20,11 +20,13 @@ import { readNewFrames } from "./page-frame-reader.js";
 
 export interface BrowserFilesystemOptions {
 	page: Page;
+	/** Label prefix for disabled-mutator error messages (e.g. "e2e browser harness" or "chrome-ext harness"). */
+	label?: string;
 }
 
-function blockMutating(method: string): never {
+function blockMutating(label: string, method: string): never {
 	throw new Error(
-		`e2e browser harness: filesystem.${method}() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
+		`${label}: filesystem.${method}() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
 	);
 }
 
@@ -34,7 +36,7 @@ const BROWSER_FS_SLASH_TIMEOUT_MS = 10_000;
 const BROWSER_FS_POLL_TICK_MS = 25;
 
 export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesystem {
-	const { page } = opts;
+	const { page, label = "e2e browser harness" } = opts;
 	let cursor = 0;
 
 	async function dispatchSlash(slashLine: string, expectedMethod: string): Promise<unknown> {
@@ -79,22 +81,22 @@ export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesys
 			return r.ok && r.exists;
 		},
 		async list(_p: string): Promise<DirEntry[]> {
-			return blockMutating("list");
+			return blockMutating(label, "list");
 		},
 		async stat(_p: string): Promise<FileStat> {
-			return blockMutating("stat");
+			return blockMutating(label, "stat");
 		},
 		async writeTextFile(): Promise<void> {
-			return blockMutating("writeTextFile");
+			return blockMutating(label, "writeTextFile");
 		},
 		async appendTextFile(): Promise<void> {
-			return blockMutating("appendTextFile");
+			return blockMutating(label, "appendTextFile");
 		},
 		async mkdir(): Promise<void> {
-			return blockMutating("mkdir");
+			return blockMutating(label, "mkdir");
 		},
 		async remove(): Promise<void> {
-			return blockMutating("remove");
+			return blockMutating(label, "remove");
 		},
 	};
 }

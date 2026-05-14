@@ -2,15 +2,13 @@
 import os from "node:os";
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
+import { type BodhiPiEvent, type BodhiPiEventHandlers, LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
 import { createNodePackageExtensionLoader } from "@bodhiapp/bodhi-pi-test-app-in-memory";
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";
 import { runHeadless } from "./repl/headless.js";
 import { runRepl } from "./repl/repl.js";
-
-const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 const ALL_EVENT_TYPES = [
 	"session_start",
 	"session_shutdown",

@@ -5,11 +5,12 @@ import type {
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import { LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
 import { encodeToken, type UserCtx } from "./auth.ts";
 import { wsToStream } from "./ws-stream.ts";
 
+export { LIFECYCLE_EVENT_METHOD };
 export const SUBPROTOCOL = "bodhi-pi.v1";
-export const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
 export interface ClientHandlers {
 	onSessionUpdate?: (n: SessionNotification) => void;

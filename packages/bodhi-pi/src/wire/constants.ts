@@ -22,6 +22,14 @@ export const THINKING_CONFIG_ID = "thinking";
 /** Custom ACP extension method (per `extensibility.mdx` `_`-prefix rule) for permanently deleting a session. */
 export const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
 
+/**
+ * Notification method bodhi-pi hosts forward `BodhiPiEvent` records over.
+ * Hosts post `{ jsonrpc: "2.0", method: LIFECYCLE_EVENT_METHOD, params: <event> }`
+ * from the agent realm; e2e/test-app clients listen for it and route into the
+ * lifecycle pane / event recorder.
+ */
+export const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
+
 /** Manual context compaction. Returns `{ summary, firstKeptEntryId, tokensBefore }`. */
 export const EXT_SESSION_COMPACT = "_bodhi-pi/session/compact";
 
