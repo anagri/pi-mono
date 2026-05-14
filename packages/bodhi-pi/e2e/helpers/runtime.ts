@@ -7,6 +7,13 @@ interface RuntimeGlobals {
 const runtimeGlobals = globalThis as unknown as RuntimeGlobals;
 
 export function setRuntime(r: E2ERuntime): void {
+	const existing = runtimeGlobals.__bodhiPiRuntime;
+	if (existing !== undefined && existing !== r) {
+		throw new Error(
+			`E2E runtime sentinel already set to '${existing}', cannot reset to '${r}'. ` +
+				`Check that vitest projects don't share a setup file.`,
+		);
+	}
 	runtimeGlobals.__bodhiPiRuntime = r;
 }
 

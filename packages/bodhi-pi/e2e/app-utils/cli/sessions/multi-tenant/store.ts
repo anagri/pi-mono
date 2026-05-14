@@ -1,81 +1,73 @@
 import fs from "node:fs";
 import path from "node:path";
-import type {
-	ExtensionEntry,
-	ReadExtensionEntriesFilter,
-	SessionEntry,
-	SessionRecord,
-	SessionStore,
-} from "@bodhiapp/bodhi-pi";
+import type { ExtensionEntry, ReadExtensionEntriesFilter, SessionRecord, SessionStore } from "@bodhiapp/bodhi-pi";
 import Database from "better-sqlite3";
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { encodeCursor, PAGE_SIZE, parseCursor, parseExtensionEntry, parseSessionEntry } from "../shared.js";
 import { runMigrations } from "./migrate.js";
-import { sessionEntries, sessions } from "./schema.js";
+import { sessionEntries, sessions, users } from "./schema.js";
 
-const PAGE_SIZE = 50;
+export type Db = ReturnType<typeof drizzle>;
 
-function parseSessionEntry(payload: string): SessionEntry {
-	const parsed: unknown = JSON.parse(payload);
-	if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") {
-		throw new Error(`SessionEntry payload missing discriminator field 'type'`);
-	}
-	return parsed as SessionEntry;
-}
-
-function parseExtensionEntry(payload: string): ExtensionEntry {
-	const parsed: unknown = JSON.parse(payload);
-	if (!parsed || typeof parsed !== "object") {
-		throw new Error(`ExtensionEntry payload is not an object`);
-	}
-	const obj = parsed as { type?: unknown; extensionName?: unknown; customType?: unknown };
-	if (obj.type !== "extension" || typeof obj.extensionName !== "string" || typeof obj.customType !== "string") {
-		throw new Error(`ExtensionEntry payload missing 'extensionName' or 'customType'`);
-	}
-	return parsed as ExtensionEntry;
-}
-
-function parseCursor(raw: string | undefined): { updatedAt: number; id: string } | undefined {
-	if (!raw) return undefined;
-	let decoded: unknown;
-	try {
-		decoded = JSON.parse(Buffer.from(raw, "base64url").toString());
-	} catch {
-		return undefined;
-	}
-	if (!decoded || typeof decoded !== "object") return undefined;
-	const cur = decoded as { updatedAt?: unknown; id?: unknown };
-	if (typeof cur.updatedAt !== "number" || typeof cur.id !== "string") return undefined;
-	return { updatedAt: cur.updatedAt, id: cur.id };
-}
-
-export interface SqliteSessionStoreOptions {
+export interface OpenDbOptions {
 	dbPath: string;
 }
 
-export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): SessionStore {
-	const { dbPath } = opts;
-	const dir = path.dirname(dbPath);
+export function openDb(opts: OpenDbOptions): { db: Db; sqlite: Database.Database } {
+	const dir = path.dirname(opts.dbPath);
 	fs.mkdirSync(dir, { recursive: true });
-
-	const sqlite = new Database(dbPath);
+	const sqlite = new Database(opts.dbPath);
 	sqlite.pragma("journal_mode = WAL");
 	sqlite.pragma("foreign_keys = ON");
-
 	runMigrations(sqlite);
-
 	const db = drizzle(sqlite);
+	return { db, sqlite };
+}
+
+export function upsertUser(db: Db, opts: { id: number; email: string }): void {
+	const now = Date.now();
+	db.insert(users)
+		.values({ id: opts.id, email: opts.email, createdAt: now, lastSeenAt: now })
+		.onConflictDoUpdate({ target: users.id, set: { email: opts.email, lastSeenAt: now } })
+		.run();
+}
+
+export interface MultiTenantSessionStoreOptions {
+	db: Db;
+	userId: number;
+}
+
+/**
+ * Multi-tenant SQLite SessionStore. Every read/write is scoped by userId.
+ * Cross-tenant access returns undefined / empty on read; throws on write.
+ */
+export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): SessionStore {
+	const { db, userId } = opts;
+
+	function ownsSession(sessionId: string): boolean {
+		const row = db
+			.select({ id: sessions.id })
+			.from(sessions)
+			.where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+			.get();
+		return row !== undefined;
+	}
 
 	return {
 		create({ cwd }) {
 			const now = Date.now();
 			const id = crypto.randomUUID();
-			db.insert(sessions).values({ id, cwd, createdAt: now, updatedAt: now }).run();
+			db.insert(sessions).values({ id, userId, cwd, createdAt: now, updatedAt: now }).run();
 			return Promise.resolve({ id, cwd, createdAt: now, updatedAt: now, entries: [] });
 		},
 
 		load(sessionId) {
-			const row = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+			const row = db
+				.select()
+				.from(sessions)
+				.where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+				.get();
 			if (!row) return Promise.resolve(undefined);
 
 			const entryRows = db
@@ -97,6 +89,9 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 		},
 
 		setLeafId(sessionId, entryId) {
+			if (!ownsSession(sessionId)) {
+				return Promise.reject(new Error(`session ${sessionId} not found for user ${userId}`));
+			}
 			db.update(sessions).set({ leafId: entryId }).where(eq(sessions.id, sessionId)).run();
 			return Promise.resolve();
 		},
@@ -104,8 +99,14 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 		append(sessionId, entry) {
 			try {
 				db.transaction((tx) => {
-					const sessionRow = tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, sessionId)).get();
-					if (!sessionRow) throw new Error(`session ${sessionId} not found (or deleted)`);
+					const sessionRow = tx
+						.select({ id: sessions.id })
+						.from(sessions)
+						.where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+						.get();
+					if (!sessionRow) {
+						throw new Error(`session ${sessionId} not found for user ${userId}`);
+					}
 
 					const maxResult = tx
 						.select({ maxOrdinal: sql<number>`max(${sessionEntries.ordinal})` })
@@ -150,6 +151,7 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 				.leftJoin(sessionEntries, eq(sessions.id, sessionEntries.sessionId))
 				.where(
 					and(
+						eq(sessions.userId, userId),
 						cwd ? eq(sessions.cwd, cwd) : undefined,
 						cursorData
 							? or(
@@ -167,10 +169,7 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 			const hasMore = rows.length > PAGE_SIZE;
 			const page = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
 			const last = page[page.length - 1];
-			const nextCursor =
-				hasMore && last
-					? Buffer.from(JSON.stringify({ updatedAt: last.updatedAt, id: last.id })).toString("base64url")
-					: undefined;
+			const nextCursor = hasMore && last ? encodeCursor({ updatedAt: last.updatedAt, id: last.id }) : undefined;
 
 			return Promise.resolve({
 				sessions: page.map((r) => ({
@@ -185,12 +184,19 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 		},
 
 		delete(sessionId) {
+			if (!ownsSession(sessionId)) {
+				return Promise.reject(new Error(`session ${sessionId} not found for user ${userId}`));
+			}
 			db.delete(sessions).where(eq(sessions.id, sessionId)).run();
+			db.delete(sessionEntries).where(eq(sessionEntries.sessionId, sessionId)).run();
 			return Promise.resolve();
 		},
 
 		forkRecord(sourceSessionId, fromEntryId, position) {
 			try {
+				if (!ownsSession(sourceSessionId)) {
+					return Promise.reject(new Error(`session ${sourceSessionId} not found for user ${userId}`));
+				}
 				const sourceRow = db.select().from(sessions).where(eq(sessions.id, sourceSessionId)).get();
 				if (!sourceRow) throw new Error(`session ${sourceSessionId} not found`);
 				const entryRows = db
@@ -212,13 +218,12 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 					curId = node.entry.parentId ?? null;
 				}
 				const copied = position === "before" ? chain.slice(0, -1) : chain;
-
 				const newId = crypto.randomUUID();
 				const now = Date.now();
 				const newLeafId = copied.length > 0 ? copied[copied.length - 1].entry.id : null;
 				db.transaction((tx) => {
 					tx.insert(sessions)
-						.values({ id: newId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now, leafId: newLeafId })
+						.values({ id: newId, userId, cwd: sourceRow.cwd, createdAt: now, updatedAt: now, leafId: newLeafId })
 						.run();
 					for (let i = 0; i < copied.length; i++) {
 						const node = copied[i];
@@ -241,6 +246,7 @@ export function createSqliteSessionStore(opts: SqliteSessionStoreOptions): Sessi
 		},
 
 		readExtensionEntries(sessionId: string, filter?: ReadExtensionEntriesFilter): Promise<ExtensionEntry[]> {
+			if (!ownsSession(sessionId)) return Promise.resolve([]);
 			const rows = db
 				.select()
 				.from(sessionEntries)

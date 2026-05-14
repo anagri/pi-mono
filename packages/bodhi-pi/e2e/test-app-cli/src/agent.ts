@@ -9,11 +9,11 @@ import {
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import {
-	createNodeFilesystem,
 	createNodeKvStore,
 	createNodeScriptExecutor,
-	createSqliteSessionStore,
-} from "@e2e/helpers/node-adapters/index.js";
+	createSingleTenantSqliteSessionStore as createSqliteSessionStore,
+} from "@e2e/app-utils/cli/index.js";
+import { createNodeFilesystem } from "@e2e/helpers/node-adapters/index.js";
 import { pickDefined } from "@e2e/helpers/pick-defined.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 

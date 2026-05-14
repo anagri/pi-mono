@@ -1,14 +1,14 @@
 import { type Agent, type Client, ClientSideConnection, ndJsonStream, type SessionNotification } from "@agentclientprotocol/sdk";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createMessagePortStream } from "@e2e/helpers/browser-adapters/transport/message-port-stream";
-import type { WorkerMessage } from "@e2e/helpers/browser-adapters/runtime/types";
+import type { EventEntry, FrameEntry } from "@e2e/app-utils/browser/lib/frame-log";
+import { parseSeedFiles } from "@e2e/app-utils/browser/lib/seed-parser";
+import { tryHandleSlash } from "@e2e/app-utils/browser/lib/slash-router";
+import { bindFsBridge } from "@e2e/app-utils/browser/lib/worker-fs-bridge";
+import { WORKSPACE_NAME, WORKSPACE_ROOT } from "@e2e/app-utils/browser/lib/workspace-constants";
+import type { WorkerMessage } from "@e2e/app-utils/browser/runtime/types";
+import { createMessagePortStream } from "@e2e/app-utils/browser/transport/message-port-stream";
 import { createSandboxPort } from "./agent/sandbox";
-import type { EventEntry, FrameEntry } from "./lib/frame-log";
-import { parseSeedFiles } from "./lib/seed-parser";
-import { tryHandleSlash } from "./lib/slash-router";
-import { WORKSPACE_NAME, WORKSPACE_ROOT } from "./lib/workspace-constants";
-import { bindFsBridge } from "./lib/worker-fs-bridge";
 
 type RootState = "needs-init" | "ready" | "streaming" | "closed" | "error";
 

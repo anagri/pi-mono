@@ -7,5 +7,11 @@
 			"@e2e/*": ["../*"]
 		}
 	},
-	"include": ["src/**/*.ts", "../helpers/node-adapters/**/*.ts", "../helpers/extension-loaders/**/*.ts"]
+	"include": [
+		"src/**/*.ts",
+		"../helpers/node-adapters/**/*.ts",
+		"../helpers/extension-loaders/**/*.ts",
+		"../helpers/pick-defined.ts",
+		"../app-utils/cli/**/*.ts"
+	]
 }

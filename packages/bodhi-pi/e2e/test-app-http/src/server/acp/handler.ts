@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { type Db, upsertUser } from "@e2e/app-utils/cli/index.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { type WireAgentResult, wireAgentForRequest } from "../agent/wire-agent.js";
 import { authenticateRequest, reject401 } from "../auth/middleware.js";
-import { type Db, upsertUser } from "../sessions/sqlite-session-store.js";
 import { createHttpAcpConn } from "./http-acp-conn.js";
 import { createInflightRegistry, type InflightRegistry } from "./inflight.js";
 import { writeSseEvent, writeSseHeaders } from "./sse.js";

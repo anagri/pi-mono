@@ -1,13 +1,18 @@
 import path from "node:path";
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
+import {
+	createNodeKvStore,
+	createNodeScriptExecutor,
+	createMultiTenantSqliteSessionStore as createSqliteSessionStore,
+	type Db,
+} from "@e2e/app-utils/cli/index.js";
 import { createNodePackageExtensionLoader } from "@e2e/helpers/extension-loaders/index.js";
-import { createNodeFilesystem, createNodeKvStore, createNodeScriptExecutor } from "@e2e/helpers/node-adapters/index.js";
+import { createNodeFilesystem } from "@e2e/helpers/node-adapters/index.js";
 import { pickDefined } from "@e2e/helpers/pick-defined.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
-import { createSqliteSessionStore, type Db } from "../sessions/sqlite-session-store.js";
 
 export interface WireAgentOptions {
 	user: UserCtx;

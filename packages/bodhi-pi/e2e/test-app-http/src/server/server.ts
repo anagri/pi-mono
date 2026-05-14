@@ -2,13 +2,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import { type Db, openDb, upsertUser } from "@e2e/app-utils/cli/index.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type Database from "better-sqlite3";
 import { type WebSocket, WebSocketServer } from "ws";
 import { createAcpHandler } from "./acp/handler.js";
 import { wireAgentForWsConnection } from "./agent/wire-agent-ws.js";
 import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
-import { type Db, openDb, upsertUser } from "./sessions/sqlite-session-store.js";
 import { createStaticHandler, type StaticHandler } from "./static.js";
 import { wsToStream } from "./transport/ws-stream.js";
 

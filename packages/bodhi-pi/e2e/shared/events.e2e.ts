@@ -32,10 +32,10 @@ test("events: text turn + tool turn fire the expected sequences and payloads", a
 		}),
 	);
 
-	// Step-2 seed (tool turn reads proj/README.md). Seeded up-front because
-	// the harness forbids in-session writes — uniform Option B across runtimes.
+	// Step-2 seed (tool turn reads README.md). Seeded up-front because the
+	// harness forbids in-session writes — uniform Option B across runtimes.
 	await h.setupFiles({
-		"proj/README.md": "# project readme\n\nhello world",
+		"README.md": "# project readme\n\nhello world",
 	});
 
 	await h.clientConn.initialize(stdInitParams);
@@ -88,13 +88,13 @@ test("events: text turn + tool turn fire the expected sequences and payloads", a
 	h.events.length = 0;
 
 	// Step 2: tool turn — tool_execution_* brackets, tool_call/tool_result hooks inside.
-	const { sessionId: sidTool } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
+	const { sessionId: sidTool } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	const toolResult = await h.clientConn.prompt({
 		sessionId: sidTool,
 		prompt: [
 			{
 				type: "text",
-				text: `Read the file ${h.cwd}/proj/README.md and tell me what's in it. You must use the read tool.`,
+				text: `Read the file ${h.cwd}/README.md and tell me what's in it. You must use the read tool.`,
 			},
 		],
 	});

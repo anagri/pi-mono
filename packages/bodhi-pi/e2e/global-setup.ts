@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser/launch.js";
+import { waitForViteReady } from "./helpers/browser/wait-for-vite.js";
 import {
 	chromeExtBaseUrl,
 	closeSharedChromeExtContext,
@@ -37,30 +38,6 @@ async function waitForListening(child: ChildProcess, timeoutMs: number): Promise
 		child.once("exit", (code) => {
 			clearTimeout(timer);
 			reject(new Error(`test-app-http exited before binding (code=${code})`));
-		});
-	});
-}
-
-async function waitForViteReady(child: ChildProcess, timeoutMs: number): Promise<void> {
-	return new Promise((resolve, reject) => {
-		let buf = "";
-		const timer = setTimeout(() => reject(new Error(`vite did not become ready within ${timeoutMs}ms`)), timeoutMs);
-		const onData = (chunk: Buffer | string) => {
-			// Strip ANSI escape sequences so the readiness regex isn't broken
-			// by Vite's coloured banner.
-			buf += chunk.toString().replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
-			// `vite preview` prints `Local: http://localhost:<port>/` instead of
-			// `ready in NNN ms`; accept either.
-			if (buf.match(/ready in/i) || buf.match(/Local:\s*http:\/\/localhost:/)) {
-				clearTimeout(timer);
-				child.stdout?.off("data", onData);
-				resolve();
-			}
-		};
-		child.stdout?.on("data", onData);
-		child.once("exit", (code) => {
-			clearTimeout(timer);
-			reject(new Error(`vite exited before becoming ready (code=${code})`));
 		});
 	});
 }

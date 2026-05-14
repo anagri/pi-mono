@@ -10,6 +10,12 @@
 			"@e2e/*": ["../*"]
 		}
 	},
-	"include": ["src/server/**/*.ts", "../helpers/node-adapters/**/*.ts", "../helpers/extension-loaders/**/*.ts"],
+	"include": [
+		"src/server/**/*.ts",
+		"../helpers/node-adapters/**/*.ts",
+		"../helpers/extension-loaders/**/*.ts",
+		"../helpers/pick-defined.ts",
+		"../app-utils/cli/**/*.ts"
+	],
 	"exclude": ["test", "e2e", "dist", "node_modules", "src/frontend", "**/*.test.ts"]
 }

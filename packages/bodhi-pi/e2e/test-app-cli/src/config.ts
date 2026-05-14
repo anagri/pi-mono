@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { BodhiPiEvent, BodhiPiEventHandlers } from "@bodhiapp/bodhi-pi";
-import { defaultDbPath } from "@e2e/helpers/node-adapters/index.js";
+import { defaultDbPath } from "@e2e/app-utils/cli/index.js";
 
 export interface ResolvedConfig {
 	systemPrompt?: string;
