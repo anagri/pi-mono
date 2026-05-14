@@ -41,11 +41,19 @@ export class ChatPanelPage {
 		return this.root.locator(sel);
 	}
 
-	get currentModel(): Locator {
-		return this.root;
+	async currentModel(): Promise<string> {
+		return (await this.root.getAttribute("data-current-model")) ?? "";
 	}
 
-	get sessionId(): Locator {
-		return this.root;
+	async sessionId(): Promise<string> {
+		return (await this.root.getAttribute("data-session-id")) ?? "";
+	}
+
+	systemMessages(): Locator {
+		return this.messages("system");
+	}
+
+	lastSystemText(): Promise<string> {
+		return this.systemMessages().last().innerText();
 	}
 }

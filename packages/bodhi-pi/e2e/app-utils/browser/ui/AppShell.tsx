@@ -1,8 +1,14 @@
-import type { ClientSideConnection, ContentBlock, SessionNotification } from "@agentclientprotocol/sdk";
+import type {
+	AvailableCommand,
+	ClientSideConnection,
+	ContentBlock,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { EventEntry, FrameEntry } from "../lib/frame-log.ts";
-import { tryHandleSlash } from "../lib/slash-router.ts";
+import { tryHandleSlash as tryHandleAcpSlash } from "../lib/slash-router.ts";
 import { ChatPanel, type ChatMessage, type ChatPanelState, type ChatToolCall } from "./ChatPanel.tsx";
+import { extractModelFromConfigOptions, isSlash, tryHandleSlash } from "./commands.ts";
 import { DevAcpIo } from "./DevAcpIo.tsx";
 import { ErrorBanner } from "./ErrorBanner.tsx";
 import { EventsPanel } from "./EventsPanel.tsx";
@@ -29,9 +35,10 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	const [composerInput, setComposerInput] = useState<string>("");
 	const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 	const [chatState, setChatState] = useState<ChatPanelState>("idle");
-	const [currentModel] = useState<string>("");
+	const [currentModel, setCurrentModel] = useState<string>("");
 	const [sessionId, setSessionId] = useState<string>("");
 	const [workspaceRoot, setWorkspaceRoot] = useState<string>("");
+	const availableCommandsRef = useRef<AvailableCommand[]>([]);
 
 	const initializedRef = useRef(false);
 	const seqRef = useRef(0);
@@ -66,6 +73,15 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 
 	const onSessionUpdate = useCallback((n: SessionNotification) => {
 		const u = n.update;
+		if (u.sessionUpdate === "available_commands_update") {
+			availableCommandsRef.current = u.availableCommands;
+			return;
+		}
+		if (u.sessionUpdate === "config_option_update") {
+			const m = extractModelFromConfigOptions(u.configOptions);
+			if (m) setCurrentModel(m);
+			return;
+		}
 		setChatMessages((prev) => {
 			const next = [...prev];
 			const upsertLast = (role: "user" | "assistant" | "system", text: string) => {
@@ -187,7 +203,7 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	const onAcpSubmit = useCallback(async () => {
 		const raw = acpInput;
 		setAcpInput("");
-		const slashResult = await tryHandleSlash(raw);
+		const slashResult = await tryHandleAcpSlash(raw);
 		if (slashResult) {
 			const synthId = `slash-${seqRef.current + 1}`;
 			pushFrame({
@@ -269,42 +285,78 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		}
 	}, []);
 
+	const pushUserMessage = useCallback((text: string) => {
+		setChatMessages((prev) => [
+			...prev,
+			{ id: `user-${prev.length}`, role: "user", text, toolCalls: [] },
+		]);
+	}, []);
+
+	const pushSystemMessage = useCallback((text: string) => {
+		setChatMessages((prev) => [
+			...prev,
+			{ id: `system-${prev.length}`, role: "system", text, toolCalls: [] },
+		]);
+	}, []);
+
+	const ensureInitialized = useCallback(async (): Promise<void> => {
+		if (initializedRef.current) return;
+		await dispatchAcp("initialize", {
+			protocolVersion: 1,
+			clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+		});
+		initializedRef.current = true;
+	}, [dispatchAcp]);
+
+	const ensureSession = useCallback(async (): Promise<string> => {
+		if (sessionIdRef.current) return sessionIdRef.current;
+		const r = (await dispatchAcp("session/new", { mcpServers: [], cwd: cwdRef.current })) as {
+			sessionId: string;
+			configOptions?: Parameters<typeof extractModelFromConfigOptions>[0];
+		};
+		sessionIdRef.current = r.sessionId;
+		setSessionId(r.sessionId);
+		const m = extractModelFromConfigOptions(r.configOptions);
+		if (m) setCurrentModel(m);
+		return r.sessionId;
+	}, [dispatchAcp]);
+
 	const onComposerSend = useCallback(async () => {
 		const input = composerInput.trim();
 		if (!input) return;
 		setComposerInput("");
-		setChatState("streaming");
-		setChatMessages((prev) => [
-			...prev,
-			{ id: `user-${prev.length}`, role: "user", text: input, toolCalls: [] },
-		]);
 		try {
-			if (!initializedRef.current) {
-				await dispatchAcp("initialize", {
-					protocolVersion: 1,
-					clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+			await ensureInitialized();
+			const sid = await ensureSession();
+			pushUserMessage(input);
+			if (isSlash(input)) {
+				const outcome = await tryHandleSlash(input, {
+					conn: connRef.current!,
+					cwd: cwdRef.current,
+					state: { sessionId: sid, availableCommands: availableCommandsRef.current },
+					pushSystemMessage,
+					setSessionId: (id) => {
+						sessionIdRef.current = id;
+						setSessionId(id);
+					},
+					setCurrentModel,
 				});
-				initializedRef.current = true;
+				if (outcome.handled) return;
 			}
-			let sid = sessionIdRef.current;
-			if (!sid) {
-				const r = (await dispatchAcp("session/new", { mcpServers: [], cwd: cwdRef.current })) as {
-					sessionId: string;
-				};
-				sid = r.sessionId;
-				sessionIdRef.current = sid;
-				setSessionId(sid);
+			setChatState("streaming");
+			try {
+				await dispatchAcp("session/prompt", {
+					sessionId: sessionIdRef.current,
+					prompt: [{ type: "text", text: input }],
+				});
+			} finally {
+				setChatState("idle");
 			}
-			await dispatchAcp("session/prompt", {
-				sessionId: sid,
-				prompt: [{ type: "text", text: input }],
-			});
 		} catch (err) {
 			setErrorMsg((err as Error).message ?? String(err));
-		} finally {
 			setChatState("idle");
 		}
-	}, [composerInput, dispatchAcp]);
+	}, [composerInput, dispatchAcp, ensureInitialized, ensureSession, pushSystemMessage, pushUserMessage]);
 
 	const onComposerStop = useCallback(async () => {
 		const sid = sessionIdRef.current;

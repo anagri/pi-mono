@@ -6,6 +6,14 @@ export {
 	type ChatPanelState,
 	type ChatToolCall,
 } from "./ChatPanel.tsx";
+export {
+	extractModelFromConfigOptions,
+	isSlash,
+	type SlashContext,
+	type SlashOutcome,
+	type SlashState,
+	tryHandleSlash,
+} from "./commands.ts";
 export { DevAcpIo, type DevAcpIoProps } from "./DevAcpIo.tsx";
 export { ErrorBanner } from "./ErrorBanner.tsx";
 export { EventsPanel, type EventsPanelProps } from "./EventsPanel.tsx";
