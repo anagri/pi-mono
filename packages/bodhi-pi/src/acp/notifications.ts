@@ -81,8 +81,10 @@ type AcpStopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal"
 
 type PiStopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 
-// `"error"` is excluded from the param: the caller throws `RequestError`
-// before reaching here, so it can't silently regress to `end_turn`.
+// `"error"` is excluded from the param: the caller throws `RequestError` before reaching here.
+// Exhaustive switch (no `default`) — a new pi-ai stop reason will fail this file's type check at
+// the two call sites (`agent.prompt`'s `mapStopReason(outcome.stopReason)` and
+// `tryOverflowRecovery`'s `mapStopReason(retryOutcome.stopReason)`).
 export function mapStopReason(sr: Exclude<PiStopReason, "error"> | undefined): AcpStopReason {
 	switch (sr) {
 		case "aborted":
@@ -92,7 +94,7 @@ export function mapStopReason(sr: Exclude<PiStopReason, "error"> | undefined): A
 		case "stop":
 		case "toolUse":
 			return "end_turn";
-		default:
+		case undefined:
 			return "end_turn";
 	}
 }

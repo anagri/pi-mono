@@ -53,9 +53,22 @@ export interface ListSessionsResult {
 }
 
 /**
- * Append-only by design. There is no `close()`: ACP `session/close` is a runtime
- * concern (drop the live agent, abort pending work) and never touches the store.
- * `delete()` is terminal — used by the `_bodhi-pi/session/delete` extension method.
+ * Host-injected persistent session store.
+ *
+ * **Contract:**
+ * - Append-only by design. There is no `close()` — ACP `session/close` drops live runtime
+ *   state, not the stored record. `delete()` is the only terminal removal.
+ * - Every `append()` MUST bump `updatedAt` and (when `setLeafId` is implemented) MUST persist
+ *   the new leaf.
+ * - `load()` returns `undefined` for an unknown session id (no rejection). Other mutators
+ *   reject on missing session.
+ * - `forkRecord` is optional. Stores that can't fork (e.g., legacy single-table) leave it
+ *   unimplemented; the `/fork` and `/clone` paths reject with `-32603` at that point.
+ * - `setLeafId` is optional. Stores in the pre-DAG migration window may omit it; tree-aware
+ *   features (compaction, fork, branch summary) require it.
+ * - `list({ cursor })` MUST honour cursor pagination when a previous call returned
+ *   `nextCursor`. In-memory stores may ignore cursor and return everything.
+ * - Path conventions: paths are POSIX-absolute, identical to the ACP wire format.
  */
 export interface SessionStore {
 	create(meta: { cwd: string; parentSessionId?: string }): Promise<SessionRecord>;

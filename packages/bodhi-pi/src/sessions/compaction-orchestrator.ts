@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentLoopTurnUpdate, AgentMessage, Agent as PiAgent } from "@earendil-works/pi-agent-core";
-import type { Api, AssistantMessage, Model, StopReason as PiStopReason } from "@earendil-works/pi-ai";
+import type { AssistantMessage, StopReason as PiStopReason } from "@earendil-works/pi-ai";
 import { isContextOverflow } from "@earendil-works/pi-ai";
 import type { AgentHelpers } from "@/acp/_helpers.js";
 import { EXT_SESSION_COMPACT } from "@/acp/constants.js";
@@ -14,6 +14,7 @@ import { buildSessionContext, walkPath } from "./build-context.js";
 import {
 	type CompactionResult,
 	calculateContextTokens,
+	getContextWindow,
 	getLastAssistantUsage,
 	prepareCompaction,
 	runCompaction,
@@ -39,6 +40,7 @@ export interface CompactionOrchestratorDeps {
 	appendEntry: AppendEntry;
 	resolveApiKey: ResolveApiKey;
 	subscribeToAgent: SubscribeToAgent;
+	logger?: { error(message: string, ...args: unknown[]): void };
 }
 
 export interface BranchNavigateContext {
@@ -60,6 +62,7 @@ export class CompactionOrchestrator {
 	private readonly appendEntry: AppendEntry;
 	private readonly resolveApiKey: ResolveApiKey;
 	private readonly subscribeToAgent: SubscribeToAgent;
+	private readonly logger: { error(message: string, ...args: unknown[]): void };
 
 	constructor(deps: CompactionOrchestratorDeps) {
 		this.sessions = deps.sessions;
@@ -69,6 +72,7 @@ export class CompactionOrchestrator {
 		this.appendEntry = deps.appendEntry;
 		this.resolveApiKey = deps.resolveApiKey;
 		this.subscribeToAgent = deps.subscribeToAgent;
+		this.logger = deps.logger ?? console;
 	}
 
 	register(): Array<[string, ExtHandler]> {
@@ -207,8 +211,7 @@ export class CompactionOrchestrator {
 		const usage = getLastAssistantUsage(path);
 		if (!usage) return undefined;
 		const contextTokens = calculateContextTokens(usage);
-		const contextWindow =
-			(session.runtime.piAgent.state.model as Model<Api> & { contextWindow?: number }).contextWindow ?? 0;
+		const contextWindow = getContextWindow(session.runtime.piAgent.state.model);
 		if (contextWindow <= 0) return undefined;
 		if (contextTokens <= contextWindow - settings.reserveTokens) return undefined;
 
@@ -232,8 +235,7 @@ export class CompactionOrchestrator {
 		const messages = session.runtime.piAgent.state.messages;
 		const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
 		if (!lastAssistant) return false;
-		const contextWindow =
-			(session.runtime.piAgent.state.model as Model<Api> & { contextWindow?: number }).contextWindow ?? 0;
+		const contextWindow = getContextWindow(session.runtime.piAgent.state.model);
 		if (!isContextOverflow(lastAssistant as AssistantMessage, contextWindow > 0 ? contextWindow : undefined)) {
 			return false;
 		}
@@ -300,7 +302,11 @@ export class CompactionOrchestrator {
 				session.runtime.piAgent.state.messages = ctx.messages;
 			}
 			return entry;
-		} catch {
+		} catch (err) {
+			this.logger.error(
+				`[bodhi-pi] branch-summary navigate failed; falling through to plain navigate (session=${sessionId})`,
+				err,
+			);
 			return undefined;
 		}
 	}

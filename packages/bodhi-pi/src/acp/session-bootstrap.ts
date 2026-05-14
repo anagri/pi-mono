@@ -145,7 +145,7 @@ export function createPiAgent(
 			...(args.messages.length > 0 ? { messages: args.messages } : {}),
 			tools: args.tools,
 			...(args.systemPrompt !== undefined ? { systemPrompt: args.systemPrompt } : {}),
-			thinkingLevel: args.thinkingLevel as never,
+			thinkingLevel: args.thinkingLevel as never, // pi-agent-core types this as `never`; widening up the stack is in this file's section below.
 		},
 		getApiKey: resolveApiKey,
 		beforeToolCall: async (ctx: BeforeToolCallContext): Promise<BeforeToolCallResult | undefined> => {
@@ -195,6 +195,7 @@ export function createPiAgent(
 			const state = sessions.get(args.sessionId);
 			if (!state?.runtime.pendingThinkingLevelChange) return compactUpdate;
 			state.runtime.pendingThinkingLevelChange = false;
+			// pi-agent-core types AgentLoopTurnUpdate.thinkingLevel as `never`; cast is centralised at top of model-registry.ts.
 			return { ...(compactUpdate ?? {}), thinkingLevel: state.runtime.thinkingLevel as never };
 		},
 	});

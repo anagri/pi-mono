@@ -24,11 +24,17 @@ import type {
  * The five mutation-aware emitters keep dedicated methods because they merge
  * handler return values into the dispatched payload.
  */
+export interface DispatcherLogger {
+	error(message: string, ...args: unknown[]): void;
+}
+
 export class EventDispatcher {
 	private readonly handlers: BodhiPiEventHandlers;
+	private readonly logger: DispatcherLogger;
 
-	constructor(handlers: BodhiPiEventHandlers = {}) {
+	constructor(handlers: BodhiPiEventHandlers = {}, logger: DispatcherLogger = console) {
 		this.handlers = { ...handlers };
+		this.logger = logger;
 	}
 
 	/** Append additional handlers for a given event type (used when extensions register late). */
@@ -44,7 +50,7 @@ export class EventDispatcher {
 		try {
 			return await handler(event);
 		} catch (err) {
-			console.error(`[bodhi-pi event:${label}] handler threw`, err);
+			this.logger.error(`[bodhi-pi event:${label}] handler threw`, err);
 			return undefined;
 		}
 	}

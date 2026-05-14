@@ -98,6 +98,16 @@ export interface BodhiPiConfig {
 	kvStore?: KvStore;
 	/** Host-explicit default thinking level; beats global/project settings. */
 	defaultThinkingLevel?: ModelThinkingLevel;
+	/**
+	 * Host-supplied logger for non-fatal internal errors (extension factory failures, event-handler
+	 * exceptions, branch-summarisation fall-through). Defaults to `console.error` when unset.
+	 */
+	logger?: BodhiPiLogger;
+}
+
+/** Minimal logger contract for non-fatal internal errors. Compatible with `console`. */
+export interface BodhiPiLogger {
+	error(message: string, ...args: unknown[]): void;
 }
 
 function _resolveProviderStreamOptions(provider: string, merged: BodhiPiProjectSettings): ResolvedRetryOptions {
@@ -148,6 +158,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
 	private readonly events: EventDispatcher;
 	private readonly helpers: AgentHelpers;
+	private readonly logger: BodhiPiLogger;
 	private readonly modelRegistry: ModelRegistry;
 	private readonly kvService: KvService;
 	private readonly settingsService: SettingsService;
@@ -164,10 +175,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 		private readonly conn: AgentSideConnection,
 	) {
 		this.helpers = new AgentHelpers(this.sessions, config.sessionStore);
+		const logger: BodhiPiLogger = config.logger ?? console;
+		this.logger = logger;
 		// EventDispatcher is constructed once with both host-supplied handlers
 		// AND extension-registered handlers merged. Extension handlers are added
 		// asynchronously via `ensureExtensionRunner()` on first session use.
-		this.events = new EventDispatcher(config.eventHandlers);
+		this.events = new EventDispatcher(config.eventHandlers, logger);
 
 		// Internal subscribers: route state-change events into spec-stable ACP
 		// `config_option_update` notifications. Demonstrates the same hook surface
@@ -228,6 +241,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			appendEntry: this.appendEntry.bind(this),
 			resolveApiKey: (p: string) => this.modelRegistry.resolveProviderApiKey(p),
 			subscribeToAgent: (sid, sess, outcome) => this.subscribeToAgent(sid, sess, outcome),
+			logger,
 		});
 
 		this.sessionGraphService = new SessionGraphService({
@@ -294,6 +308,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					sessionStore: this.config.sessionStore,
 					extensions: factories,
 					requestSlashableRefresh: (sessionId) => this.refreshSlashable(sessionId),
+					logger: this.logger,
 				});
 				this.extensionRunner = runner;
 				// Merge extension event handlers into the dispatcher's existing handler map.

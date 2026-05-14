@@ -1,13 +1,24 @@
 /**
  * Host-injected filesystem the agent uses for every file operation.
  *
- * bodhi-pi never imports `node:fs` directly. Hosts construct a `Filesystem`
- * (Node-fs adapter, in-memory, OPFS, S3, etc.) and pass it via
- * `BodhiPiConfig.filesystem`. There is no default fallback.
+ * **Contract:**
+ * - All paths are POSIX-absolute (`/proj/foo.md`). The agent normalises any relative input
+ *   under the session `cwd` before calling these methods. Hosts may choose to jail the
+ *   filesystem under a root prefix — bodhi-pi never enforces that itself.
+ * - **Error semantics** are split: `readTextFile`, `writeTextFile`, `list`, `stat`, `mkdir`,
+ *   `remove` **reject** when the operation fails. `exists` **never rejects** — it returns
+ *   `false` on any error.
+ * - `writeTextFile` does NOT auto-create the parent directory. Hosts that need autocreate
+ *   should layer that on themselves; the agent always calls `mkdir({ recursive: true })`
+ *   before a settings write.
  *
- * This is *not* the ACP `fs/read_text_file` / `fs/write_text_file` mechanism.
- * Those let an agent fetch files from a remote client (e.g., browser IDE).
- * bodhi-pi's `Filesystem` is the local handle the host gives the agent.
+ * bodhi-pi never imports `node:fs` directly. Hosts construct a `Filesystem` (Node-fs adapter,
+ * in-memory, OPFS, S3, etc.) and pass it via `BodhiPiConfig.filesystem`. There is no default
+ * fallback — missing `filesystem` throws at `createBodhiPiAgent` time.
+ *
+ * This is *not* the ACP `fs/read_text_file` / `fs/write_text_file` mechanism. Those let an
+ * agent fetch files from a remote client (e.g., browser IDE). bodhi-pi's `Filesystem` is the
+ * local handle the host gives the agent.
  */
 export interface Filesystem {
 	/** Read a UTF-8 text file. Rejects if the path is missing or is a directory. */

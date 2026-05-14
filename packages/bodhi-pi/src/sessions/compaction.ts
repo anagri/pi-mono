@@ -34,6 +34,16 @@ export function calculateContextTokens(usage: Usage): number {
 	return usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 }
 
+/**
+ * Pi-ai `Model` does not yet expose `contextWindow` in its public types, but the runtime data
+ * carries it for every catalog entry. Hoist the cast into one named helper so the unsafe access
+ * is auditable from a single site. Returns 0 when the field is absent — callers should treat 0 as
+ * "no window known".
+ */
+export function getContextWindow(model: Model<Api>): number {
+	return (model as Model<Api> & { contextWindow?: number }).contextWindow ?? 0;
+}
+
 function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 	if (msg.role !== "assistant") return undefined;
 	const a = msg as AssistantMessage;

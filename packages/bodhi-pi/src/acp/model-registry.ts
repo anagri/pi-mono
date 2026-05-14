@@ -41,6 +41,16 @@ export interface ModelRegistryDeps {
 }
 
 /**
+ * `pi-agent-core` types `state.thinkingLevel` as a narrow `ThinkingLevel` union; pi-ai's
+ * `ModelThinkingLevel` is wider. The two shapes are runtime-identical (string enum) but the
+ * compiler needs a bridge. Centralize the cast in one helper so future fixes upstream can flip
+ * a single line.
+ */
+export function assignThinkingLevel(piAgentState: { thinkingLevel: unknown }, level: ModelThinkingLevel): void {
+	(piAgentState as { thinkingLevel: ModelThinkingLevel }).thinkingLevel = level;
+}
+
+/**
  * Resolved per-provider stream options (retry/timeout) from a merged project-settings layer.
  * Pure transform — exported so the bootstrap can call it without going through the registry.
  */
@@ -256,7 +266,7 @@ export class ModelRegistry {
 		const clamped = clampThinkingLevel(newModel, session.runtime.thinkingLevel);
 		if (clamped !== session.runtime.thinkingLevel) {
 			session.runtime.thinkingLevel = clamped;
-			session.runtime.piAgent.state.thinkingLevel = clamped as never;
+			assignThinkingLevel(session.runtime.piAgent.state, clamped);
 			session.runtime.pendingThinkingLevelChange = true;
 		}
 		await this.appendEntry(sessionId, session, {
@@ -289,7 +299,7 @@ export class ModelRegistry {
 		const level = value as ModelThinkingLevel;
 		if (level === session.runtime.thinkingLevel) return;
 		session.runtime.thinkingLevel = level;
-		session.runtime.piAgent.state.thinkingLevel = level as never;
+		assignThinkingLevel(session.runtime.piAgent.state, level);
 		session.runtime.pendingThinkingLevelChange = true;
 		await this.appendEntry(sessionId, session, {
 			type: "thinking_change",

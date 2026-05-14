@@ -48,6 +48,10 @@ export interface ExtensionFactoryError {
  */
 export type RequestSlashableRefresh = (sessionId?: string) => Promise<void>;
 
+export interface RunnerLogger {
+	error(message: string, ...args: unknown[]): void;
+}
+
 export class ExtensionRunner {
 	private readonly tools: AgentTool[] = [];
 	private readonly commands: PromptTemplate[] = [];
@@ -58,15 +62,18 @@ export class ExtensionRunner {
 	private readonly sessionStore: SessionStore;
 	private readonly errors: ExtensionFactoryError[] = [];
 	private readonly requestSlashableRefresh?: RequestSlashableRefresh;
+	private readonly logger: RunnerLogger;
 
 	private constructor(opts: {
 		conn: AgentSideConnection;
 		sessionStore: SessionStore;
 		requestSlashableRefresh?: RequestSlashableRefresh;
+		logger?: RunnerLogger;
 	}) {
 		this.conn = opts.conn;
 		this.sessionStore = opts.sessionStore;
 		this.requestSlashableRefresh = opts.requestSlashableRefresh;
+		this.logger = opts.logger ?? console;
 	}
 
 	static async build(opts: {
@@ -74,21 +81,23 @@ export class ExtensionRunner {
 		sessionStore: SessionStore;
 		extensions: RegisteredExtension[];
 		requestSlashableRefresh?: RequestSlashableRefresh;
+		logger?: RunnerLogger;
 	}): Promise<ExtensionRunner> {
 		const runner = new ExtensionRunner({
 			conn: opts.conn,
 			sessionStore: opts.sessionStore,
 			requestSlashableRefresh: opts.requestSlashableRefresh,
+			...(opts.logger ? { logger: opts.logger } : {}),
 		});
 		for (const ext of opts.extensions) {
 			const api = runner.buildApiFor(ext.name);
 			try {
 				await ext.factory(api);
 			} catch (err) {
-				// Capture for later programmatic inspection by the host. We also log
-				// to console so dev-tools / stderr surfaces it without explicit access.
+				// Capture for later programmatic inspection by the host. We also log via the
+				// host-supplied logger so dev-tools / stderr surfaces it without explicit access.
 				runner.errors.push({ extensionName: ext.name, error: err });
-				console.error(`[bodhi-pi extension:${ext.name}] factory threw`, err);
+				runner.logger.error(`[bodhi-pi extension:${ext.name}] factory threw`, err);
 			}
 		}
 		return runner;

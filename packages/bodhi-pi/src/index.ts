@@ -68,6 +68,7 @@ export type {
 	SettingsUnsetParams,
 	SettingsUnsetResult,
 } from "./client/types.js";
+export type { PromptTemplate } from "./commands/prompt-templates.js";
 export {
 	formatProviderAuth,
 	KEYLESS_PROVIDER_DEFAULTS,
@@ -113,6 +114,7 @@ export type {
 	TurnEndEvent,
 	TurnStartEvent,
 } from "./events/types.js";
+export type { ExtensionFactoryError } from "./extensions/runner.js";
 export type {
 	ExtensionAPI,
 	ExtensionCommandDefinition,
@@ -174,3 +176,5 @@ export {
 } from "./settings/settings.js";
 export { loadGlobalSettings } from "./settings/settings-global.js";
 export { mergeSettings } from "./settings/settings-merge.js";
+export type { Skill } from "./skills/skill.js";
+export { BODHI_PI_VERSION } from "./version.js";
