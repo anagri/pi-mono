@@ -97,10 +97,7 @@ export class SettingsService {
 
 	private async handleSettingsGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_GET, params);
-		const key = params.key;
-		if (typeof key !== "string" || key.length === 0) {
-			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_GET}: key must be a non-empty string`);
-		}
+		const key = this.helpers.requireStringParam(EXT_SESSION_SETTINGS_GET, params, "key");
 		const scope = this.parseScope(EXT_SESSION_SETTINGS_GET, params.scope, "session");
 		const path = parseDottedKey(key);
 		let source: Record<string, unknown> = {};
@@ -127,10 +124,7 @@ export class SettingsService {
 
 	private async handleSettingsSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_SET, params);
-		const key = params.key;
-		if (typeof key !== "string" || key.length === 0) {
-			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_SET}: key must be a non-empty string`);
-		}
+		const key = this.helpers.requireStringParam(EXT_SESSION_SETTINGS_SET, params, "key");
 		if (!("value" in params)) {
 			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_SET}: value is required`);
 		}
@@ -173,10 +167,7 @@ export class SettingsService {
 
 	private async handleSettingsUnset(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_UNSET, params);
-		const key = params.key;
-		if (typeof key !== "string" || key.length === 0) {
-			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_UNSET}: key must be a non-empty string`);
-		}
+		const key = this.helpers.requireStringParam(EXT_SESSION_SETTINGS_UNSET, params, "key");
 		const scope = this.parseScope(EXT_SESSION_SETTINGS_UNSET, params.scope, "session");
 		const path = parseDottedKey(key);
 

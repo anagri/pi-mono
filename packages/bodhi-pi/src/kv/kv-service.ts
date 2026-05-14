@@ -46,10 +46,7 @@ export class KvService {
 
 	private async handleKvSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_SET);
-		const key = params.key;
-		if (typeof key !== "string" || key.length === 0) {
-			throw new RequestError(-32602, `${EXT_KV_SET}: key must be a non-empty string`);
-		}
+		const key = this.helpers.requireStringParam(EXT_KV_SET, params, "key");
 		if (!("value" in params)) {
 			throw new RequestError(-32602, `${EXT_KV_SET}: value is required`);
 		}
@@ -68,10 +65,7 @@ export class KvService {
 
 	private async handleKvGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_GET);
-		const key = params.key;
-		if (typeof key !== "string" || key.length === 0) {
-			throw new RequestError(-32602, `${EXT_KV_GET}: key must be a non-empty string`);
-		}
+		const key = this.helpers.requireStringParam(EXT_KV_GET, params, "key");
 		const value = await kv.get(key);
 		if (value === undefined) return { key, value: null };
 		return { key, value: maskSecrets(value) };
@@ -91,10 +85,7 @@ export class KvService {
 
 	private async handleKvRemove(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_REMOVE);
-		const key = params.key;
-		if (typeof key !== "string" || key.length === 0) {
-			throw new RequestError(-32602, `${EXT_KV_REMOVE}: key must be a non-empty string`);
-		}
+		const key = this.helpers.requireStringParam(EXT_KV_REMOVE, params, "key");
 		await kv.remove(key);
 		if (key.startsWith(AUTH_PREFIX)) {
 			await this.events.emit({

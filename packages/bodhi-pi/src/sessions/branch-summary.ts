@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
 import {
+	buildEntryIndex,
 	computeFileLists,
 	extractFileOpsFromMessage,
 	newFileOps,
@@ -24,8 +25,7 @@ export function detectCrossBranch(
 	targetEntryId: string,
 ): { abandonedTail: SessionEntry[]; commonAncestorId: string | null } | undefined {
 	if (!oldLeafId || oldLeafId === targetEntryId) return undefined;
-	const byId = new Map<string, SessionEntry>();
-	for (const entry of entries) byId.set(entry.id, entry);
+	const byId = buildEntryIndex(entries);
 
 	const targetChain = new Set<string>();
 	let cur: SessionEntry | undefined = byId.get(targetEntryId);

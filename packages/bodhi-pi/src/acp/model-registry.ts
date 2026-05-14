@@ -223,18 +223,25 @@ export class ModelRegistry {
 		return options;
 	}
 
+	/** Dispatch table for `setSessionConfigOption`. Add a new entry to support a new config option. */
+	private readonly configOptionSetters: Record<
+		string,
+		(sessionId: string, session: SessionState, value: unknown) => Promise<void>
+	> = {
+		[MODEL_CONFIG_ID]: (sid, s, v) => this.setSessionModel(sid, s, v),
+		[THINKING_CONFIG_ID]: (sid, s, v) => this.setSessionThinkingLevel(sid, s, v),
+	};
+
 	async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
 		const session = this.sessions.get(params.sessionId);
 		if (!session) {
 			throw new RequestError(-32602, `unknown session: ${params.sessionId}`);
 		}
-		if (params.configId === MODEL_CONFIG_ID) {
-			await this.setSessionModel(params.sessionId, session, params.value);
-		} else if (params.configId === THINKING_CONFIG_ID) {
-			await this.setSessionThinkingLevel(params.sessionId, session, params.value);
-		} else {
+		const setter = this.configOptionSetters[params.configId];
+		if (!setter) {
 			throw new RequestError(-32602, `unknown configId: ${params.configId}`);
 		}
+		await setter(params.sessionId, session, params.value);
 		return { configOptions: await this.buildAllConfigOptions(params.sessionId) };
 	}
 

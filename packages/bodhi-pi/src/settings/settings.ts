@@ -3,8 +3,18 @@ import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
 
+/**
+ * Project-scope settings file, resolved relative to the session `cwd` by
+ * `loadProjectSettings(fs, cwd)` → `<cwd>/.bodhi-pi/settings.json`.
+ */
 export const SETTINGS_PATH = ".bodhi-pi/settings.json";
-/** Path under the user's home where the global layer lives (Node hosts only). */
+/**
+ * Global-scope settings file, resolved relative to the host-supplied `homeDir`
+ * by `loadGlobalSettings(fs, homeDir)` → `<homeDir>/.bodhi-pi/settings.json`.
+ * Node-only — browser hosts omit `BodhiPiConfig.homeDir` and the global layer
+ * is unavailable. The literal happens to match `SETTINGS_PATH`; the distinction
+ * is the resolution root, not the file name.
+ */
 export const GLOBAL_SETTINGS_PATH = ".bodhi-pi/settings.json";
 
 /** Per-provider stream options (retry / timeout). Threaded into pi-ai SimpleStreamOptions. */

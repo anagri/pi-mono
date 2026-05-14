@@ -1,13 +1,10 @@
 import path from "node:path";
+import { isPlainObject } from "@/_internal/object.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { type BodhiPiProjectSettings, GLOBAL_SETTINGS_PATH, loadProjectSettings, SETTINGS_PATH } from "./settings.js";
 import { loadGlobalSettings } from "./settings-global.js";
 
 export type SettingsScope = "global" | "project" | "session";
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-	return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 /** Parse `"a.b.c"` into `["a","b","c"]`. Empty/invalid → []. */
 export function parseDottedKey(key: string): string[] {

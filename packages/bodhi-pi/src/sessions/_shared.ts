@@ -1,6 +1,17 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai";
+import type { SessionEntry } from "./entries.js";
+
+/**
+ * Build an id → entry lookup over a list of session entries. Used by branch-summary detection
+ * and DAG walks to avoid repeated O(n) `entries.find(...)` scans.
+ */
+export function buildEntryIndex(entries: SessionEntry[]): Map<string, SessionEntry> {
+	const byId = new Map<string, SessionEntry>();
+	for (const entry of entries) byId.set(entry.id, entry);
+	return byId;
+}
 
 /**
  * File-operation tracking shared between compaction and branch summarization.

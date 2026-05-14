@@ -1,3 +1,8 @@
+/**
+ * @internal
+ * ACP wire-protocol notification helpers consumed only by `BodhiPiAcpAgent.subscribeToAgent`
+ * and the session-graph/info services. Not part of the public `@bodhiapp/bodhi-pi` surface.
+ */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
 
@@ -9,7 +14,7 @@ export function isAssistantMessage(msg: AgentMessage): msg is Extract<AgentMessa
 	return msg.role === "assistant";
 }
 
-export interface ToolCallContentBlock {
+interface ToolCallContentBlock {
 	type: "content";
 	content: { type: "text"; text: string };
 }
@@ -32,7 +37,7 @@ export function extractText(message: AgentMessage): string {
 	return "";
 }
 
-export interface ExtractedToolCall {
+interface ExtractedToolCall {
 	id: string;
 	name: string;
 	arguments: Record<string, unknown>;
@@ -72,7 +77,7 @@ export function formatLocationHint(args: unknown): string {
 	return typeof path === "string" ? path : "";
 }
 
-export type AcpStopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
+type AcpStopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
 
 type PiStopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 

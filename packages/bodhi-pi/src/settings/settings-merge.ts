@@ -1,8 +1,5 @@
+import { isPlainObject } from "@/_internal/object.js";
 import type { BodhiPiProjectSettings } from "./settings.js";
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-	return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 /** One-level deep merge; `undefined` in overrides inherits from base. */
 export function mergeSettings(base: BodhiPiProjectSettings, overrides: BodhiPiProjectSettings): BodhiPiProjectSettings {

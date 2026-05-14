@@ -53,7 +53,7 @@ export interface ExtensionEntryPayload {
 	data: unknown;
 }
 
-type Awaitable<T> = T | Promise<T>;
+import type { Awaitable } from "@/_internal/awaitable.js";
 
 /** Type-narrowed event handler matching `BodhiPiEventHandlers`. */
 export type ExtensionEventHandler<T extends BodhiPiEventType> = (

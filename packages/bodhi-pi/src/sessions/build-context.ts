@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { buildEntryIndex } from "./_shared.js";
 import type { BranchSummaryEntry, CompactionEntry, CustomMessageEntry, SessionEntry } from "./entries.js";
 import type { SessionRecord } from "./session-store.js";
 
@@ -18,8 +19,7 @@ export interface SessionContext {
 export function walkPath(entries: SessionEntry[], leafId?: string | null): SessionEntry[] {
 	const haveParentLinks = entries.some((e) => e.parentId !== undefined && e.parentId !== null);
 	if (!haveParentLinks) return entries.slice();
-	const byId = new Map<string, SessionEntry>();
-	for (const entry of entries) byId.set(entry.id, entry);
+	const byId = buildEntryIndex(entries);
 	const start = leafId ? byId.get(leafId) : entries[entries.length - 1];
 	if (!start) return [];
 	const path: SessionEntry[] = [];
