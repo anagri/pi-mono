@@ -1,15 +1,15 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentHelpers } from "@/acp/_helpers.js";
+import type { SessionState } from "@/acp/session-state.js";
+import type { EventDispatcher } from "@/events/dispatcher.js";
 import {
 	EXT_SESSION_CLONE,
 	EXT_SESSION_ENTRIES,
 	EXT_SESSION_FORK,
 	EXT_SESSION_NAVIGATE,
 	EXT_SESSION_TREE,
-} from "@/acp/constants.js";
-import { extractText } from "@/acp/notifications.js";
-import type { SessionState } from "@/acp/session-state.js";
-import type { EventDispatcher } from "@/events/dispatcher.js";
+} from "@/wire/constants.js";
+import { extractText } from "./_shared.js";
 import { buildSessionContext, walkPath } from "./build-context.js";
 import type { CompactionOrchestrator } from "./compaction-orchestrator.js";
 import type { SessionStore } from "./session-store.js";

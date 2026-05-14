@@ -1,28 +1,5 @@
 export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
-export {
-	EXT_DELETE_SESSION,
-	EXT_KV_GET,
-	EXT_KV_LIST,
-	EXT_KV_REMOVE,
-	EXT_KV_SET,
-	EXT_SESSION_CLONE,
-	EXT_SESSION_COMPACT,
-	EXT_SESSION_CONFIG,
-	EXT_SESSION_ENTRIES,
-	EXT_SESSION_EXPORT,
-	EXT_SESSION_FORK,
-	EXT_SESSION_NAVIGATE,
-	EXT_SESSION_SET_NAME,
-	EXT_SESSION_SETTINGS_GET,
-	EXT_SESSION_SETTINGS_LIST,
-	EXT_SESSION_SETTINGS_SET,
-	EXT_SESSION_SETTINGS_UNSET,
-	EXT_SESSION_STATS,
-	EXT_SESSION_TREE,
-	MODEL_CONFIG_ID,
-	THINKING_CONFIG_ID,
-} from "./acp/constants.js";
 export { BodhiPiClient, createBodhiPiClient } from "./client/client.js";
 export { flattenModelOptions, modelConfigFromOptions } from "./client/config-options.js";
 export type {
@@ -178,3 +155,26 @@ export { loadGlobalSettings } from "./settings/settings-global.js";
 export { mergeSettings } from "./settings/settings-merge.js";
 export type { Skill } from "./skills/skill.js";
 export { BODHI_PI_VERSION } from "./version.js";
+export {
+	EXT_DELETE_SESSION,
+	EXT_KV_GET,
+	EXT_KV_LIST,
+	EXT_KV_REMOVE,
+	EXT_KV_SET,
+	EXT_SESSION_CLONE,
+	EXT_SESSION_COMPACT,
+	EXT_SESSION_CONFIG,
+	EXT_SESSION_ENTRIES,
+	EXT_SESSION_EXPORT,
+	EXT_SESSION_FORK,
+	EXT_SESSION_NAVIGATE,
+	EXT_SESSION_SET_NAME,
+	EXT_SESSION_SETTINGS_GET,
+	EXT_SESSION_SETTINGS_LIST,
+	EXT_SESSION_SETTINGS_SET,
+	EXT_SESSION_SETTINGS_UNSET,
+	EXT_SESSION_STATS,
+	EXT_SESSION_TREE,
+	MODEL_CONFIG_ID,
+	THINKING_CONFIG_ID,
+} from "./wire/constants.js";

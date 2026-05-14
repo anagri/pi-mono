@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { type AgentSideConnection, RequestError } from "@agentclientprotocol/sdk";
 import type { AgentHelpers } from "@/acp/_helpers.js";
-import { EXT_SESSION_CONFIG, EXT_SESSION_EXPORT, EXT_SESSION_SET_NAME, EXT_SESSION_STATS } from "@/acp/constants.js";
 import type { SessionState } from "@/acp/session-state.js";
 import { walkPath } from "@/sessions/build-context.js";
 import type { SessionEntry } from "@/sessions/entries.js";
 import type { SessionStore } from "@/sessions/session-store.js";
+import { EXT_SESSION_CONFIG, EXT_SESSION_EXPORT, EXT_SESSION_SET_NAME, EXT_SESSION_STATS } from "@/wire/constants.js";
+import { validateSessionId } from "@/wire/validators.js";
 
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
@@ -57,7 +58,7 @@ export class SessionInfoService {
 	}
 
 	private async handleSessionConfig(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const sessionId = this.helpers.validateSessionId(EXT_SESSION_CONFIG, params);
+		const sessionId = validateSessionId(EXT_SESSION_CONFIG, params);
 		const session = this.helpers.requireSession(EXT_SESSION_CONFIG, params);
 		return {
 			sessionId,
@@ -79,7 +80,7 @@ export class SessionInfoService {
 	}
 
 	private async handleSessionSetName(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const sessionId = this.helpers.validateSessionId(EXT_SESSION_SET_NAME, params);
+		const sessionId = validateSessionId(EXT_SESSION_SET_NAME, params);
 		const name = params.name;
 		if (typeof name !== "string") {
 			throw new RequestError(-32602, `${EXT_SESSION_SET_NAME}: name must be a string`);

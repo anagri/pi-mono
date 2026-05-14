@@ -35,6 +35,7 @@ import type { Filesystem } from "@/filesystem/filesystem.js";
 import { KvService } from "@/kv/kv-service.js";
 import type { KvStore } from "@/kv/kv-store.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import { extractText, extractToolCalls, formatLocationHint, isToolResultMessage } from "@/sessions/_shared.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
 import { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.js";
 import type { SessionEntry } from "@/sessions/entries.js";
@@ -47,18 +48,11 @@ import { expandSkillCommand } from "@/skills/invocation.js";
 import type { Skill } from "@/skills/skill.js";
 import { toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
+import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "@/wire/constants.js";
+import { agentToolContentForAcp, mapStopReason, toolResultContentForAcp } from "@/wire/converters.js";
+import { validateSessionId } from "@/wire/validators.js";
 import { AgentHelpers } from "./_helpers.js";
-import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "./constants.js";
 import { ModelRegistry } from "./model-registry.js";
-import {
-	agentToolContentForAcp,
-	extractText,
-	extractToolCalls,
-	formatLocationHint,
-	isToolResultMessage,
-	mapStopReason,
-	toolResultContentForAcp,
-} from "./notifications.js";
 import {
 	type BootstrapDeps,
 	buildSessionState as buildSessionStateFn,
@@ -216,7 +210,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		this.kvService = new KvService({
 			...(config.kvStore ? { kvStore: config.kvStore } : {}),
 			events: this.events,
-			helpers: this.helpers,
 		});
 		this.settingsService = new SettingsService({
 			filesystem: config.filesystem,
@@ -507,7 +500,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	private async handleSessionDelete(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const sessionId = this.helpers.validateSessionId(EXT_DELETE_SESSION, params);
+		const sessionId = validateSessionId(EXT_DELETE_SESSION, params);
 		this.sessions.get(sessionId)?.runtime.piAgent.abort();
 		this.sessions.delete(sessionId);
 		await this.config.sessionStore.delete(sessionId);

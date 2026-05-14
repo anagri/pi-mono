@@ -4,11 +4,11 @@ import type { AgentLoopTurnUpdate, AgentMessage, Agent as PiAgent } from "@earen
 import type { AssistantMessage, StopReason as PiStopReason } from "@earendil-works/pi-ai";
 import { isContextOverflow } from "@earendil-works/pi-ai";
 import type { AgentHelpers } from "@/acp/_helpers.js";
-import { EXT_SESSION_COMPACT } from "@/acp/constants.js";
-import { mapStopReason } from "@/acp/notifications.js";
 import type { SessionState } from "@/acp/session-state.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { StopReason } from "@/events/types.js";
+import { EXT_SESSION_COMPACT } from "@/wire/constants.js";
+import { mapStopReason } from "@/wire/converters.js";
 import { detectCrossBranch, runBranchSummary } from "./branch-summary.js";
 import { buildSessionContext, walkPath } from "./build-context.js";
 import {

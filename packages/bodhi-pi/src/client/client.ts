@@ -9,6 +9,8 @@ import type {
 	SetSessionConfigOptionRequest,
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
+import { normalizeProviderAuth, parseProviderAuth } from "@/kv/auth-format.js";
+import { AUTH_PREFIX } from "@/kv/kv-store.js";
 import {
 	EXT_DELETE_SESSION,
 	EXT_KV_GET,
@@ -30,9 +32,7 @@ import {
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
 	MODEL_CONFIG_ID,
-} from "@/acp/constants.js";
-import { normalizeProviderAuth, parseProviderAuth } from "@/kv/auth-format.js";
-import { AUTH_PREFIX } from "@/kv/kv-store.js";
+} from "@/wire/constants.js";
 import { modelConfigFromOptions } from "./config-options.js";
 import type {
 	AddProviderOptions,

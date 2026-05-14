@@ -1,7 +1,37 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, Message, Model } from "@earendil-works/pi-ai";
+import type { Api, Message, Model, ToolResultMessage } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai";
 import type { SessionEntry } from "./entries.js";
+
+export function isToolResultMessage(msg: AgentMessage): msg is ToolResultMessage {
+	return msg.role === "toolResult";
+}
+
+interface ExtractedToolCall {
+	id: string;
+	name: string;
+	arguments: Record<string, unknown>;
+}
+
+export function extractToolCalls(message: AgentMessage): ExtractedToolCall[] {
+	if (message.role !== "assistant") return [];
+	const out: ExtractedToolCall[] = [];
+	for (const block of message.content) {
+		if (block.type !== "toolCall") continue;
+		out.push({
+			id: block.id,
+			name: block.name,
+			arguments: (block.arguments ?? {}) as Record<string, unknown>,
+		});
+	}
+	return out;
+}
+
+export function formatLocationHint(args: unknown): string {
+	if (!args || typeof args !== "object") return "";
+	const path = (args as { path?: unknown }).path;
+	return typeof path === "string" ? path : "";
+}
 
 /**
  * Build an id → entry lookup over a list of session entries. Used by branch-summary detection
@@ -82,6 +112,18 @@ export function joinTextBlocks(content: ReadonlyArray<{ type: string; text?: str
 		.filter((b): b is { type: "text"; text: string } => b.type === "text")
 		.map((b) => b.text)
 		.join(separator);
+}
+
+export function extractText(message: AgentMessage): string {
+	if (message.role === "user") {
+		const content = message.content;
+		if (typeof content === "string") return content;
+		return joinTextBlocks(content);
+	}
+	if (message.role === "assistant") {
+		return joinTextBlocks(message.content);
+	}
+	return "";
 }
 
 const TOOL_RESULT_MAX_CHARS = 2000;

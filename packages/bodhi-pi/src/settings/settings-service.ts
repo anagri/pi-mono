@@ -1,14 +1,15 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentHelpers } from "@/acp/_helpers.js";
+import type { SessionState } from "@/acp/session-state.js";
+import type { EventDispatcher } from "@/events/dispatcher.js";
+import type { Filesystem } from "@/filesystem/filesystem.js";
 import {
 	EXT_SESSION_SETTINGS_GET,
 	EXT_SESSION_SETTINGS_LIST,
 	EXT_SESSION_SETTINGS_SET,
 	EXT_SESSION_SETTINGS_UNSET,
-} from "@/acp/constants.js";
-import type { SessionState } from "@/acp/session-state.js";
-import type { EventDispatcher } from "@/events/dispatcher.js";
-import type { Filesystem } from "@/filesystem/filesystem.js";
+} from "@/wire/constants.js";
+import { requireStringParam } from "@/wire/validators.js";
 import type { BodhiPiProjectSettings } from "./settings.js";
 import { mergeSettings } from "./settings-merge.js";
 import {
@@ -97,7 +98,7 @@ export class SettingsService {
 
 	private async handleSettingsGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_GET, params);
-		const key = this.helpers.requireStringParam(EXT_SESSION_SETTINGS_GET, params, "key");
+		const key = requireStringParam(EXT_SESSION_SETTINGS_GET, params, "key");
 		const scope = this.parseScope(EXT_SESSION_SETTINGS_GET, params.scope, "session");
 		const path = parseDottedKey(key);
 		let source: Record<string, unknown> = {};
@@ -124,7 +125,7 @@ export class SettingsService {
 
 	private async handleSettingsSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_SET, params);
-		const key = this.helpers.requireStringParam(EXT_SESSION_SETTINGS_SET, params, "key");
+		const key = requireStringParam(EXT_SESSION_SETTINGS_SET, params, "key");
 		if (!("value" in params)) {
 			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_SET}: value is required`);
 		}
@@ -167,7 +168,7 @@ export class SettingsService {
 
 	private async handleSettingsUnset(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_UNSET, params);
-		const key = this.helpers.requireStringParam(EXT_SESSION_SETTINGS_UNSET, params, "key");
+		const key = requireStringParam(EXT_SESSION_SETTINGS_UNSET, params, "key");
 		const scope = this.parseScope(EXT_SESSION_SETTINGS_UNSET, params.scope, "session");
 		const path = parseDottedKey(key);
 

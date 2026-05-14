@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
-import { MODEL_CONFIG_ID } from "@/acp/constants.js";
+import { MODEL_CONFIG_ID } from "@/wire/constants.js";
 import type { ModelConfigState, ModelOption } from "./types.js";
 
 export function flattenModelOptions(option: SessionConfigOption | undefined): ModelOption[] {

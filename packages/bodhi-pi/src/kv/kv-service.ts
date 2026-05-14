@@ -1,7 +1,7 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import type { AgentHelpers } from "@/acp/_helpers.js";
-import { EXT_KV_GET, EXT_KV_LIST, EXT_KV_REMOVE, EXT_KV_SET } from "@/acp/constants.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { EXT_KV_GET, EXT_KV_LIST, EXT_KV_REMOVE, EXT_KV_SET } from "@/wire/constants.js";
+import { optionalSessionId, requireStringParam } from "@/wire/validators.js";
 import { AUTH_PREFIX, type JsonValue, type KvStore, maskSecrets } from "./kv-store.js";
 
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -9,7 +9,6 @@ type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, un
 export interface KvServiceDeps {
 	kvStore?: KvStore;
 	events: EventDispatcher;
-	helpers: AgentHelpers;
 }
 
 /**
@@ -20,12 +19,10 @@ export interface KvServiceDeps {
 export class KvService {
 	private readonly kvStore: KvStore | undefined;
 	private readonly events: EventDispatcher;
-	private readonly helpers: AgentHelpers;
 
 	constructor(deps: KvServiceDeps) {
 		this.kvStore = deps.kvStore;
 		this.events = deps.events;
-		this.helpers = deps.helpers;
 	}
 
 	register(): Array<[string, ExtHandler]> {
@@ -46,7 +43,7 @@ export class KvService {
 
 	private async handleKvSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_SET);
-		const key = this.helpers.requireStringParam(EXT_KV_SET, params, "key");
+		const key = requireStringParam(EXT_KV_SET, params, "key");
 		if (!("value" in params)) {
 			throw new RequestError(-32602, `${EXT_KV_SET}: value is required`);
 		}
@@ -55,7 +52,7 @@ export class KvService {
 		if (key.startsWith(AUTH_PREFIX)) {
 			await this.events.emit({
 				type: "auth_change",
-				sessionId: this.helpers.optionalSessionId(params),
+				sessionId: optionalSessionId(params),
 				provider: key.slice(AUTH_PREFIX.length),
 				action: "login",
 			});
@@ -65,7 +62,7 @@ export class KvService {
 
 	private async handleKvGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_GET);
-		const key = this.helpers.requireStringParam(EXT_KV_GET, params, "key");
+		const key = requireStringParam(EXT_KV_GET, params, "key");
 		const value = await kv.get(key);
 		if (value === undefined) return { key, value: null };
 		return { key, value: maskSecrets(value) };
@@ -85,12 +82,12 @@ export class KvService {
 
 	private async handleKvRemove(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKvStore(EXT_KV_REMOVE);
-		const key = this.helpers.requireStringParam(EXT_KV_REMOVE, params, "key");
+		const key = requireStringParam(EXT_KV_REMOVE, params, "key");
 		await kv.remove(key);
 		if (key.startsWith(AUTH_PREFIX)) {
 			await this.events.emit({
 				type: "auth_change",
-				sessionId: this.helpers.optionalSessionId(params),
+				sessionId: optionalSessionId(params),
 				provider: key.slice(AUTH_PREFIX.length),
 				action: "logout",
 			});

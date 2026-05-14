@@ -21,7 +21,7 @@ import { extractAuthApiKey, extractAuthBaseUrl } from "@/kv/auth-format.js";
 import { AUTH_PREFIX, type JsonValue, type KvStore } from "@/kv/kv-store.js";
 import type { SessionEntry } from "@/sessions/entries.js";
 import type { BodhiPiProjectSettings, ProviderOptionsEntry } from "@/settings/settings.js";
-import { MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "./constants.js";
+import { MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/wire/constants.js";
 import type { ResolvedRetryOptions, SessionState } from "./session-state.js";
 
 export type AppendEntry = (sessionId: string, session: SessionState, entry: SessionEntry) => Promise<void>;

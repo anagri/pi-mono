@@ -6,13 +6,13 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { createInMemoryFilesystem } from "@/index.js";
 import {
 	EXT_SESSION_SETTINGS_GET,
 	EXT_SESSION_SETTINGS_LIST,
 	EXT_SESSION_SETTINGS_SET,
 	EXT_SESSION_SETTINGS_UNSET,
-} from "@/acp/constants.js";
-import { createInMemoryFilesystem } from "@/index.js";
+} from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { findUpdateOfKind, hasUpdateOfKind } from "./helpers/acp-narrow.js";
 import { seedGlobalSettings } from "./helpers/filesystem.js";

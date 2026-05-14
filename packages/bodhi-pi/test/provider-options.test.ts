@@ -6,8 +6,8 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { EXT_SESSION_CONFIG } from "@/acp/constants.js";
 import { createInMemoryFilesystem } from "@/index.js";
+import { EXT_SESSION_CONFIG } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { seedProjectSettings } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";

@@ -6,11 +6,11 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { EXT_SESSION_CONFIG, EXT_SESSION_SETTINGS_LIST } from "@/acp/constants.js";
 import { createInMemoryFilesystem } from "@/index.js";
 import { loadProjectSettings } from "@/settings/settings.js";
 import { loadGlobalSettings } from "@/settings/settings-global.js";
 import { mergeSettings } from "@/settings/settings-merge.js";
+import { EXT_SESSION_CONFIG, EXT_SESSION_SETTINGS_LIST } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { seedGlobalSettings, seedProjectSettings } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";

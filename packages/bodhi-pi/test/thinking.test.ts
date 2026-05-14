@@ -7,7 +7,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { EXT_SESSION_CONFIG, MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/acp/constants.js";
+import { EXT_SESSION_CONFIG, MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
 

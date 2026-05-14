@@ -6,6 +6,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { AUTH_PREFIX } from "@/index.js";
 import {
 	EXT_KV_REMOVE,
 	EXT_KV_SET,
@@ -16,8 +17,7 @@ import {
 	EXT_SESSION_SETTINGS_SET,
 	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_TREE,
-} from "@/acp/constants.js";
-import { AUTH_PREFIX } from "@/index.js";
+} from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { findEventOfType, findUpdateOfKind } from "./helpers/acp-narrow.js";
 import { recorder } from "./helpers/event-recorder.js";

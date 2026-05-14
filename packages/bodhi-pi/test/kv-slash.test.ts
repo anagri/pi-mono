@@ -6,8 +6,8 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { EXT_KV_GET, EXT_KV_LIST, EXT_KV_REMOVE, EXT_KV_SET } from "@/acp/constants.js";
 import { AUTH_PREFIX, createBodhiPiAgent, createInMemoryFilesystem, createInMemorySessionStore } from "@/index.js";
+import { EXT_KV_GET, EXT_KV_LIST, EXT_KV_REMOVE, EXT_KV_SET } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { findUpdateOfKind, hasUpdateOfKind } from "./helpers/acp-narrow.js";
 import { createTestHarness } from "./helpers/harness.js";
