@@ -32,6 +32,8 @@ export async function launchHarnessContext(opts: HarnessSetupOptions): Promise<H
 	const browser = await ensureSharedBrowser();
 	const context = await browser.newContext();
 	const page = await context.newPage();
+	// 15s covers regular Vite-preview page load + bootstrap-worker init.
+	// chrome-ext/launch.ts uses 30s for its MV3 boot overhead.
 	await runHarnessSetupOnPage(page, opts, {
 		readyTimeoutMs: 15_000,
 		logPrefix: "page",

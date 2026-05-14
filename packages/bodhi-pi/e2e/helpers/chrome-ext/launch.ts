@@ -69,6 +69,8 @@ export interface ChromeExtHarnessPage {
 export async function launchChromeExtHarnessPage(opts: HarnessSetupOptions): Promise<ChromeExtHarnessPage> {
 	const context = await ensureSharedChromeExtContext();
 	const page = await context.newPage();
+	// 30s (vs. 15s for browser/launch.ts) covers MV3 boot: sandbox iframe
+	// load + service-worker registration is ~2× the Vite-served browser path.
 	await runHarnessSetupOnPage(page, opts, {
 		readyTimeoutMs: 30_000,
 		logPrefix: "ext page",

@@ -103,7 +103,7 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 	}
 
 	private async pollForResponse(opts: { method: string; startSeq: number }): Promise<unknown> {
-		const deadline = Date.now() + 60_000;
+		const deadline = Date.now() + BROWSER_ACP_RPC_TIMEOUT_MS;
 		let cursor = opts.startSeq;
 		while (Date.now() < deadline) {
 			const { frames, events } = await readNewFramesAndEvents(this.page, cursor, this.lastEventSeq);
@@ -158,8 +158,13 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 				}
 			}
 			this.lastFrameSeq = cursor;
-			await this.page.waitForTimeout(25);
+			await this.page.waitForTimeout(BROWSER_ACP_POLL_TICK_MS);
 		}
 		throw new Error(`browser-connection: timed out waiting for response to ${opts.method}`);
 	}
 }
+
+// 60s covers a real-LLM round-trip through the in-page agent worker. 25ms
+// poll tick balances p50 latency against CDP round-trips.
+const BROWSER_ACP_RPC_TIMEOUT_MS = 60_000;
+const BROWSER_ACP_POLL_TICK_MS = 25;

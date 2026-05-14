@@ -28,6 +28,11 @@ function blockMutating(method: string): never {
 	);
 }
 
+// 10s covers a worker-fs-bridge slash round-trip during seeded-scenario load.
+// 25ms poll tick matches BROWSER_ACP_POLL_TICK_MS in acp-connection.ts.
+const BROWSER_FS_SLASH_TIMEOUT_MS = 10_000;
+const BROWSER_FS_POLL_TICK_MS = 25;
+
 export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesystem {
 	const { page } = opts;
 	let cursor = 0;
@@ -38,7 +43,7 @@ export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesys
 		const startSeq = cursor;
 		await page.fill('[data-testid="acp-input"]', slashLine);
 		await page.click('[data-testid="acp-submit"]');
-		const deadline = Date.now() + 10_000;
+		const deadline = Date.now() + BROWSER_FS_SLASH_TIMEOUT_MS;
 		while (Date.now() < deadline) {
 			const frames = await readNewFrames(page, cursor);
 			for (const f of frames) {
@@ -54,7 +59,7 @@ export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesys
 				}
 			}
 			cursor = Math.max(cursor, startSeq);
-			await page.waitForTimeout(25);
+			await page.waitForTimeout(BROWSER_FS_POLL_TICK_MS);
 		}
 		throw new Error(`browser-filesystem: timed out waiting for ${expectedMethod}`);
 	}

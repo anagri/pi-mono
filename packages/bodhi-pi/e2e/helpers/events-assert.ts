@@ -37,12 +37,18 @@ export function countOfType(events: readonly BodhiPiEvent[], type: BodhiPiEventT
  * assertions — required for cli (separate stderr/stdout pipes), no-op for
  * in-memory/http (same channel as the prompt response).
  */
+// 2s deadline is enough for the cli stderr pipe to flush every event emitted
+// before agent_end balance — bench p99 < 400ms. 50ms idle window confirms no
+// late-arriving stragglers (notification jitter under aimock).
+const AGENT_END_BALANCE_TIMEOUT_MS = 2000;
+const AGENT_END_BALANCE_IDLE_MS = 50;
+
 export async function waitForAgentEndBalance(
 	events: readonly BodhiPiEvent[],
 	opts: { timeoutMs?: number; idleMs?: number } = {},
 ): Promise<void> {
-	const timeoutMs = opts.timeoutMs ?? 2000;
-	const idleMs = opts.idleMs ?? 50;
+	const timeoutMs = opts.timeoutMs ?? AGENT_END_BALANCE_TIMEOUT_MS;
+	const idleMs = opts.idleMs ?? AGENT_END_BALANCE_IDLE_MS;
 	const deadline = Date.now() + timeoutMs;
 	let lastSeenCount = -1;
 	let stableSince = 0;
