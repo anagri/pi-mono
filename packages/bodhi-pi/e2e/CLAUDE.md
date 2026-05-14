@@ -99,11 +99,11 @@ Use `test.runIf(!isRuntime("http"))` for tests that fail under bodhi-pi-http's p
 - `sessionStore` / `kvStore` are in-memory stubs under `cli`/`http` — the spawned child / server owns the real backing store; tests assert at the protocol level instead.
 - `cwd` defaults to `/proj` under in-memory (non-root so path concatenation stays clean), tmpDir under cli/http. Always pass `h.cwd` to `newSession` and compose paths as `${h.cwd}/file.txt`.
 
-### Don't depend on bodhi-pi-* packages from e2e
+### Blackbox boundary: e2e/ never imports test-apps/ or sibling adapter packages
 
-`bodhi-pi/e2e/` must not import from any `@bodhiapp/bodhi-pi-*` sibling-package (bodhi-pi-node, bodhi-pi-cli, bodhi-pi-http, bodhi-pi-browser, etc.). Required adapters and helpers live under `e2e/helpers/node-adapters/` and are reachable via the `@e2e/*` tsconfig path alias (e.g. `import { createNodeFilesystem } from "@e2e/helpers/node-adapters/index.js"`). If a helper drifts from its source-package counterpart, update the copy in lockstep.
+`bodhi-pi/e2e/` is a blackbox suite: it drives the test-apps via process spawn (`test-apps/cli/dist/...`, `test-apps/http/dist/...`) or via the in-process harness — never by importing test-app source. It also must not import from any `@bodhiapp/bodhi-pi-*` sibling-package (bodhi-pi-node, bodhi-pi-cli, bodhi-pi-http, bodhi-pi-browser, etc.). Required Node adapters live inlined under `e2e/helpers/node-adapters/` and are reachable via the `@e2e/*` tsconfig path alias (e.g. `import { createNodeFilesystem } from "@e2e/helpers/node-adapters/index.js"`). The same shapes live duplicated under `packages/bodhi-pi/test-apps/in-memory/` for the test-apps' own use — keep both copies in lockstep with `@bodhiapp/bodhi-pi-node`'s upstream.
 
-The two test-app workspaces (`e2e/test-app-cli/`, `e2e/test-app-http/`) are independent Node projects (their own package.json + tsconfigs); they re-use the same `e2e/helpers/node-adapters/` via `@e2e/*` so source stays single-canonical. Each test-app's `tsconfig.build.json` extends `include` to pull in the helpers folder and emits a self-contained `dist/` tree.
+The test-apps live under `packages/bodhi-pi/test-apps/` (a peer of `e2e/` and `e2e-ui/`) — six workspaces: `app-utils`, `in-memory`, `cli`, `http`, `browser`, `chrome-ext`. They depend on each other and on `@bodhiapp/bodhi-pi`, never on `e2e/`. The vitest e2e config (`vitest.e2e.config.ts`) and `global-setup.ts` build the four runnable test-apps and spawn their compiled `dist/` outputs as subprocesses.
 
 ### Anti-patterns
 

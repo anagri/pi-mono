@@ -14,8 +14,18 @@ import {
 const REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_HTTP_BIN = path.resolve(here, "test-app-http/dist/test-app-http/src/server/index.js");
-const TEST_APP_BROWSER_DIR = path.resolve(here, "test-app-browser");
+const TEST_APP_HTTP_BIN = path.resolve(
+	here,
+	"..",
+	"test-apps",
+	"http",
+	"dist",
+	"test-app-http",
+	"src",
+	"server",
+	"index.js",
+);
+const TEST_APP_BROWSER_DIR = path.resolve(here, "..", "test-apps", "browser");
 const BROWSER_VITE_PORT = 35273;
 
 const DEFAULT_MODELS = "openai:gpt-4o-mini,openai:gpt-5-mini,anthropic:claude-haiku-4-5-20251001";

@@ -13,7 +13,7 @@ import { type HarnessSetupOptions, runHarnessSetupOnPage } from "../browser/page
 // the per-test random userId to namespace each test's Dexie dbName.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_CHROME_EXT_DIR = path.resolve(here, "../../test-app-chrome-ext");
+const TEST_APP_CHROME_EXT_DIR = path.resolve(here, "..", "..", "..", "test-apps", "chrome-ext");
 const DIST_PATH = path.resolve(TEST_APP_CHROME_EXT_DIR, "dist");
 const EXT_ID_PATH = path.resolve(TEST_APP_CHROME_EXT_DIR, ".ext-id");
 

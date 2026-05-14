@@ -1,0 +1,14 @@
+{
+	"extends": "../../../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src/server",
+		"declaration": true,
+		"sourceMap": true,
+		"paths": {
+			"@/*": ["./src/server/*"]
+		}
+	},
+	"include": ["src/server/**/*.ts"],
+	"exclude": ["test", "e2e", "dist", "node_modules", "src/frontend", "**/*.test.ts"]
+}

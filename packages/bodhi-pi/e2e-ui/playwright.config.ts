@@ -7,8 +7,8 @@ import { chromeExtBaseUrl } from "./helpers/chrome-ext.ts";
 const here = path.dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: path.resolve(here, "..", "e2e", ".env.test") });
 
-const TEST_APP_HTTP = path.resolve(here, "..", "e2e", "test-app-http");
-const TEST_APP_BROWSER = path.resolve(here, "..", "e2e", "test-app-browser");
+const TEST_APP_HTTP = path.resolve(here, "..", "test-apps", "http");
+const TEST_APP_BROWSER = path.resolve(here, "..", "test-apps", "browser");
 const HTTP_PORT = 35373;
 const BROWSER_PORT = 35473;
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type BrowserContext, chromium } from "@playwright/test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const CHROME_EXT_DIR = path.resolve(here, "..", "..", "e2e", "test-app-chrome-ext");
+const CHROME_EXT_DIR = path.resolve(here, "..", "..", "test-apps", "chrome-ext");
 const DIST = path.resolve(CHROME_EXT_DIR, "dist");
 const EXT_ID_PATH = path.resolve(CHROME_EXT_DIR, ".ext-id");
 

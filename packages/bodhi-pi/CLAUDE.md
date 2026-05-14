@@ -65,7 +65,7 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 | `src/version.ts` | `BODHI_PI_VERSION` — bump alongside `package.json` |
 | `src/acp/agent.ts` | `createBodhiPiAgent` factory + `BodhiPiAcpAgent` class |
 | `src/acp/notifications.ts` | ACP-shape helpers + `isAssistantMessage`/`isToolResultMessage` guards |
-| `src/acp/constants.ts` | `MODEL_CONFIG_ID`, `EXT_DELETE_SESSION` |
+| `src/wire/constants.ts` | `MODEL_CONFIG_ID`, `EXT_DELETE_SESSION`, `LIFECYCLE_EVENT_METHOD` |
 | `src/sessions/session-store.ts` | `SessionStore` interface + `SessionEntry` union |
 | `src/sessions/in-memory-session-store.ts` | `createInMemorySessionStore()` helper |
 | `src/filesystem/filesystem.ts` | `Filesystem` interface |

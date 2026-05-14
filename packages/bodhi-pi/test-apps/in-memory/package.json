@@ -1,0 +1,40 @@
+{
+	"name": "@bodhiapp/bodhi-pi-test-app-in-memory",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Node-side in-process adapters for bodhi-pi test-apps: Filesystem, KvStore, ScriptExecutor, SessionStore (single + multi tenant), extension loader. Consumed by test-app-cli and test-app-http server.",
+	"type": "module",
+	"main": "./dist/index.js",
+	"exports": {
+		".": "./dist/index.js",
+		"./node-filesystem": "./dist/node-filesystem.js",
+		"./extension-loader": "./dist/extension-loader.js",
+		"./kv-store": "./dist/kv-store.js",
+		"./script-executor": "./dist/script-executor.js",
+		"./bash-terminal": "./dist/bash-terminal.js",
+		"./default-db-path": "./dist/default-db-path.js",
+		"./key-encoding": "./dist/key-encoding.js",
+		"./sessions/single-tenant": "./dist/sessions/single-tenant/store.js",
+		"./sessions/multi-tenant": "./dist/sessions/multi-tenant/store.js"
+	},
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json",
+		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput"
+	},
+	"dependencies": {
+		"@bodhiapp/bodhi-pi": "^0.0.1",
+		"@bodhiapp/bodhi-pi-test-app-utils": "^0.0.0",
+		"better-sqlite3": "^11.10.0",
+		"drizzle-orm": "^0.43.1",
+		"jiti": "^2.7.0"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/node": "^24.3.0",
+		"typescript": "^5.7.3"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}

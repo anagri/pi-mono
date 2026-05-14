@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const CHROME_EXT_DIR = path.resolve(here, "..", "e2e", "test-app-chrome-ext");
+const CHROME_EXT_DIR = path.resolve(here, "..", "test-apps", "chrome-ext");
 
 const REQUIRED = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 
