@@ -23,11 +23,6 @@ export interface SessionGraphServiceDeps {
 	compactionOrchestrator: CompactionOrchestrator;
 }
 
-/**
- * Read/branch ext handlers over the session DAG: tree shape, navigate (with optional cross-branch
- * summarisation), entry list, fork/clone. The cross-branch summarisation path delegates to
- * {@link CompactionOrchestrator.runBranchSummaryForNavigate} so the LLM glue stays in one place.
- */
 export class SessionGraphService {
 	private readonly sessions: Map<string, SessionState>;
 	private readonly sessionStore: SessionStore;

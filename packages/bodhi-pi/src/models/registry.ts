@@ -50,10 +50,7 @@ export function assignThinkingLevel(piAgentState: { thinkingLevel: unknown }, le
 	(piAgentState as { thinkingLevel: ModelThinkingLevel }).thinkingLevel = level;
 }
 
-/**
- * Resolved per-provider stream options (retry/timeout) from a merged project-settings layer.
- * Pure transform — exported so the bootstrap can call it without going through the registry.
- */
+/** Pure transform — exported so the bootstrap can call it without going through the registry. */
 export function resolveProviderStreamOptions(provider: string, merged: BodhiPiProjectSettings): ResolvedRetryOptions {
 	const perProvider: ProviderOptionsEntry | undefined = merged.providerOptions?.[provider];
 	const defaults = merged.retry;
@@ -67,11 +64,6 @@ export function resolveProviderStreamOptions(provider: string, merged: BodhiPiPr
 	return out;
 }
 
-/**
- * Owns the dynamic model catalog (host-supplied + extensions + pi-ai built-ins filtered by auth),
- * provider-auth resolution (kvStore → host getApiKey → extension fallback), the per-session
- * model/thinking-level mutations, and the `configOptions` builders surfaced through ACP.
- */
 export class ModelRegistry {
 	private readonly hostModels: Model<Api>[];
 	private readonly defaultModelId: string | undefined;
@@ -118,10 +110,6 @@ export class ModelRegistry {
 		return auth === undefined ? undefined : extractAuthBaseUrl(auth);
 	}
 
-	/**
-	 * Dynamic model catalog: pi-ai built-ins filtered by stored auth, host-additive models for
-	 * non-pi-ai providers, plus extension-provided models. Deduped by id.
-	 */
 	async allModels(): Promise<Model<Api>[]> {
 		const out: Model<Api>[] = [];
 		const seen = new Set<string>();
@@ -168,14 +156,7 @@ export class ModelRegistry {
 		return m;
 	}
 
-	/**
-	 * Pick a model id at session bootstrap, preferring (in order):
-	 *   1. host `defaultModelId` when it resolves in the dynamic registry,
-	 *   2. `mergedFileSettings.defaultModel` when it resolves,
-	 *   3. The first auth-available model in the dynamic registry.
-	 *
-	 * Returns `null` when no auth-resolvable model exists.
-	 */
+	/** Precedence: host `defaultModelId` → `mergedFileSettings.defaultModel` → first auth-available; `null` when none. */
 	async pickDefaultModelIdOrNull(merged: BodhiPiProjectSettings): Promise<string | null> {
 		const models = await this.allModels();
 		if (this.defaultModelId && models.find((m) => m.id === this.defaultModelId)) return this.defaultModelId;
@@ -184,11 +165,7 @@ export class ModelRegistry {
 		return models[0]?.id ?? null;
 	}
 
-	/**
-	 * Resolve a requested model id against the dynamic auth-available registry. Returns the first
-	 * available model when `requestedId` doesn't match (so a stale per-session default still boots
-	 * with *some* working model), or `null` when nothing is auth-available.
-	 */
+	/** Falls back to first available so a stale per-session default still boots with *some* working model. */
 	async resolveSessionModel(requestedId: string | null): Promise<Model<Api> | null> {
 		const models = await this.allModels();
 		if (requestedId) {

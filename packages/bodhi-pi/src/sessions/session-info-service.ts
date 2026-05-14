@@ -20,10 +20,6 @@ export interface SessionInfoServiceDeps {
 	getDefaultModelId: () => string | undefined;
 }
 
-/**
- * Read-only and metadata-only session ext handlers: config snapshot, name set, stats walk, jsonl export.
- * Also owns the `session_info_update` notification emission triggered by name changes.
- */
 export class SessionInfoService {
 	private readonly sessions: Map<string, SessionState>;
 	private readonly sessionStore: SessionStore;
@@ -48,7 +44,6 @@ export class SessionInfoService {
 		];
 	}
 
-	/** Emit the spec-stable `session_info_update` sessionUpdate after a name change. */
 	async emitSessionInfoUpdate(sessionId: string, title: string | null, updatedAt: string | null): Promise<void> {
 		await this.conn.sessionUpdate({
 			sessionId,

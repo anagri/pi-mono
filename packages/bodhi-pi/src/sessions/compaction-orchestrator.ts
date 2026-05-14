@@ -47,12 +47,6 @@ export interface BranchNavigateContext {
 	commonAncestorId: string | null;
 }
 
-/**
- * Owns end-to-end compaction (manual `/compact`, proactive auto-compact after `agent_end`, and
- * provider-context-overflow recovery). The agent delegates `_bodhi-pi/session/compact`, the
- * `prepareNextTurn` hook, and post-prompt auto-compact ticks here. Also exposes a wrapper for
- * cross-branch summarisation used by `SessionGraphService.handleSessionNavigate`.
- */
 export class CompactionOrchestrator {
 	private readonly sessions: Map<string, SessionState>;
 	private readonly sessionStore: SessionStore;
@@ -76,7 +70,6 @@ export class CompactionOrchestrator {
 		return [[EXT_SESSION_COMPACT, this.handleSessionCompact.bind(this)]];
 	}
 
-	/** Build the persisted entry from a successful summarization result. Single source of truth across manual/proactive/recovery paths. */
 	private makeCompactionEntry(parentId: string | null | undefined, result: CompactionResult): CompactionEntry {
 		return {
 			type: "compaction",
@@ -90,10 +83,7 @@ export class CompactionOrchestrator {
 		};
 	}
 
-	/**
-	 * Run a compaction end-to-end (prepare → emit start → summarize → persist entry → rebuild live messages → emit end).
-	 * Returns a discriminated union so manual callers can re-throw and background callers can swallow gracefully.
-	 */
+	/** Returns a discriminated union so manual callers can re-throw and background callers can swallow gracefully. */
 	async runAndPersistCompaction(
 		sessionId: string,
 		session: SessionState,
@@ -260,14 +250,7 @@ export class CompactionOrchestrator {
 		return true;
 	}
 
-	/**
-	 * Cross-branch summarisation wrapper used by `SessionGraphService.handleSessionNavigate`. Runs
-	 * the branch-summary LLM call against the abandoned tail, persists the resulting `branch_summary`
-	 * entry, advances the leaf to the new target, and rebuilds the live agent's message stream.
-	 * Returns the persisted entry on success; `undefined` when no API key is available, the summary
-	 * came back empty, or the LLM call failed. Failures are non-fatal — caller falls through to a
-	 * plain navigate.
-	 */
+	/** Failures are non-fatal — caller falls through to a plain navigate. */
 	async runBranchSummaryForNavigate(
 		sessionId: string,
 		session: SessionState,
@@ -308,7 +291,6 @@ export class CompactionOrchestrator {
 		}
 	}
 
-	/** Re-export so callers don't need to import branch-summary.ts directly. */
 	detectCrossBranch(
 		entries: SessionEntry[],
 		oldLeafId: string | null,

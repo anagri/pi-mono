@@ -9,6 +9,7 @@ import type {
 	SetSessionConfigOptionRequest,
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
+import { pickDefined } from "@/_internal/object.js";
 import { normalizeProviderAuth, parseProviderAuth } from "@/kv/auth-format.js";
 import { AUTH_PREFIX } from "@/kv/kv-store.js";
 import {
@@ -153,8 +154,8 @@ export class BodhiPiClient {
 		const result = await this.acp.newSession({
 			cwd: params.cwd ?? this.defaultCwd,
 			mcpServers: params.mcpServers ?? [],
-			...(params.additionalDirectories !== undefined ? { additionalDirectories: params.additionalDirectories } : {}),
-			...(params._meta !== undefined ? { _meta: params._meta } : {}),
+			...pickDefined({ additionalDirectories: params.additionalDirectories }),
+			...pickDefined({ _meta: params._meta }),
 		});
 		this.activeSessionId = result.sessionId;
 		this.lastConfigOptions = result.configOptions ?? undefined;
@@ -166,8 +167,8 @@ export class BodhiPiClient {
 			sessionId: params.sessionId,
 			cwd: params.cwd ?? this.defaultCwd,
 			mcpServers: params.mcpServers ?? [],
-			...(params.additionalDirectories !== undefined ? { additionalDirectories: params.additionalDirectories } : {}),
-			...(params._meta !== undefined ? { _meta: params._meta } : {}),
+			...pickDefined({ additionalDirectories: params.additionalDirectories }),
+			...pickDefined({ _meta: params._meta }),
 		});
 		this.activeSessionId = params.sessionId;
 		this.lastConfigOptions = result.configOptions ?? undefined;
@@ -179,8 +180,8 @@ export class BodhiPiClient {
 			sessionId: params.sessionId,
 			cwd: params.cwd ?? this.defaultCwd,
 			mcpServers: params.mcpServers ?? [],
-			...(params.additionalDirectories !== undefined ? { additionalDirectories: params.additionalDirectories } : {}),
-			...(params._meta !== undefined ? { _meta: params._meta } : {}),
+			...pickDefined({ additionalDirectories: params.additionalDirectories }),
+			...pickDefined({ _meta: params._meta }),
 		});
 		this.activeSessionId = params.sessionId;
 		this.lastConfigOptions = result.configOptions ?? undefined;
@@ -195,7 +196,7 @@ export class BodhiPiClient {
 		const sessionId = this.requireSession(params);
 		const result = await this.acp.closeSession({
 			sessionId,
-			...(params._meta !== undefined ? { _meta: params._meta } : {}),
+			...pickDefined({ _meta: params._meta }),
 		});
 		if (this.activeSessionId === sessionId) this.activeSessionId = undefined;
 		return result;
@@ -289,7 +290,7 @@ export class BodhiPiClient {
 		const sessionId = this.requireSession(params);
 		return this.ext<CompactSessionResult>(EXT_SESSION_COMPACT, {
 			sessionId,
-			...(params.customInstructions !== undefined ? { customInstructions: params.customInstructions } : {}),
+			...pickDefined({ customInstructions: params.customInstructions }),
 		});
 	}
 
@@ -297,7 +298,7 @@ export class BodhiPiClient {
 		return this.ext<ForkSessionResult>(EXT_SESSION_FORK, {
 			sessionId: this.requireSession(params),
 			entryId: params.entryId,
-			...(params.position !== undefined ? { position: params.position } : {}),
+			...pickDefined({ position: params.position }),
 		});
 	}
 
@@ -343,7 +344,7 @@ export class BodhiPiClient {
 		return this.ext<KvSetResult>(EXT_KV_SET, {
 			key: params.key,
 			value: params.value,
-			...(params.sessionId !== undefined ? { sessionId: params.sessionId } : {}),
+			...pickDefined({ sessionId: params.sessionId }),
 		});
 	}
 
@@ -353,21 +354,21 @@ export class BodhiPiClient {
 
 	private kvList(params: KvListParams): Promise<KvListResult> {
 		return this.ext<KvListResult>(EXT_KV_LIST, {
-			...(params.prefix !== undefined ? { prefix: params.prefix } : {}),
+			...pickDefined({ prefix: params.prefix }),
 		});
 	}
 
 	private kvRemove(params: KvRemoveParams): Promise<KvRemoveResult> {
 		return this.ext<KvRemoveResult>(EXT_KV_REMOVE, {
 			key: params.key,
-			...(params.sessionId !== undefined ? { sessionId: params.sessionId } : {}),
+			...pickDefined({ sessionId: params.sessionId }),
 		});
 	}
 
 	private listSettings(params: SettingsListParams): Promise<SettingsListResult> {
 		return this.ext<SettingsListResult>(EXT_SESSION_SETTINGS_LIST, {
 			sessionId: this.requireSession(params),
-			...(params.scope !== undefined ? { scope: params.scope } : {}),
+			...pickDefined({ scope: params.scope }),
 		});
 	}
 
@@ -375,7 +376,7 @@ export class BodhiPiClient {
 		return this.ext<SettingsGetResult>(EXT_SESSION_SETTINGS_GET, {
 			sessionId: this.requireSession(params),
 			key: params.key,
-			...(params.scope !== undefined ? { scope: params.scope } : {}),
+			...pickDefined({ scope: params.scope }),
 		});
 	}
 
@@ -384,7 +385,7 @@ export class BodhiPiClient {
 			sessionId: this.requireSession(params),
 			key: params.key,
 			value: params.value,
-			...(params.scope !== undefined ? { scope: params.scope } : {}),
+			...pickDefined({ scope: params.scope }),
 		});
 	}
 
@@ -392,7 +393,7 @@ export class BodhiPiClient {
 		return this.ext<SettingsUnsetResult>(EXT_SESSION_SETTINGS_UNSET, {
 			sessionId: this.requireSession(params),
 			key: params.key,
-			...(params.scope !== undefined ? { scope: params.scope } : {}),
+			...pickDefined({ scope: params.scope }),
 		});
 	}
 

@@ -33,21 +33,12 @@ export function formatLocationHint(args: unknown): string {
 	return typeof path === "string" ? path : "";
 }
 
-/**
- * Build an id → entry lookup over a list of session entries. Used by branch-summary detection
- * and DAG walks to avoid repeated O(n) `entries.find(...)` scans.
- */
 export function buildEntryIndex(entries: SessionEntry[]): Map<string, SessionEntry> {
 	const byId = new Map<string, SessionEntry>();
 	for (const entry of entries) byId.set(entry.id, entry);
 	return byId;
 }
 
-/**
- * File-operation tracking shared between compaction and branch summarization.
- * Both walk an entry chain, extracting `read`/`write`/`edit` tool calls so the
- * summary can append a list of touched files.
- */
 export interface FileOps {
 	read: Set<string>;
 	written: Set<string>;
@@ -80,11 +71,7 @@ export function extractFileOpsFromMessage(message: AgentMessage, ops: FileOps): 
 	}
 }
 
-/**
- * Files that were modified (write OR edit) win over read-only — a file that
- * was both read and edited counts as modified. Lists are sorted for stable
- * summary rendering.
- */
+/** Modified files (write OR edit) win over read-only — a file both read and edited counts as modified. */
 export function computeFileLists(ops: FileOps): { readFiles: string[]; modifiedFiles: string[] } {
 	const modified = new Set<string>([...ops.edited, ...ops.written]);
 	const readFiles = [...ops.read].filter((f) => !modified.has(f)).sort();
@@ -103,10 +90,6 @@ export function formatFileOperations(readFiles: string[], modifiedFiles: string[
 	return sections.length === 0 ? "" : `\n\n${sections.join("\n\n")}`;
 }
 
-/**
- * Filter `content` to text blocks and join their `text` fields. Used both for
- * serialization (collecting message text) and for extracting LLM responses.
- */
 export function joinTextBlocks(content: ReadonlyArray<{ type: string; text?: string }>, separator = ""): string {
 	return content
 		.filter((b): b is { type: "text"; text: string } => b.type === "text")
@@ -133,12 +116,7 @@ function truncateForSummary(text: string, max: number): string {
 	return `${text.slice(0, max)}\n\n[... ${text.length - max} more characters truncated]`;
 }
 
-/**
- * Serialize an LLM message array to a single text blob suitable for stuffing
- * into a summarization user-prompt. Tool results are truncated at
- * `TOOL_RESULT_MAX_CHARS` because full content rarely matters for summary
- * quality and bloats the request.
- */
+/** Tool results truncated at TOOL_RESULT_MAX_CHARS: full content rarely matters for summary quality and bloats the request. */
 export function serializeConversation(messages: Message[]): string {
 	const parts: string[] = [];
 	for (const msg of messages) {
@@ -179,11 +157,6 @@ export interface RunSummarizationLLMOptions {
 	errorPrefix: string;
 }
 
-/**
- * Single point of contact for compaction / turn-prefix / branch-summary LLM
- * calls. Wraps `completeSimple` with the canonical user-message envelope, the
- * uniform error rethrow, and text-block extraction.
- */
 export async function runSummarizationLLM(
 	model: Model<Api>,
 	systemPrompt: string,

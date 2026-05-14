@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
 	type Agent as AcpAgent,
 	type AgentSideConnection,
@@ -24,10 +23,11 @@ import {
 	type SetSessionConfigOptionRequest,
 	type SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
-import type { Api, Model, ModelThinkingLevel, StopReason as PiStopReason } from "@earendil-works/pi-ai";
-import { expandPromptTemplate, type PromptTemplate } from "@/commands/prompt-templates.js";
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { pickDefined } from "@/_internal/object.js";
+import type { PromptTemplate } from "@/commands/prompt-templates.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
-import type { BodhiPiEventHandlers, StopReason } from "@/events/types.js";
+import type { BodhiPiEventHandlers } from "@/events/types.js";
 import { mergeCommands } from "@/extensions/merge.js";
 import { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
@@ -51,14 +51,14 @@ import type { ResolvedRetryOptions, SessionState } from "@/sessions/session-stat
 import type { SessionStore } from "@/sessions/session-store.js";
 import type { BodhiPiProjectSettings, ProviderOptionsEntry } from "@/settings/settings.js";
 import { SettingsService } from "@/settings/settings-service.js";
-import { expandSkillCommand } from "@/skills/invocation.js";
 import type { Skill } from "@/skills/skill.js";
 import { toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
-import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "@/wire/constants.js";
-import { agentToolContentForAcp, mapStopReason, toolResultContentForAcp } from "@/wire/converters.js";
+import { EXT_DELETE_SESSION } from "@/wire/constants.js";
+import { toolResultContentForAcp } from "@/wire/converters.js";
 import { validateSessionId } from "@/wire/validators.js";
 import { wireInternalEventHandlers } from "./event-wiring.js";
+import { type PromptLoopDeps, runPromptLoop, subscribeToAgent } from "./prompt-loop.js";
 
 export interface BodhiPiConfig {
 	/** Additive host-supplied models for providers not in pi-ai's built-in catalog (e.g. local Ollama). */
@@ -99,7 +99,6 @@ export interface BodhiPiConfig {
 	logger?: BodhiPiLogger;
 }
 
-/** Minimal logger contract for non-fatal internal errors. Compatible with `console`. */
 export interface BodhiPiLogger {
 	error(message: string, ...args: unknown[]): void;
 }
@@ -129,7 +128,6 @@ function skillToAvailableCommand(s: Skill): AvailableCommand {
 	return { name: `skill:${s.name}`, description: s.description };
 }
 
-/** Returns the `toAgent` callback expected by `AgentSideConnection`. */
 export function createBodhiPiAgent(config: BodhiPiConfig) {
 	if (!config.sessionStore) {
 		throw new Error("BodhiPiConfig.sessionStore is required (no default fallback)");
@@ -140,12 +138,6 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 	return (conn: AgentSideConnection): AcpAgent => new BodhiPiAcpAgent(config, conn);
 }
 
-/**
- * Throw conventions:
- *   - ACP protocol violations → `RequestError(-32602/-32601, ...)`
- *   - tool execution errors → plain `Error` (pi-agent-core surfaces these as
- *     `tool_execution_end.isError` → ACP `tool_call_update.status: "failed"`)
- */
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
 class BodhiPiAcpAgent implements AcpAgent {
@@ -160,7 +152,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private readonly sessionGraphService: SessionGraphService;
 	private extensionRunner?: ExtensionRunner;
 	private extensionRunnerReady?: Promise<void>;
-	/** Single source of truth for `_bodhi-pi/*` ext-method dispatch — one entry per implemented method. */
 	private readonly extHandlers: Map<string, ExtHandler>;
 
 	constructor(
@@ -169,16 +160,15 @@ class BodhiPiAcpAgent implements AcpAgent {
 	) {
 		const logger: BodhiPiLogger = config.logger ?? console;
 		this.logger = logger;
-		// EventDispatcher is constructed once with both host-supplied handlers
-		// AND extension-registered handlers merged. Extension handlers are added
-		// asynchronously via `ensureExtensionRunner()` on first session use.
 		this.events = new EventDispatcher(config.eventHandlers, logger);
 
 		this.modelRegistry = new ModelRegistry({
-			...(config.models ? { hostModels: config.models } : {}),
-			...(config.defaultModelId !== undefined ? { defaultModelId: config.defaultModelId } : {}),
-			...(config.getApiKey ? { getApiKey: config.getApiKey } : {}),
-			...(config.kvStore ? { kvStore: config.kvStore } : {}),
+			...pickDefined({
+				hostModels: config.models,
+				defaultModelId: config.defaultModelId,
+				getApiKey: config.getApiKey,
+				kvStore: config.kvStore,
+			}),
 			sessions: this.sessions,
 			events: this.events,
 			appendEntry: this.appendEntry.bind(this),
@@ -193,12 +183,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 
 		this.kvService = new KvService({
-			...(config.kvStore ? { kvStore: config.kvStore } : {}),
+			...pickDefined({ kvStore: config.kvStore }),
 			events: this.events,
 		});
 		this.settingsService = new SettingsService({
 			filesystem: config.filesystem,
-			...(config.globalFilesystem ? { globalFilesystem: config.globalFilesystem } : {}),
+			...pickDefined({ globalFilesystem: config.globalFilesystem }),
 			...(config.homeDir ? { homeDir: config.homeDir } : {}),
 			events: this.events,
 			sessions: this.sessions,
@@ -216,7 +206,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 			events: this.events,
 			appendEntry: this.appendEntry.bind(this),
 			resolveApiKey: (p: string) => this.modelRegistry.resolveProviderApiKey(p),
-			subscribeToAgent: (sid, sess, outcome) => this.subscribeToAgent(sid, sess, outcome),
+			subscribeToAgent: (sid, sess, outcome) =>
+				subscribeToAgent(
+					{ conn: this.conn, events: this.events, appendEntry: this.appendEntry.bind(this) },
+					sid,
+					sess,
+					outcome,
+				),
 			logger,
 		});
 
@@ -237,10 +233,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		]);
 	}
 
-	/**
-	 * Persist `entry` with `parentId` set to the session's current leaf, then
-	 * advance the leaf to `entry.id`. The store and runtime state stay in sync.
-	 */
 	private async appendEntry(sessionId: string, session: SessionState, entry: SessionEntry): Promise<void> {
 		entry.parentId = session.runtime.leafId;
 		await this.config.sessionStore.append(sessionId, entry);
@@ -262,7 +254,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 					logger: this.logger,
 				});
 				this.extensionRunner = runner;
-				// Merge extension event handlers into the dispatcher's existing handler map.
 				const extHandlers = runner.getEventHandlers();
 				for (const [type, list] of Object.entries(extHandlers) as [
 					keyof BodhiPiEventHandlers,
@@ -466,8 +457,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		return {};
 	}
 
-	/** Build the persisted entry from a successful summarization result. Single source of truth for the literal across manual/proactive/recovery paths. */
-
 	setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
 		return this.modelRegistry.setSessionConfigOption(params);
 	}
@@ -477,235 +466,17 @@ class BodhiPiAcpAgent implements AcpAgent {
 		if (!session) {
 			throw new RequestError(-32602, `session ${params.sessionId} is not loaded. Call session/load first.`);
 		}
-
-		if (session.runtime.currentModelId === null) {
-			const models = await this.modelRegistry.allModels();
-			throw new RequestError(
-				-32603,
-				models.length > 0
-					? `no model selected; choose one of: ${models.map((m) => m.id).join(", ")} via setSessionConfigOption(${MODEL_CONFIG_ID}) or /model <id>`
-					: `no models available; configure provider auth via /login <provider> <api-key> or _bodhi-pi/kv/set auth/<provider>`,
-			);
-		}
-
-		const text = params.prompt
-			.filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-			.map((b) => b.text)
-			.join("");
-		// Skills first because they use the more specific `/skill:` prefix; if no
-		// skill matches, the text falls through to slash-command expansion.
-		const expandedText = expandPromptTemplate(expandSkillCommand(text, session.skills), session.commands);
-
-		// Reset so a prior cancel doesn't bleed into this prompt.
-		session.runtime.cancelled = false;
-		// Each user prompt gets one shot at overflow auto-compact recovery.
-		session.runtime.overflowRecoveryAttempted = false;
-
-		const sessionId = params.sessionId;
-		const events = this.events;
-
-		// Mutable input hook — extensions can rewrite text or short-circuit with `handled: true`.
-		const inputResult = await events.emitInput({ type: "input", sessionId, text: expandedText, source: "acp" });
-		if (inputResult.handled) {
-			return { stopReason: "end_turn", userMessageId: params.messageId ?? null };
-		}
-
-		// Mutable system-prompt + user-prompt hook (fired once per agent run).
-		const before = await events.emitBeforeAgentStart({
-			type: "before_agent_start",
-			sessionId,
-			systemPrompt: session.runtime.piAgent.state.systemPrompt,
-			userPrompt: inputResult.text,
-		});
-		if (before.systemPrompt !== session.runtime.piAgent.state.systemPrompt) {
-			session.runtime.piAgent.state.systemPrompt = before.systemPrompt;
-		}
-		const promptText = before.userPrompt;
-
-		await events.emit({ type: "agent_start", sessionId, userPrompt: promptText });
-
-		const outcome: { stopReason?: PiStopReason; errorMessage?: string } = {};
-		const unsubscribe = this.subscribeToAgent(sessionId, session, outcome);
-
-		// Single `agent_end` emitter — every exit path from prompt/recovery flows through here so
-		// the event always pairs with the matching `agent_start` and forwards optional `stopReason` /
-		// `errorMessage` consistently. `tryOverflowRecovery` reuses this helper for the retry case.
-		const finishTurn = async (
-			stopReason: StopReason | undefined,
-			errorMessage: string | undefined,
-		): Promise<void> => {
-			await events.emit({
-				type: "agent_end",
-				sessionId,
-				...(stopReason !== undefined ? { stopReason } : {}),
-				messages: session.runtime.piAgent.state.messages,
-				...(errorMessage !== undefined ? { errorMessage } : {}),
-			});
-		};
-
-		try {
-			await session.runtime.piAgent.prompt(promptText);
-			await session.runtime.piAgent.waitForIdle();
-			if (session.runtime.cancelled) {
-				await finishTurn("cancelled", outcome.errorMessage);
-				return { stopReason: "cancelled", userMessageId: params.messageId ?? null };
-			}
-			if (outcome.stopReason === "error") {
-				const recovered = await this.compactionOrchestrator.tryOverflowRecovery(
-					sessionId,
-					session,
-					promptText,
-					outcome,
-					finishTurn,
-				);
-				if (recovered) {
-					return { stopReason: "end_turn", userMessageId: params.messageId ?? null };
-				}
-				const errorMessage = outcome.errorMessage ?? "model error";
-				await finishTurn(undefined, errorMessage);
-				throw new RequestError(-32603, errorMessage);
-			}
-			const stopReason = mapStopReason(outcome.stopReason);
-			await finishTurn(stopReason, undefined);
-			await this.compactionOrchestrator.checkAutoCompact(sessionId, session);
-			return { stopReason, userMessageId: params.messageId ?? null };
-		} finally {
-			unsubscribe();
-		}
+		return runPromptLoop(this.promptLoopDeps(), session, params);
 	}
 
-	/**
-	 * Wire the pi-agent-core subscription. Forwards every `Agent` event to its
-	 * matching {@link EventDispatcher} emitter, mirrors text deltas + tool-call
-	 * updates onto the ACP `sessionUpdate` channel, persists `message_end` to the
-	 * session store, and records the final assistant `stopReason`/`errorMessage`
-	 * into `outcome` so the caller can map to an ACP `PromptResponse`.
-	 */
-	private subscribeToAgent(
-		sessionId: string,
-		session: SessionState,
-		outcome: { stopReason?: PiStopReason; errorMessage?: string },
-	): () => void {
-		const conn = this.conn;
-		const events = this.events;
-		const appendEntry = this.appendEntry.bind(this);
-		return session.runtime.piAgent.subscribe(async (event) => {
-			switch (event.type) {
-				case "turn_start": {
-					await events.emit({ type: "turn_start", sessionId });
-					return;
-				}
-				case "turn_end": {
-					await events.emit({
-						type: "turn_end",
-						sessionId,
-						message: event.message,
-						toolResults: event.toolResults,
-					});
-					return;
-				}
-				case "message_start": {
-					await events.emit({ type: "message_start", sessionId, message: event.message });
-					return;
-				}
-				case "message_update": {
-					await events.emit({
-						type: "message_update",
-						sessionId,
-						message: event.message,
-						assistantMessageEvent: event.assistantMessageEvent,
-					});
-					if (event.assistantMessageEvent.type !== "text_delta") return;
-					await conn.sessionUpdate({
-						sessionId,
-						update: {
-							sessionUpdate: "agent_message_chunk",
-							content: { type: "text", text: event.assistantMessageEvent.delta },
-						},
-					});
-					return;
-				}
-				case "tool_execution_start": {
-					await events.emit({
-						type: "tool_execution_start",
-						sessionId,
-						toolCallId: event.toolCallId,
-						toolName: event.toolName,
-						args: event.args,
-					});
-					await conn.sessionUpdate({
-						sessionId,
-						update: {
-							sessionUpdate: "tool_call",
-							toolCallId: event.toolCallId,
-							title: `${event.toolName} ${formatLocationHint(event.args)}`.trim(),
-							kind: toolKindFor(event.toolName),
-							status: "in_progress",
-							rawInput: event.args,
-						},
-					});
-					return;
-				}
-				case "tool_execution_update": {
-					await events.emit({
-						type: "tool_execution_update",
-						sessionId,
-						toolCallId: event.toolCallId,
-						toolName: event.toolName,
-						partialResult: event.partialResult,
-					});
-					const partialContent = Array.isArray(event.partialResult?.content) ? event.partialResult.content : [];
-					await conn.sessionUpdate({
-						sessionId,
-						update: {
-							sessionUpdate: "tool_call_update",
-							toolCallId: event.toolCallId,
-							status: "in_progress",
-							content: agentToolContentForAcp(partialContent),
-						},
-					});
-					return;
-				}
-				case "tool_execution_end": {
-					await events.emit({
-						type: "tool_execution_end",
-						sessionId,
-						toolCallId: event.toolCallId,
-						toolName: event.toolName,
-						result: event.result,
-						isError: event.isError,
-					});
-					const resultContent = Array.isArray(event.result?.content) ? event.result.content : [];
-					await conn.sessionUpdate({
-						sessionId,
-						update: {
-							sessionUpdate: "tool_call_update",
-							toolCallId: event.toolCallId,
-							status: event.isError ? "failed" : "completed",
-							content: agentToolContentForAcp(resultContent),
-						},
-					});
-					return;
-				}
-				case "message_end": {
-					await events.emit({ type: "message_end", sessionId, message: event.message });
-					const message = event.message;
-					if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return;
-					if (message.role === "assistant") {
-						outcome.stopReason = message.stopReason;
-						outcome.errorMessage = message.errorMessage;
-					}
-					await appendEntry(sessionId, session, {
-						type: "message",
-						id: randomUUID(),
-						parentId: session.runtime.leafId,
-						timestamp: Date.now(),
-						message,
-					});
-					return;
-				}
-			}
-		});
+	private promptLoopDeps(): PromptLoopDeps {
+		return {
+			conn: this.conn,
+			events: this.events,
+			modelRegistry: this.modelRegistry,
+			compactionOrchestrator: this.compactionOrchestrator,
+			appendEntry: this.appendEntry.bind(this),
+		};
 	}
 
 	async cancel(params: CancelNotification): Promise<void> {
@@ -714,12 +485,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		session.runtime.cancelled = true;
 		session.runtime.piAgent.abort();
 	}
-
-	/**
-	 * Dynamic model registry: pi-ai built-in catalog filtered by stored auth,
-	 * plus host-additive `config.models` (for non-pi-ai providers like local
-	 * Ollama), plus extension-provided models. Deduped by id.
-	 */
 
 	private async advertiseSlashable(sessionId: string): Promise<void> {
 		const session = this.sessions.get(sessionId);
@@ -737,17 +502,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 	}
 
-	/**
-	 * Re-merge each session's `commands` from its frozen `projectCommands` plus
-	 * the extension runner's *current* registry, then re-advertise. Invoked by
-	 * the runner whenever a `registerCommand` (or its unregister) fires after
-	 * boot, and by the explicit `pi.requestSlashableRefresh(sessionId)` API.
-	 *
-	 * When `sessionId` is omitted, refresh every loaded session — implicit
-	 * `registerCommand` is global, so all sessions need to see the new entry.
-	 * When `sessionId` is provided but unknown, this is a no-op (graceful for
-	 * extensions that hold stale ids).
-	 */
+	/** When `sessionId` is omitted, refresh every loaded session — implicit `registerCommand` is global. */
 	private async refreshSlashable(sessionId?: string): Promise<void> {
 		const runner = this.extensionRunner;
 		const targets = sessionId !== undefined ? [sessionId] : Array.from(this.sessions.keys());

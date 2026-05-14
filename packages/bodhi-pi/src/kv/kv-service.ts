@@ -11,11 +11,6 @@ export interface KvServiceDeps {
 	events: EventDispatcher;
 }
 
-/**
- * Bundles the four `_bodhi-pi/kv/*` ext-method handlers. The agent constructs this once and
- * spreads `register()` into its `extHandlers` map. `auth_change` emission for keys under
- * `auth/<provider>` lives here so KV becomes the single owner of that side-effect.
- */
 export class KvService {
 	private readonly kvStore: KvStore | undefined;
 	private readonly events: EventDispatcher;

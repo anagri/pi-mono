@@ -35,10 +35,6 @@ export interface SettingsServiceDeps {
 	sessions: Map<string, SessionState>;
 }
 
-/**
- * Bundles the four `_bodhi-pi/session/settings/*` ext-method handlers. Owns scope parsing,
- * the three-layer merge, and the global/project filesystem writes.
- */
 export class SettingsService {
 	private readonly filesystem: Filesystem;
 	private readonly globalFilesystem: Filesystem | undefined;
