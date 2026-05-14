@@ -1,30 +1,26 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // gpt-4o-mini (non-reasoning) avoids pi-ai's openai-responses reasoning-item
 // round-trip issue: with store:false and no encrypted_content include, reasoning
 // items from a prior turn 404 on the next call. Same workaround coding-agent uses.
 
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("project slash commands: no-args expand, $1 substitution, tool-using expansion", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? process.env.OPENAI_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	await h.setupFiles({
 		".bodhi-pi/commands/say-tuesday.md":

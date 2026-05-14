@@ -9,6 +9,7 @@ import {
 } from "@/index.js";
 import { waitForAgentEndBalance } from "../events-assert.js";
 import type { E2EHarness, E2EHarnessOptions } from "../harness.js";
+import { pickDefined } from "../pick-defined.js";
 import { loadFixtureFactoriesFromSource } from "../seed-bodhi-pi.js";
 import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "../test-filesystem.js";
 
@@ -30,12 +31,16 @@ export async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2
 		kvStore,
 		scriptExecutor,
 		eventHandlers: handlers,
-		...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
-		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
-		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
+		...pickDefined({
+			getApiKey: opts.getApiKey,
+			systemPrompt: opts.systemPrompt,
+			appendSystemPrompt: opts.appendSystemPrompt,
+			compaction: opts.compaction,
+			homeDir: opts.homeDir,
+		}),
+		// extensionFactories is omitted when empty so createTestHarness uses its
+		// own default. (pickDefined would forward an empty array.)
 		...(extensionFactories.length > 0 ? { extensionFactories } : {}),
-		...(opts.compaction ? { compaction: opts.compaction } : {}),
-		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
 	});
 	// Non-root default so tests can compose paths as `${h.cwd}/file.txt` without
 	// hitting `//file.txt`.

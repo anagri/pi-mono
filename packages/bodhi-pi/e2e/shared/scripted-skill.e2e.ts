@@ -1,12 +1,11 @@
-import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { toolCallStarts } from "@test/helpers/tool-call-asserts.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
-
-const PROVIDER = "openai";
-const MODEL_ID = "gpt-4o-mini";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // Hardcoded baseline date (UTC, 0-indexed month) so the test is deterministic
 // across runs regardless of when CI fires it. Keep BIRTHDAY consistent with
@@ -20,26 +19,17 @@ console.log(Math.floor(ms / 86400000));
 const BIRTHDAY = "2000-01-01";
 const EXPECTED_DAYS = "9624";
 
-async function buildHarness(model: Model<Api>, apiKey: string): Promise<E2EHarness> {
-	return createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === PROVIDER ? apiKey : undefined),
-	});
-}
-
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("scripted skill: /skill:days-since-birthday invokes run_script and reports the integer", async () => {
-	const h = await buildHarness(getModel(PROVIDER, MODEL_ID), process.env.OPENAI_API_KEY!);
-	activeHarness = h;
+	const model = getModel("openai", "gpt-4o-mini");
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	const skillDir = `${h.cwd}/.bodhi-pi/skills/days-since-birthday`;
 	await h.setupFiles({

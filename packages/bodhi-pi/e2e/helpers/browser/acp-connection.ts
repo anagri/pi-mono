@@ -1,4 +1,3 @@
-/// <reference lib="dom" />
 import type {
 	InitializeRequest,
 	InitializeResponse,
@@ -18,6 +17,7 @@ import type {
 } from "@agentclientprotocol/sdk";
 import type { Page } from "playwright";
 import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
+import { readNewFramesAndEvents } from "./page-frame-reader.js";
 
 // ACP transport over a Playwright-driven page. Each call writes a JSON-RPC
 // request body into [data-testid="acp-input"], clicks acp-submit, then polls
@@ -33,24 +33,7 @@ export interface BrowserConnectionOptions {
 	onLifecycleEvent?: (ev: BodhiPiEvent) => void;
 }
 
-interface FrameSnapshot {
-	seq: number;
-	direction: "out" | "in";
-	kind: "request" | "response" | "notification";
-	method: string;
-	rpcId: string;
-	payload: string;
-}
-
-interface EventSnapshot {
-	seq: number;
-	type: string;
-	payload: string;
-}
-
 const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
-
-let nextId = 1;
 
 export class BrowserAcpConnection implements BodhiPiAcpConnection {
 	private readonly page: Page;
@@ -58,6 +41,9 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 	private readonly onLifecycleEvent: ((ev: BodhiPiEvent) => void) | undefined;
 	private lastFrameSeq = 0;
 	private lastEventSeq = 0;
+	// id in the body is informational only: the in-page SDK rewrites it.
+	// Per-instance counter so two concurrent connections don't share state.
+	private nextId = 1;
 
 	constructor(opts: BrowserConnectionOptions) {
 		this.page = opts.page;
@@ -95,22 +81,19 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 	prompt(params: PromptRequest): Promise<PromptResponse> {
 		return this.call("session/prompt", params as unknown as Record<string, unknown>) as Promise<PromptResponse>;
 	}
-	async cancel(_params: { sessionId: string }): Promise<void> {
-		// Page tracks the active sessionId from the most recent
-		// new/load/resume response and fires session/cancel on click. We
-		// ignore the params.sessionId argument and trust the page's tracker.
-		// The harness sees the cancel frame in the same DOM frame log.
-		await this.page.click('[data-testid="acp-cancel"]');
+	async cancel(params: { sessionId: string }): Promise<void> {
+		// Post session/cancel through the same acp-input + acp-submit channel as
+		// every other method. The page's command handler forwards params.sessionId
+		// to ClientSideConnection.cancel; the resulting frame surfaces in the same
+		// DOM frame log we already poll.
+		await this.call("session/cancel", params as unknown as Record<string, unknown>);
 	}
 	extMethod(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		return this.call(method, params) as Promise<Record<string, unknown>>;
 	}
 
 	private async call(method: string, params: Record<string, unknown>): Promise<unknown> {
-		// id in the body is informational only: the in-page SDK rewrites it.
-		// Correlation is by ordering — requests are sequential through this
-		// connection, so the next response frame after submit IS this call's.
-		const id = nextId++;
+		const id = this.nextId++;
 		const body = { jsonrpc: "2.0", id, method, params };
 		const startSeq = this.lastFrameSeq;
 		await this.page.fill('[data-testid="acp-input"]', JSON.stringify(body));
@@ -123,7 +106,8 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 		const deadline = Date.now() + 60_000;
 		let cursor = opts.startSeq;
 		while (Date.now() < deadline) {
-			const { frames, events } = await this.readNewFrames(cursor);
+			const { frames, events } = await readNewFramesAndEvents(this.page, cursor, this.lastEventSeq);
+			if (events.length > 0) this.lastEventSeq = events[events.length - 1].seq;
 			for (const ev of events) {
 				if (this.onLifecycleEvent) {
 					try {
@@ -177,53 +161,5 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 			await this.page.waitForTimeout(25);
 		}
 		throw new Error(`browser-connection: timed out waiting for response to ${opts.method}`);
-	}
-
-	private async readNewFrames(cursor: number): Promise<{ frames: FrameSnapshot[]; events: EventSnapshot[] }> {
-		// Bulk DOM read over the documented contract (data-testid +
-		// data-frame-*/data-event-*). Not a peek at internal state — the same
-		// data is exposed via Playwright locators; the bulk read avoids
-		// per-element round-trips that would make streaming-poll loops slow.
-		const data = await this.page.evaluate(
-			({ frameCursor, eventCursor }) => {
-				const frames: FrameSnapshot[] = [];
-				const events: EventSnapshot[] = [];
-				const frameLog = document.querySelector('[data-testid="frame-log"]');
-				if (frameLog) {
-					for (const el of Array.from(frameLog.querySelectorAll<HTMLElement>('[data-testid="frame"]'))) {
-						const seq = Number(el.dataset.frameSeq ?? 0);
-						if (seq <= frameCursor) continue;
-						const pre = el.querySelector("pre");
-						frames.push({
-							seq,
-							direction: (el.dataset.frameDirection ?? "") as FrameSnapshot["direction"],
-							kind: (el.dataset.frameKind ?? "") as FrameSnapshot["kind"],
-							method: el.dataset.frameMethod ?? "",
-							rpcId: el.dataset.frameRpcId ?? "",
-							payload: pre?.textContent ?? "",
-						});
-					}
-				}
-				const eventLog = document.querySelector('[data-testid="event-log"]');
-				if (eventLog) {
-					for (const el of Array.from(eventLog.querySelectorAll<HTMLElement>('[data-testid="event"]'))) {
-						const seq = Number(el.dataset.eventSeq ?? 0);
-						if (seq <= eventCursor) continue;
-						const pre = el.querySelector("pre");
-						events.push({
-							seq,
-							type: el.dataset.eventType ?? "",
-							payload: pre?.textContent ?? "",
-						});
-					}
-				}
-				return { frames, events };
-			},
-			{ frameCursor: cursor, eventCursor: this.lastEventSeq },
-		);
-		data.frames.sort((a, b) => a.seq - b.seq);
-		data.events.sort((a, b) => a.seq - b.seq);
-		if (data.events.length > 0) this.lastEventSeq = data.events[data.events.length - 1].seq;
-		return data;
 	}
 }

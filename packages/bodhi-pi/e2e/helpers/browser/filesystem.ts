@@ -1,31 +1,25 @@
-/// <reference lib="dom" />
 import type { Page } from "playwright";
 import type { DirEntry, FileStat, Filesystem } from "@/index.js";
+import { readNewFrames } from "./page-frame-reader.js";
 
 // Read-only Filesystem proxy over the in-page InMemory ZenFS mount.
 //
 // Reads (readTextFile, exists) route through the page-side slash router:
 // "/file <abs-path>" emits a synthetic `_test/file/read` frame; "/exists
 // <abs-path>" emits `_test/file/exists`. The harness uses these to satisfy
-// post-prompt readback assertions (fs.e2e.ts:51, commands.e2e.ts:64).
+// post-prompt readback assertions (fs.e2e.ts, commands.e2e.ts).
 //
 // Mutating methods throw — the e2e suite seeds via `h.setupFiles` BEFORE
 // initialize (Option B, fleet-wide). list/stat throw too (zero shared-test
 // usages; if added later, build a slash for them).
 //
 // The slash router emits its synthetic frame via `acp-input + acp-submit`
-// click; we therefore funnel through the same waitForFrame cursor used by
-// BrowserAcpConnection. To keep ordering consistent under a busy frame log,
-// we read the frame-log via locator + textContent (no internal-state peeks).
+// click; we therefore funnel through the same DOM frame log used by
+// BrowserAcpConnection. Frame reads share `helpers/browser/page-frame-reader.ts`
+// so the `data-testid` contract stays single-source.
 
 export interface BrowserFilesystemOptions {
 	page: Page;
-}
-
-interface FrameSnapshot {
-	seq: number;
-	method: string;
-	payload: string;
 }
 
 function blockMutating(method: string): never {
@@ -38,24 +32,6 @@ export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesys
 	const { page } = opts;
 	let cursor = 0;
 
-	async function readNewSlashFrames(): Promise<FrameSnapshot[]> {
-		return await page.evaluate((after) => {
-			const out: FrameSnapshot[] = [];
-			const log = document.querySelector('[data-testid="frame-log"]');
-			if (!log) return out;
-			for (const el of Array.from(log.querySelectorAll<HTMLElement>('[data-testid="frame"]'))) {
-				const seq = Number(el.dataset.frameSeq ?? 0);
-				if (seq <= after) continue;
-				if (el.dataset.frameDirection !== "in") continue;
-				const method = el.dataset.frameMethod ?? "";
-				if (!method.startsWith("_test/")) continue;
-				const pre = el.querySelector("pre");
-				out.push({ seq, method, payload: pre?.textContent ?? "" });
-			}
-			return out;
-		}, cursor);
-	}
-
 	async function dispatchSlash(slashLine: string, expectedMethod: string): Promise<unknown> {
 		// startSeq captured before submit so the poll begins from after
 		// any prior unrelated frames.
@@ -64,9 +40,11 @@ export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesys
 		await page.click('[data-testid="acp-submit"]');
 		const deadline = Date.now() + 10_000;
 		while (Date.now() < deadline) {
-			const frames = await readNewSlashFrames();
+			const frames = await readNewFrames(page, cursor);
 			for (const f of frames) {
 				cursor = f.seq;
+				if (f.direction !== "in") continue;
+				if (!f.method.startsWith("_test/")) continue;
 				if (f.method !== expectedMethod) continue;
 				try {
 					const body = JSON.parse(f.payload) as { result?: unknown };

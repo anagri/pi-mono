@@ -1,8 +1,10 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // Cross-runtime coverage for the two Filesystem-driven system-prompt surfaces:
 //   * `appendSystemPrompt` via `.bodhi-pi/settings.json` (project scope)
@@ -12,23 +14,17 @@ import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 // option with no transport-reachable hook, so it's covered in
 // `test/system-prompt-append.test.ts` via the faux provider instead.
 
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("appendSystemPrompt: rule from .bodhi-pi/settings.json is appended to the system prompt", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? process.env.OPENAI_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	// Project settings file is loaded at newSession; seed it before initialize
 	// so the agent picks up the appended rule.
@@ -47,12 +43,13 @@ test("appendSystemPrompt: rule from .bodhi-pi/settings.json is appended to the s
 
 test("AGENTS.md: ancestor-walk picks up project rules and feeds them into the model", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? process.env.OPENAI_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	// AGENTS.md lives at cwd root; `loadProjectContextFiles` walks ancestors
 	// at newSession time and threads the contents into the system prompt.

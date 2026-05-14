@@ -1,27 +1,23 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 // Flow test: same session, same prompts, exercise both /fork and /clone semantics.
 // /fork at the second user message excludes that turn; /clone at the leaf duplicates the whole chain.
 test("session graph: /fork excludes target turn; /clone duplicates the chain", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? process.env.OPENAI_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	await h.client.initialize(stdInitParams);
 	const { sessionId } = await h.client.newSession({ cwd: h.cwd, mcpServers: [] });

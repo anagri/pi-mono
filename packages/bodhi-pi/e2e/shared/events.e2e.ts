@@ -1,6 +1,6 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
-import { afterEach, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,
@@ -10,32 +10,27 @@ import type {
 	ToolCallEvent,
 	ToolExecutionEndEvent,
 } from "@/index.js";
+import { envKeysFor } from "../helpers/api-keys.js";
 import { expectSubsequence } from "../helpers/events-assert.js";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // Lifecycle-event coverage across the two distinct shapes: a plain text turn
 // and a tool-using turn. Both share the same gpt-4o-mini setup; one harness,
 // two prompts back-to-back, with `harness.events` reset between so the
 // subsequence assertion runs against a clean slate per turn.
 
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("events: text turn + tool turn fire the expected sequences and payloads", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	// Step-2 seed (tool turn reads proj/README.md). Seeded up-front because
 	// the harness forbids in-session writes — uniform Option B across runtimes.

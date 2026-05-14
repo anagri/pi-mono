@@ -3,6 +3,7 @@ import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest 
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
 import { createNodePackageExtensionLoader } from "@e2e/helpers/extension-loaders/index.js";
 import { createNodeFilesystem, createNodeKvStore, createNodeScriptExecutor } from "@e2e/helpers/node-adapters/index.js";
+import { pickDefined } from "@e2e/helpers/pick-defined.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
@@ -120,12 +121,15 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 			filesystem,
 			kvStore,
 			scriptExecutor,
-			...(opts.models !== undefined ? { models: opts.models } : {}),
-			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
-			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
 			eventHandlers: eventForwardingHandlers(conn),
-			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
-			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
+			...pickDefined({
+				models: opts.models,
+				defaultModelId: opts.defaultModelId,
+				getApiKey: opts.getApiKey,
+				systemPrompt: opts.systemPrompt,
+				appendSystemPrompt: opts.appendSystemPrompt,
+			}),
+			// extensionFactories is omitted when empty so the agent uses its default.
 			...(extensionFactories.length > 0 ? { extensionFactories } : {}),
 		});
 		const inner = innerFactory(conn);

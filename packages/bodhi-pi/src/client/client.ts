@@ -43,9 +43,13 @@ import type {
 	ExportSessionResult,
 	ForkSessionParams,
 	ForkSessionResult,
+	KvGetParams,
 	KvGetResult,
+	KvListParams,
 	KvListResult,
+	KvRemoveParams,
 	KvRemoveResult,
+	KvSetParams,
 	KvSetResult,
 	ModelConfigState,
 	NavigateSessionParams,
@@ -132,6 +136,12 @@ export class BodhiPiClient {
 			set: (params: SettingsSetParams) => this.setSetting(params),
 			unset: (params: SettingsUnsetParams) => this.unsetSetting(params),
 		};
+		this.kv = {
+			set: (params) => this.kvSet(params),
+			get: (params) => this.kvGet(params),
+			list: (params = {}) => this.kvList(params),
+			remove: (params) => this.kvRemove(params),
+		};
 	}
 
 	readonly settings: {
@@ -139,6 +149,13 @@ export class BodhiPiClient {
 		get(params: SettingsGetParams): Promise<SettingsGetResult>;
 		set(params: SettingsSetParams): Promise<SettingsSetResult>;
 		unset(params: SettingsUnsetParams): Promise<SettingsUnsetResult>;
+	};
+
+	readonly kv: {
+		set(params: KvSetParams): Promise<KvSetResult>;
+		get(params: KvGetParams): Promise<KvGetResult>;
+		list(params?: KvListParams): Promise<KvListResult>;
+		remove(params: KvRemoveParams): Promise<KvRemoveResult>;
 	};
 
 	get sessionId(): string | undefined {
@@ -345,6 +362,31 @@ export class BodhiPiClient {
 
 	getSessionConfig(params: SessionRef = {}): Promise<SessionConfigResult> {
 		return this.ext<SessionConfigResult>(EXT_SESSION_CONFIG, { sessionId: this.requireSession(params) });
+	}
+
+	private kvSet(params: KvSetParams): Promise<KvSetResult> {
+		return this.ext<KvSetResult>(EXT_KV_SET, {
+			key: params.key,
+			value: params.value,
+			...(params.sessionId !== undefined ? { sessionId: params.sessionId } : {}),
+		});
+	}
+
+	private kvGet(params: KvGetParams): Promise<KvGetResult> {
+		return this.ext<KvGetResult>(EXT_KV_GET, { key: params.key });
+	}
+
+	private kvList(params: KvListParams): Promise<KvListResult> {
+		return this.ext<KvListResult>(EXT_KV_LIST, {
+			...(params.prefix !== undefined ? { prefix: params.prefix } : {}),
+		});
+	}
+
+	private kvRemove(params: KvRemoveParams): Promise<KvRemoveResult> {
+		return this.ext<KvRemoveResult>(EXT_KV_REMOVE, {
+			key: params.key,
+			...(params.sessionId !== undefined ? { sessionId: params.sessionId } : {}),
+		});
 	}
 
 	private listSettings(params: SettingsListParams): Promise<SettingsListResult> {

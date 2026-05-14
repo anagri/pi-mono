@@ -1,12 +1,11 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, createBodhiPiClient, createInMemoryKvStore, createInMemorySessionStore } from "@/index.js";
 import { waitForAgentEndBalance } from "../events-assert.js";
 import type { E2EHarness, E2EHarnessOptions } from "../harness.js";
-import { mintTestToken } from "../http/auth.js";
+import { mintTestUser, provisionWorkspace } from "../http/workspace.js";
 import { createNodeFilesystem } from "../node-adapters/index.js";
-import { fixtureBodhiPiDir } from "../seed-bodhi-pi.js";
+import { pickDefined } from "../pick-defined.js";
 import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "../test-filesystem.js";
 import { openWsConnection } from "./connection.js";
 
@@ -19,21 +18,8 @@ export async function createWsHarness(opts: E2EHarnessOptions): Promise<E2EHarne
 		);
 	}
 
-	// Per-test user token → multi-tenant SQLite isolates workspaces under
-	// <dataDir>/users/<id>/workspace/. The stateful-per-WS-connection agent
-	// lifecycle means cross-test bleed would be catastrophic if user IDs
-	// collided — random 32-bit id keeps the odds negligible.
-	const userId = Math.floor(Math.random() * 0x7fff_ffff);
-	const token = mintTestToken({ id: userId, email: `test-${userId}@example.com` });
-	const cwd = path.join(dataDir, "users", String(userId), "workspace");
-	await fs.mkdir(cwd, { recursive: true });
-
-	// When the test seeds a fixture, symlink the source `.bodhi-pi/` into the
-	// per-user workspace. wireAgentForWsConnection's extension loader walks the
-	// symlinked snapshot once per connection.
-	if (opts.bodhiPiFixture) {
-		await fs.symlink(fixtureBodhiPiDir(opts.bodhiPiFixture), path.join(cwd, ".bodhi-pi"), "dir");
-	}
+	const { token, cwd } = mintTestUser({ dataDir });
+	await provisionWorkspace({ cwd, ...pickDefined({ fixture: opts.bodhiPiFixture }) });
 
 	const updates: SessionNotification[] = [];
 	const events: BodhiPiEvent[] = [];

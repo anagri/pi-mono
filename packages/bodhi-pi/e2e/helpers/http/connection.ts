@@ -16,6 +16,7 @@ import type {
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
 import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
+import { parseSse } from "./sse-parser.js";
 
 const LIFECYCLE_EVENT_METHOD = "_bodhi-pi/lifecycle/event";
 
@@ -29,8 +30,6 @@ export interface HttpConnectionOptions {
 
 const SSE_METHODS = new Set(["session/prompt", "session/load"]);
 
-let nextId = 1;
-
 // Ported from packages/bodhi-pi-http/src/frontend/lib/{acp-http-client,sse-parser}.ts.
 // `session/prompt` and `session/load` are SSE; everything else is JSON-on-JSON.
 export class HttpAcpConnection implements BodhiPiAcpConnection {
@@ -38,6 +37,8 @@ export class HttpAcpConnection implements BodhiPiAcpConnection {
 	private readonly token: string;
 	private readonly onUpdate: (notif: SessionNotification) => void;
 	private readonly onLifecycleEvent: ((ev: BodhiPiEvent) => void) | undefined;
+	// Per-instance JSON-RPC id counter so concurrent connections don't collide.
+	private nextId = 1;
 
 	constructor(opts: HttpConnectionOptions) {
 		this.baseUrl = opts.baseUrl;
@@ -84,7 +85,7 @@ export class HttpAcpConnection implements BodhiPiAcpConnection {
 	}
 
 	private async call(method: string, params: Record<string, unknown>): Promise<unknown> {
-		const id = nextId++;
+		const id = this.nextId++;
 		const body = JSON.stringify({ jsonrpc: "2.0", id, method, params });
 		const isSse = SSE_METHODS.has(method);
 		const res = await fetch(`${this.baseUrl}/acp`, {
@@ -131,41 +132,5 @@ export class HttpAcpConnection implements BodhiPiAcpConnection {
 		}
 		if (final === undefined) throw new Error("SSE stream ended without final response");
 		return final;
-	}
-}
-
-async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
-	const decoder = new TextDecoder();
-	const reader = body.getReader();
-	let buffer = "";
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (value) buffer += decoder.decode(value, { stream: !done });
-			while (true) {
-				const idx = buffer.indexOf("\n\n");
-				if (idx === -1) break;
-				const block = buffer.slice(0, idx);
-				buffer = buffer.slice(idx + 2);
-				const dataLines: string[] = [];
-				for (const line of block.split("\n")) {
-					if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
-				}
-				if (dataLines.length === 0) continue;
-				yield JSON.parse(dataLines.join("\n")) as unknown;
-			}
-			if (done) {
-				if (buffer.trim().length > 0) {
-					const dataLines: string[] = [];
-					for (const line of buffer.split("\n")) {
-						if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
-					}
-					if (dataLines.length > 0) yield JSON.parse(dataLines.join("\n")) as unknown;
-				}
-				return;
-			}
-		}
-	} finally {
-		reader.releaseLock();
 	}
 }

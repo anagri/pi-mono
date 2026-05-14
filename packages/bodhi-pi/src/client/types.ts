@@ -51,6 +51,27 @@ export interface ModelConfigState {
 	option?: SessionConfigOption;
 }
 
+export interface KvSetParams {
+	key: string;
+	value: JsonValue;
+	/** Scopes an emitted `auth_change` event to this session when the key is under `auth/*`. */
+	sessionId?: string;
+}
+
+export interface KvGetParams {
+	key: string;
+}
+
+export interface KvListParams {
+	prefix?: string;
+}
+
+export interface KvRemoveParams {
+	key: string;
+	/** Scopes an emitted `auth_change` event to this session when the key is under `auth/*`. */
+	sessionId?: string;
+}
+
 export interface KvSetResult {
 	key: string;
 }

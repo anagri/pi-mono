@@ -1,8 +1,10 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // Extension fixtures live as real files under `e2e/data/<slug>/.bodhi-pi/extensions/`
 // and the harness materializes them per-runtime via `bodhiPiFixture`. Simple
@@ -11,25 +13,18 @@ import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 // loader. Phase 4 wires the rich loader for in-memory only; phase 5 widens to
 // cli + http.
 
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("input-transform with real LLM: ?quick prefix produces a short answer", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		bodhiPiFixture: "input-transform",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+			bodhiPiFixture: "input-transform",
+		}),
+	);
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	const result = await h.clientConn.prompt({
@@ -45,14 +40,14 @@ test("input-transform with real LLM: ?quick prefix produces a short answer", asy
 
 test("pirate with real LLM: response uses pirate-style language", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		bodhiPiFixture: "pirate",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+			bodhiPiFixture: "pirate",
+		}),
+	);
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "Say hello in your own words." }] });
@@ -65,14 +60,14 @@ test("pirate with real LLM: response uses pirate-style language", async () => {
 
 test("redact-secrets with real LLM: API-key in tool output is scrubbed before being returned", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		bodhiPiFixture: "redact-secrets",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+			bodhiPiFixture: "redact-secrets",
+		}),
+	);
 	await h.setupFiles({
 		"proj/leak.txt": "API_KEY=sk-PLAINTEXTSECRETXYZ123 should not leak",
 	});
@@ -98,14 +93,14 @@ test("redact-secrets with real LLM: API-key in tool output is scrubbed before be
 
 test("register-command extension: custom slash command expands and reaches the model", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		bodhiPiFixture: "register-command",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+			bodhiPiFixture: "register-command",
+		}),
+	);
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "/ext-greet" }] });
@@ -114,14 +109,14 @@ test("register-command extension: custom slash command expands and reaches the m
 
 test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const apiKey = process.env.OPENAI_API_KEY!;
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? apiKey : undefined),
-		bodhiPiFixture: "dynamic-tools",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+			bodhiPiFixture: "dynamic-tools",
+		}),
+	);
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({
@@ -142,17 +137,17 @@ test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async
 });
 
 test("registerProvider with real Anthropic: switching to extension-supplied model routes to Claude", async () => {
-	const openaiKey = process.env.OPENAI_API_KEY!;
 	const openai = getModel("openai", "gpt-4o-mini");
 	const claude = getModel("anthropic", "claude-haiku-4-5");
 
-	const h = await createE2EHarness({
-		models: [openai],
-		defaultModelId: openai.id,
-		getApiKey: (p) => (p === "openai" ? openaiKey : undefined),
-		bodhiPiFixture: "register-provider",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [openai],
+			defaultModelId: openai.id,
+			getApiKey: envKeysFor("openai"),
+			bodhiPiFixture: "register-provider",
+		}),
+	);
 	await h.clientConn.initialize(stdInitParams);
 	const newSess = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	const sid = newSess.sessionId;

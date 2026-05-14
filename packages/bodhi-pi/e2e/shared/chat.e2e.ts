@@ -2,25 +2,21 @@ import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { asSelectOption } from "@test/helpers/acp-narrow.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
-let activeHarness: E2EHarness | undefined;
+const harness = useHarness();
 
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
-
-async function runSingleTurn(opts: { model: Model<Api>; apiKey: string; provider: string; prompt: string }) {
-	const h = await createE2EHarness({
-		models: [opts.model],
-		defaultModelId: opts.model.id,
-		getApiKey: (p) => (p === opts.provider ? opts.apiKey : undefined),
-	});
-	activeHarness = h;
+async function runSingleTurn(opts: { model: Model<Api>; provider: "openai" | "anthropic"; prompt: string }) {
+	const h = harness.set(
+		await createE2EHarness({
+			models: [opts.model],
+			defaultModelId: opts.model.id,
+			getApiKey: envKeysFor(opts.provider),
+		}),
+	);
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
@@ -39,7 +35,6 @@ async function runSingleTurn(opts: { model: Model<Api>; apiKey: string; provider
 test("Anthropic Haiku replies with tuesday via ACP", async () => {
 	const result = await runSingleTurn({
 		model: getModel("anthropic", "claude-haiku-4-5"),
-		apiKey: process.env.ANTHROPIC_API_KEY!,
 		provider: "anthropic",
 		prompt: "Answer in one word: what day comes after Monday?",
 	});
@@ -52,7 +47,6 @@ test("Anthropic Haiku replies with tuesday via ACP", async () => {
 test("OpenAI gpt-5-mini replies with tuesday via ACP", async () => {
 	const result = await runSingleTurn({
 		model: getModel("openai", "gpt-5-mini"),
-		apiKey: process.env.OPENAI_API_KEY!,
 		provider: "openai",
 		prompt: "Answer in one word: what day comes after Monday?",
 	});
@@ -66,16 +60,13 @@ test("switching model mid-session changes provenance", async () => {
 	const claude = getModel("anthropic", "claude-haiku-4-5");
 	const gpt = getModel("openai", "gpt-5-mini");
 
-	const h = await createE2EHarness({
-		models: [claude, gpt],
-		defaultModelId: claude.id,
-		getApiKey: (p) => {
-			if (p === "anthropic") return process.env.ANTHROPIC_API_KEY!;
-			if (p === "openai") return process.env.OPENAI_API_KEY!;
-			return undefined;
-		},
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [claude, gpt],
+			defaultModelId: claude.id,
+			getApiKey: envKeysFor("anthropic", "openai"),
+		}),
+	);
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId, configOptions } = await h.clientConn.newSession({
@@ -132,12 +123,13 @@ test("switching model mid-session changes provenance", async () => {
 
 test("real LLM remembers context across two prompts in same session", async () => {
 	const haiku = getModel("anthropic", "claude-haiku-4-5");
-	const h = await createE2EHarness({
-		models: [haiku],
-		defaultModelId: haiku.id,
-		getApiKey: (p) => (p === "anthropic" ? process.env.ANTHROPIC_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [haiku],
+			defaultModelId: haiku.id,
+			getApiKey: envKeysFor("anthropic"),
+		}),
+	);
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
@@ -172,12 +164,13 @@ test("real LLM remembers context across two prompts in same session", async () =
 test("thinking level: setSessionConfigOption('thinking') persists as a ThinkingChangeEntry", async () => {
 	// No real LLM call — exercise only the config-option machinery + entry persistence.
 	const claude = getModel("anthropic", "claude-haiku-4-5");
-	const h = await createE2EHarness({
-		models: [claude],
-		defaultModelId: claude.id,
-		getApiKey: () => "ignored-no-prompt",
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [claude],
+			defaultModelId: claude.id,
+			getApiKey: () => "ignored-no-prompt",
+		}),
+	);
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
@@ -208,9 +201,7 @@ test("thinking level: setSessionConfigOption('thinking') persists as a ThinkingC
 	expect.soft(asSelectOption(updated).currentValue).toBe(otherLevel);
 
 	// The agent appends a `thinking_change` entry to the session record.
-	const tree = (await h.clientConn.extMethod("_bodhi-pi/session/tree", { sessionId })) as {
-		nodes: Array<{ type: string }>;
-	};
+	const tree = await h.client.getSessionTree({ sessionId });
 	const change = tree.nodes.find((n) => n.type === "thinking_change");
 	expect.soft(change, "expected thinking_change entry in session tree").toBeDefined();
 });

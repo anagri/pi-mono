@@ -14,6 +14,7 @@ import {
 	createNodeScriptExecutor,
 	createSqliteSessionStore,
 } from "@e2e/helpers/node-adapters/index.js";
+import { pickDefined } from "@e2e/helpers/pick-defined.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
 
 export interface CliAgentOptions {
@@ -52,15 +53,17 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 		filesystem,
 		kvStore,
 		scriptExecutor: createNodeScriptExecutor(),
-		...(opts.models !== undefined ? { models: opts.models } : {}),
-		...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
-		...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
-		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
-		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
-		...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
-		...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
-		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
-		...(globalFilesystem !== undefined ? { globalFilesystem } : {}),
+		...pickDefined({
+			models: opts.models,
+			defaultModelId: opts.defaultModelId,
+			getApiKey: opts.getApiKey,
+			systemPrompt: opts.systemPrompt,
+			appendSystemPrompt: opts.appendSystemPrompt,
+			eventHandlers: opts.eventHandlers,
+			extensionFactories: opts.extensionFactories,
+			homeDir: opts.homeDir,
+			globalFilesystem,
+		}),
 	});
 	return { factory, sessionStore, filesystem, kvStore, cwd: opts.cwd };
 }

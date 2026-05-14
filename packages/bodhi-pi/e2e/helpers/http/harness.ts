@@ -1,14 +1,13 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, createBodhiPiClient, createInMemoryKvStore, createInMemorySessionStore } from "@/index.js";
 import { waitForAgentEndBalance } from "../events-assert.js";
 import type { E2EHarness, E2EHarnessOptions } from "../harness.js";
 import { createNodeFilesystem } from "../node-adapters/index.js";
-import { fixtureBodhiPiDir } from "../seed-bodhi-pi.js";
+import { pickDefined } from "../pick-defined.js";
 import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "../test-filesystem.js";
-import { mintTestToken } from "./auth.js";
 import { HttpAcpConnection } from "./connection.js";
+import { mintTestUser, provisionWorkspace } from "./workspace.js";
 
 export async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	const baseUrl = process.env.BODHI_PI_E2E_HTTP_BASE_URL;
@@ -19,21 +18,8 @@ export async function createHttpHarness(opts: E2EHarnessOptions): Promise<E2EHar
 		);
 	}
 
-	// Per-test user token → multi-tenant SQLite isolates workspaces under
-	// <dataDir>/users/<id>/workspace/. Random 32-bit id keeps the cross-test
-	// collision odds negligible.
-	const userId = Math.floor(Math.random() * 0x7fff_ffff);
-	const token = mintTestToken({ id: userId, email: `test-${userId}@example.com` });
-	const cwd = path.join(dataDir, "users", String(userId), "workspace");
-	await fs.mkdir(cwd, { recursive: true });
-
-	// When the test seeds a fixture, symlink the source `.bodhi-pi/` into the
-	// per-user workspace. wireAgentForRequest's `createNodePackageExtensionLoader`
-	// walks the symlinked snapshot per request; following the symlink reaches
-	// the monorepo node_modules for package-mode imports.
-	if (opts.bodhiPiFixture) {
-		await fs.symlink(fixtureBodhiPiDir(opts.bodhiPiFixture), path.join(cwd, ".bodhi-pi"), "dir");
-	}
+	const { token, cwd } = mintTestUser({ dataDir });
+	await provisionWorkspace({ cwd, ...pickDefined({ fixture: opts.bodhiPiFixture }) });
 
 	const updates: SessionNotification[] = [];
 	const events: BodhiPiEvent[] = [];

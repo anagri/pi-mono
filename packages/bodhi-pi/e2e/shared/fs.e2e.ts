@@ -1,8 +1,10 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // Built-in filesystem tools (write / read / grep) round-trip through real
 // disk under cli/http and through the in-memory FS under in-memory. One
@@ -10,23 +12,17 @@ import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
 // previously two granular tests (write+read, grep); same coverage, one
 // harness setup.
 
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("filesystem tools (Haiku): write → read → grep across seeded files", async () => {
 	const haiku = getModel("anthropic", "claude-haiku-4-5");
-	const h = await createE2EHarness({
-		models: [haiku],
-		defaultModelId: haiku.id,
-		getApiKey: (p) => (p === "anthropic" ? process.env.ANTHROPIC_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [haiku],
+			defaultModelId: haiku.id,
+			getApiKey: envKeysFor("anthropic"),
+		}),
+	);
 
 	// Pre-seed grep targets so they don't compete with the write step's output.
 	await h.setupFiles({

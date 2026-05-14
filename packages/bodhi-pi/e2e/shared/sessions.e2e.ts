@@ -1,35 +1,29 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
-import { afterEach, expect, test } from "vitest";
-import { createE2EHarness, type E2EHarness } from "../helpers/harness.js";
+import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
+import { createE2EHarness } from "../helpers/harness.js";
 import { isRuntime } from "../helpers/runtime.js";
+import { useHarness } from "../helpers/use-harness.js";
 
 // End-to-end coverage for the session-lifecycle ACP methods beyond the
 // new/fork/clone surface that fork-clone.e2e.ts exercises: listSessions,
-// closeSession, resumeSession, and the `_bodhi-pi/session/delete` ext method.
-// One flow with gpt-4o-mini drives all of them across two concurrent
-// sessions; `expect.soft` keeps later steps running on failure.
+// closeSession, resumeSession, and `client.deleteSession`. One flow with
+// gpt-4o-mini drives all of them across two concurrent sessions;
+// `expect.soft` keeps later steps running on failure.
 
-const SESSION_DELETE = "_bodhi-pi/session/delete";
-
-let activeHarness: E2EHarness | undefined;
-
-afterEach(async () => {
-	if (activeHarness) {
-		await activeHarness.cleanup();
-		activeHarness = undefined;
-	}
-});
+const harness = useHarness();
 
 test("sessions: list, close (record kept), resume (history rehydrated), delete (record gone)", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
-	const h = await createE2EHarness({
-		models: [model],
-		defaultModelId: model.id,
-		getApiKey: (p) => (p === "openai" ? process.env.OPENAI_API_KEY! : undefined),
-	});
-	activeHarness = h;
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: envKeysFor("openai"),
+		}),
+	);
 
 	await h.clientConn.initialize(stdInitParams);
 
@@ -77,8 +71,8 @@ test("sessions: list, close (record kept), resume (history rehydrated), delete (
 	expect.soft(recallResult.stopReason).toBe("end_turn");
 	expect.soft(chunkedAgentText(h.updates).toLowerCase()).toContain("amber");
 
-	// _bodhi-pi/session/delete permanently removes the record from the store.
-	await h.clientConn.extMethod(SESSION_DELETE, { sessionId: sidA });
+	// client.deleteSession permanently removes the record from the store.
+	await h.client.deleteSession({ sessionId: sidA });
 	list = await h.clientConn.listSessions({ cwd: h.cwd });
 	ids = list.sessions.map((s) => s.sessionId);
 	expect.soft(ids, "deleted session is gone from the store").not.toContain(sidA);

@@ -2,7 +2,6 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import readline from "node:readline";
 import type { Readable as NodeReadable, Writable as NodeWritable } from "node:stream";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -17,9 +16,11 @@ import {
 import { type BodhiPiEvent, createBodhiPiClient, createInMemoryKvStore, createInMemorySessionStore } from "@/index.js";
 import { waitForAgentEndBalance } from "../events-assert.js";
 import type { E2EHarness, E2EHarnessOptions } from "../harness.js";
+import { provisionWorkspace } from "../http/workspace.js";
 import { createNodeFilesystem } from "../node-adapters/index.js";
-import { fixtureBodhiPiDir } from "../seed-bodhi-pi.js";
+import { pickDefined } from "../pick-defined.js";
 import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "../test-filesystem.js";
+import { pipeLifecycleEvents } from "./lifecycle-stderr.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_CLI_BIN = path.resolve(here, "../../test-app-cli/dist/test-app-cli/src/cli.js");
@@ -29,17 +30,9 @@ export async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarn
 	const dbPath = path.join(tmpDir, "sessions.db");
 	const homeDir = path.join(tmpDir, ".home");
 	await fs.mkdir(homeDir, { recursive: true });
+	await provisionWorkspace({ cwd: tmpDir, ...pickDefined({ fixture: opts.bodhiPiFixture }) });
 
 	const modelsArg = opts.models.map((m) => `${m.provider}:${m.id}`).join(",");
-
-	// When the test seeds a fixture, symlink the source `.bodhi-pi/` into the
-	// spawned child's cwd. Following the symlink, Node walks back to the
-	// monorepo node_modules so package-mode extensions can `import` from npm.
-	// Without a fixture, keep `--no-extensions` so other shared tests stay
-	// isolated from each other.
-	if (opts.bodhiPiFixture) {
-		await fs.symlink(fixtureBodhiPiDir(opts.bodhiPiFixture), path.join(tmpDir, ".bodhi-pi"), "dir");
-	}
 
 	const args = [
 		TEST_APP_CLI_BIN,
@@ -63,28 +56,9 @@ export async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarn
 	const output = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
 	const stream: Stream = ndJsonStream(input, output);
 
-	// Stderr is the event channel under --rpc: one JSON-RPC notification per
-	// line (`_bodhi-pi/lifecycle/event`). Non-matching lines are forwarded so
-	// genuine diagnostic output still surfaces in the test runner.
+	// Stderr is the event channel under --rpc — see helpers/cli/lifecycle-stderr.ts.
 	const events: BodhiPiEvent[] = [];
-	const stderrReader = readline.createInterface({ input: child.stderr });
-	stderrReader.on("line", (line) => {
-		const trimmed = line.trim();
-		if (!trimmed.startsWith("{")) {
-			if (trimmed.length > 0) process.stderr.write(`${line}\n`);
-			return;
-		}
-		try {
-			const frame = JSON.parse(trimmed) as { method?: string; params?: unknown };
-			if (frame.method === "_bodhi-pi/lifecycle/event" && frame.params && typeof frame.params === "object") {
-				events.push(frame.params as BodhiPiEvent);
-				return;
-			}
-		} catch {
-			// Not a JSON-RPC frame — fall through and forward verbatim.
-		}
-		process.stderr.write(`${line}\n`);
-	});
+	const stderrReader = pipeLifecycleEvents(child.stderr, events);
 
 	const updates: SessionNotification[] = [];
 	const clientConn = new ClientSideConnection(
