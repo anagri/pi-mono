@@ -13,6 +13,7 @@ import { DevAcpIo } from "./DevAcpIo.tsx";
 import { ErrorBanner } from "./ErrorBanner.tsx";
 import { EventsPanel } from "./EventsPanel.tsx";
 import { SetupForm, type SetupFormValues } from "./SetupForm.tsx";
+import { StatusBar } from "./StatusBar.tsx";
 import type { TransportAdapter } from "./transport.ts";
 import { WirePanel } from "./WirePanel.tsx";
 
@@ -369,34 +370,44 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	}, [dispatchAcp]);
 
 	return (
-		<main data-testid="test-app-root" data-test-state={state}>
-			<h1>{title}</h1>
-			{headerSlot}
-			{state === "error" && <ErrorBanner message={errorMsg} />}
-			{state === "needs-init" && <SetupForm onSubmit={onSetupSubmit} />}
-			{(state === "ready" || state === "streaming") && (
-				<>
-					<ChatPanel
-						state={chatState}
-						currentModel={currentModel}
-						sessionId={sessionId}
-						messages={chatMessages}
-						composerValue={composerInput}
-						onComposerChange={setComposerInput}
-						onSend={onComposerSend}
-						onStop={onComposerStop}
-					/>
-					<DevAcpIo
-						workspaceRoot={workspaceRoot}
-						value={acpInput}
-						onChange={setAcpInput}
-						onSubmit={onAcpSubmit}
-						onCancel={onAcpCancel}
-					/>
-				</>
-			)}
-			<WirePanel frames={frames} />
-			<EventsPanel events={events} />
+		<main className="app-shell" data-testid="test-app-root" data-test-state={state}>
+			<section className="app-shell-main">
+				<StatusBar title={title} model={currentModel} sessionId={sessionId} state={state} />
+				{headerSlot}
+				{state === "error" && <ErrorBanner message={errorMsg} />}
+				{state === "needs-init" && <SetupForm onSubmit={onSetupSubmit} />}
+				{(state === "ready" || state === "streaming") && (
+					<>
+						<ChatPanel
+							state={chatState}
+							currentModel={currentModel}
+							sessionId={sessionId}
+							messages={chatMessages}
+							composerValue={composerInput}
+							onComposerChange={setComposerInput}
+							onSend={onComposerSend}
+							onStop={onComposerStop}
+						/>
+						{/* `open` keeps the acp-input textarea visible so page-driven
+						harnesses can fill it without first expanding the details
+						element. Users can still collapse it manually. */}
+						<details className="dev-acp-io" open>
+							<summary>dev: raw ACP I/O</summary>
+							<DevAcpIo
+								workspaceRoot={workspaceRoot}
+								value={acpInput}
+								onChange={setAcpInput}
+								onSubmit={onAcpSubmit}
+								onCancel={onAcpCancel}
+							/>
+						</details>
+					</>
+				)}
+			</section>
+			<aside className="app-shell-rail">
+				<WirePanel frames={frames} />
+				<EventsPanel events={events} />
+			</aside>
 		</main>
 	);
 }

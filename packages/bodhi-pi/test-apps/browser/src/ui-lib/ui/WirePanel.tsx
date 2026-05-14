@@ -7,8 +7,9 @@ export interface WirePanelProps {
 
 export function WirePanel({ frames }: WirePanelProps) {
 	return (
-		<section data-testid="wire-panel">
-			<section data-testid="frame-log">
+		<section className="wire-panel" data-testid="wire-panel">
+			<header className="wire-panel-header">wire</header>
+			<section className="frame-log" data-testid="frame-log">
 				{frames.map((f) => (
 					<div
 						key={f.seq}

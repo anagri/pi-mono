@@ -38,27 +38,31 @@ export function ChatPanel({
 	const streaming = state === "streaming";
 	return (
 		<section
+			className="chat-panel"
 			data-testid="chat-panel"
 			data-test-state={state}
 			data-current-model={currentModel}
 			data-session-id={sessionId}
 		>
-			<div data-testid="chat-messages">
+			<div className="chat-messages" data-testid="chat-messages">
 				{messages.map((m, idx) => {
 					const isLastAssistant = m.role === "assistant" && idx === messages.length - 1;
 					const messageState = isLastAssistant && streaming ? "streaming" : "done";
 					return (
 						<div
 							key={m.id}
+							className="chat-message"
 							data-testid="chat-message"
 							data-message-role={m.role}
 							data-test-state={messageState}
 							{...(m.dataAttrs ?? {})}
 						>
+							<span className="chat-message-role">{m.role}</span>
 							{m.text && <pre>{m.text}</pre>}
-						{m.toolCalls.map((tc) => (
+							{m.toolCalls.map((tc) => (
 								<div
 									key={tc.id}
+									className="tool-call"
 									data-testid="tool-call"
 									data-tool-name={tc.name}
 									data-tool-status={tc.status}
@@ -70,13 +74,12 @@ export function ChatPanel({
 					);
 				})}
 			</div>
-			<div data-testid="composer">
+			<div className="composer" data-testid="composer">
 				<textarea
 					data-testid="composer-input"
 					value={composerValue}
 					onChange={(e) => onComposerChange(e.target.value)}
 					rows={3}
-					cols={60}
 					disabled={streaming}
 				/>
 				{streaming ? (

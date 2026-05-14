@@ -23,24 +23,24 @@ export function SetupForm({ onSubmit }: SetupFormProps) {
 		});
 	};
 	return (
-		<form data-testid="setup-form" onSubmit={handleSubmit}>
-			<label>
-				user-id
-				<input data-testid="user-id" name="user-id" type="text" required />
-			</label>
-			<label>
-				user-email
-				<input data-testid="user-email" name="user-email" type="text" required />
-			</label>
-			<label>
-				seed-files
-				<textarea data-testid="seed-files" name="seed-files" rows={8} cols={60} />
-			</label>
-			<label>
-				config
-				<textarea data-testid="config" name="config" rows={8} cols={60} />
-			</label>
-			<button data-testid="setup-submit" type="submit">
+		<form className="setup-form" data-testid="setup-form" onSubmit={handleSubmit}>
+			<div className="setup-form-row">
+				<label htmlFor="setup-user-id">user-id</label>
+				<input id="setup-user-id" data-testid="user-id" name="user-id" type="text" required />
+			</div>
+			<div className="setup-form-row">
+				<label htmlFor="setup-user-email">user-email</label>
+				<input id="setup-user-email" data-testid="user-email" name="user-email" type="text" required />
+			</div>
+			<div className="setup-form-row">
+				<label htmlFor="setup-seed">seed-files</label>
+				<textarea id="setup-seed" data-testid="seed-files" name="seed-files" rows={8} />
+			</div>
+			<div className="setup-form-row">
+				<label htmlFor="setup-config">config</label>
+				<textarea id="setup-config" data-testid="config" name="config" rows={8} />
+			</div>
+			<button className="setup-form-submit" data-testid="setup-submit" type="submit">
 				setup
 			</button>
 		</form>

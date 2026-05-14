@@ -1,0 +1,278 @@
+/* Vertical-panel layout: left chat column grows, right rail is 420 px fixed.
+   Layout-critical rules only — see packages/bodhi-pi-web/src/App.css for the
+   richer reference theme. */
+
+:root {
+	--bg: #fafafa;
+	--fg: #1f2937;
+	--muted: #6b7280;
+	--border: #e5e7eb;
+	--border-strong: #cbd5e1;
+	--accent: #2563eb;
+	--surface: #ffffff;
+	--surface-muted: #f8fafc;
+	--user-bubble: #dbeafe;
+	--system-bubble: #fef3c7;
+	--assistant-bubble: #ffffff;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	font-size: 14px;
+	color: var(--fg);
+	background: var(--bg);
+}
+
+.app-shell {
+	display: flex;
+	flex-direction: row;
+	height: 100vh;
+	overflow: hidden;
+}
+
+.app-shell-main {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 100%;
+	background: var(--bg);
+}
+
+.app-shell-rail {
+	flex: 0 0 420px;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	border-left: 1px solid var(--border);
+	background: var(--surface);
+	overflow: hidden;
+}
+
+.status-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.4rem 0.75rem;
+	background: #111827;
+	color: #e5e7eb;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.78rem;
+	border-bottom: 1px solid #1f2937;
+}
+
+.status-bar-state {
+	margin-left: auto;
+	color: var(--muted);
+}
+
+.chat-panel {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.chat-messages {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: 0.75rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.chat-message {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	padding: 0.5rem 0.75rem;
+	border-radius: 0.5rem;
+	background: var(--assistant-bubble);
+	border: 1px solid var(--border);
+	max-width: 100%;
+}
+
+.chat-message[data-message-role="user"] {
+	background: var(--user-bubble);
+	align-self: flex-end;
+}
+
+.chat-message[data-message-role="system"] {
+	background: var(--system-bubble);
+}
+
+.chat-message-role {
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--muted);
+}
+
+.chat-message pre {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: inherit;
+}
+
+.tool-call {
+	margin-top: 0.25rem;
+	padding: 0.25rem 0.5rem;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	border-radius: 0.25rem;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.75rem;
+}
+
+.composer {
+	display: flex;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	border-top: 1px solid var(--border);
+	background: var(--surface);
+}
+
+.composer textarea {
+	flex: 1 1 auto;
+	min-height: 60px;
+	font-family: inherit;
+	font-size: 0.85rem;
+	padding: 0.4rem 0.5rem;
+	border: 1px solid var(--border-strong);
+	border-radius: 0.25rem;
+	resize: vertical;
+}
+
+.composer button {
+	padding: 0.4rem 0.9rem;
+	background: var(--accent);
+	color: #fff;
+	border: 1px solid var(--accent);
+	border-radius: 0.25rem;
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 0.85rem;
+}
+
+.composer button[data-mode="stop"] {
+	background: #dc2626;
+	border-color: #b91c1c;
+}
+
+.dev-acp-io {
+	border-top: 1px solid var(--border);
+	background: var(--surface-muted);
+	padding: 0.4rem 0.75rem;
+	font-size: 0.78rem;
+}
+
+.dev-acp-io summary {
+	cursor: pointer;
+	color: var(--muted);
+	user-select: none;
+}
+
+.wire-panel,
+.events-panel {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.wire-panel {
+	border-bottom: 1px solid var(--border);
+}
+
+.wire-panel-header,
+.events-panel-header {
+	padding: 0.4rem 0.75rem;
+	background: var(--surface-muted);
+	border-bottom: 1px solid var(--border);
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: var(--muted);
+}
+
+.frame-log,
+.events-log {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	overflow-x: auto;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.72rem;
+}
+
+.frame-log [data-testid="frame"],
+.events-log [data-testid="event"] {
+	padding: 0.25rem 0.5rem;
+	border-bottom: 1px solid var(--border);
+}
+
+.frame-log pre,
+.events-log pre {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.setup-form {
+	max-width: 720px;
+	margin: 1.5rem auto;
+	padding: 1rem 1.25rem;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+}
+
+.setup-form-row {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	margin-bottom: 0.75rem;
+}
+
+.setup-form-row label {
+	font-size: 0.78rem;
+	color: var(--muted);
+}
+
+.setup-form-row input,
+.setup-form-row textarea {
+	font-family: inherit;
+	font-size: 0.85rem;
+	padding: 0.4rem 0.5rem;
+	border: 1px solid var(--border-strong);
+	border-radius: 0.25rem;
+}
+
+.setup-form-row textarea {
+	resize: vertical;
+}
+
+.setup-form-submit {
+	padding: 0.5rem 1rem;
+	background: var(--accent);
+	color: #fff;
+	border: 1px solid var(--accent);
+	border-radius: 0.25rem;
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 0.9rem;
+}
+
+.error-banner {
+	padding: 0.5rem 0.75rem;
+	background: #fee2e2;
+	color: #991b1b;
+	border-bottom: 1px solid #fecaca;
+	font-size: 0.85rem;
+}
