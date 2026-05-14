@@ -3,12 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser-launch.js";
+import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser/launch.js";
 import {
 	chromeExtBaseUrl,
 	closeSharedChromeExtContext,
 	ensureSharedChromeExtContext,
-} from "./helpers/chrome-ext-launch.js";
+} from "./helpers/chrome-ext/launch.js";
 
 const REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 

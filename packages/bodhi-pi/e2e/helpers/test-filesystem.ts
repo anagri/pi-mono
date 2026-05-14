@@ -41,7 +41,7 @@ export async function seedFilesViaFilesystem(
 		}
 		const absPath = path.posix.join(cwd, relPath);
 		const dir = path.posix.dirname(absPath);
-		if (dir && dir !== cwd && dir !== "/") {
+		if (dir && dir !== cwd) {
 			await inner.mkdir(dir, { recursive: true });
 		}
 		await inner.writeTextFile(absPath, content);

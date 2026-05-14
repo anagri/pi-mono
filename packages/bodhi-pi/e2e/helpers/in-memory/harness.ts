@@ -1,0 +1,57 @@
+import { recorder } from "@test/helpers/event-recorder.js";
+import { createTestHarness } from "@test/helpers/harness.js";
+import { createTestScriptExecutor } from "@test/helpers/script-executor.js";
+import {
+	createBodhiPiClient,
+	createInMemoryFilesystem,
+	createInMemoryKvStore,
+	createInMemorySessionStore,
+} from "@/index.js";
+import { waitForAgentEndBalance } from "../events-assert.js";
+import type { E2EHarness, E2EHarnessOptions } from "../harness.js";
+import { loadFixtureFactoriesFromSource } from "../seed-bodhi-pi.js";
+import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "../test-filesystem.js";
+
+export async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
+	const filesystem = opts.filesystem ?? createInMemoryFilesystem();
+	const sessionStore = opts.sessionStore ?? createInMemorySessionStore();
+	const kvStore = opts.kvStore ?? createInMemoryKvStore();
+	// Default scriptExecutor reads from the harness's filesystem so run_script
+	// tests work without explicit wiring. The cli/http runtimes use the real
+	// Node executor via their respective hosts.
+	const scriptExecutor = opts.scriptExecutor ?? createTestScriptExecutor(filesystem);
+	const { log: events, handlers } = recorder();
+	const extensionFactories = opts.bodhiPiFixture ? await loadFixtureFactoriesFromSource(opts.bodhiPiFixture) : [];
+	const inner = createTestHarness({
+		models: opts.models,
+		defaultModelId: opts.defaultModelId,
+		filesystem,
+		sessionStore,
+		kvStore,
+		scriptExecutor,
+		eventHandlers: handlers,
+		...(opts.getApiKey ? { getApiKey: opts.getApiKey } : {}),
+		...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
+		...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
+		...(extensionFactories.length > 0 ? { extensionFactories } : {}),
+		...(opts.compaction ? { compaction: opts.compaction } : {}),
+		...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
+	});
+	// Non-root default so tests can compose paths as `${h.cwd}/file.txt` without
+	// hitting `//file.txt`.
+	const cwd = opts.homeDir ?? "/proj";
+	await filesystem.mkdir(cwd, { recursive: true });
+	return {
+		clientConn: inner.clientConn,
+		client: createBodhiPiClient(inner.clientConn, { cwd }),
+		updates: inner.updates,
+		events,
+		flushEvents: () => waitForAgentEndBalance(events),
+		filesystem: createReadOnlyFilesystemProxy(inner.filesystem),
+		setupFiles: (files) => seedFilesViaFilesystem(inner.filesystem, cwd, files),
+		sessionStore: inner.sessionStore,
+		kvStore: inner.kvStore,
+		cwd,
+		cleanup: async () => {},
+	};
+}
