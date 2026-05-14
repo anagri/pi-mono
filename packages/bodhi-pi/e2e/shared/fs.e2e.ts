@@ -15,7 +15,7 @@ import { useHarness } from "../helpers/use-harness.js";
 const harness = useHarness();
 
 test("filesystem tools (Haiku): write → read → grep across seeded files", async () => {
-	const haiku = getModel("anthropic", "claude-haiku-4-5");
+	const haiku = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [haiku],

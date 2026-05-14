@@ -32,12 +32,12 @@ export async function loadFixtureSeedFiles(
 			`// Auto-generated flat-JS twin of the TS package-mode register-provider
 // extension for the browser e2e harness. The TS file under
 // register-provider/src/index.ts continues to power cli/http/ws.
-// Mirrors the runtime shape from pi-ai's claude-haiku-4-5 entry.
+// Mirrors the runtime shape from pi-ai's claude-haiku-4-5-20251001 entry.
 export default function registerAnthropicProvider(pi) {
   const apiKey = ${JSON.stringify(apiKey)};
   if (!apiKey) throw new Error("register-provider (browser): anthropic api key missing");
   const model = {
-    id: "claude-haiku-4-5",
+    id: "claude-haiku-4-5-20251001",
     name: "Claude Haiku 4.5 (latest)",
     api: "anthropic-messages",
     provider: "anthropic",

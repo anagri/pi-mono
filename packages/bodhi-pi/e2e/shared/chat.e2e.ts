@@ -34,7 +34,7 @@ async function runSingleTurn(opts: { model: Model<Api>; provider: "openai" | "an
 
 test("Anthropic Haiku replies with tuesday via ACP", async () => {
 	const result = await runSingleTurn({
-		model: getModel("anthropic", "claude-haiku-4-5"),
+		model: getModel("anthropic", "claude-haiku-4-5-20251001"),
 		provider: "anthropic",
 		prompt: "Answer in one word: what day comes after Monday?",
 	});
@@ -57,7 +57,7 @@ test("OpenAI gpt-5-mini replies with tuesday via ACP", async () => {
 });
 
 test("switching model mid-session changes provenance", async () => {
-	const claude = getModel("anthropic", "claude-haiku-4-5");
+	const claude = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const gpt = getModel("openai", "gpt-5-mini");
 
 	const h = harness.set(
@@ -122,7 +122,7 @@ test("switching model mid-session changes provenance", async () => {
 });
 
 test("real LLM remembers context across two prompts in same session", async () => {
-	const haiku = getModel("anthropic", "claude-haiku-4-5");
+	const haiku = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [haiku],
@@ -163,7 +163,7 @@ test("real LLM remembers context across two prompts in same session", async () =
 
 test("thinking level: setSessionConfigOption('thinking') persists as a ThinkingChangeEntry", async () => {
 	// No real LLM call — exercise only the config-option machinery + entry persistence.
-	const claude = getModel("anthropic", "claude-haiku-4-5");
+	const claude = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [claude],
@@ -185,7 +185,7 @@ test("thinking level: setSessionConfigOption('thinking') persists as a ThinkingC
 		value: claude.id,
 	});
 	const thinkingOption = (modelSwitch.configOptions ?? []).find((o) => o.id === "thinking");
-	if (!thinkingOption) throw new Error("expected 'thinking' configOption after pinning claude-haiku-4-5");
+	if (!thinkingOption) throw new Error("expected 'thinking' configOption after pinning claude-haiku-4-5-20251001");
 	const select = asSelectOption(thinkingOption);
 	const values = (select.options as Array<{ value: string }>).map((o) => o.value);
 	const otherLevel = values.find((v) => v !== select.currentValue);

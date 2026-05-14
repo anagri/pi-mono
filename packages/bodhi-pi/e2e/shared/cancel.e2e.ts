@@ -5,6 +5,7 @@ import { type AimockFixture, startAimockProvider } from "../helpers/aimock-fixtu
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { useHarness } from "../helpers/use-harness.js";
+import { withTimeout } from "../helpers/with-timeout.js";
 
 // Cancellation produces `stopReason: "cancelled"` regardless of transport.
 // Two complementary tests, both running across all four runtimes via aimock:
@@ -23,10 +24,11 @@ let activeMock: AimockFixture | undefined;
 
 afterEach(async () => {
 	if (activeMock) {
-		await activeMock.cleanup();
+		const mock = activeMock;
 		activeMock = undefined;
+		await withTimeout("aimock.cleanup", 5_000, () => mock.cleanup());
 	}
-});
+}, 30_000);
 
 test("cancel (aimock): mid-stream cancel resolves prompt with stopReason='cancelled'", async () => {
 	const mock = await startAimockProvider();

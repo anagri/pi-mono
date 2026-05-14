@@ -1,6 +1,7 @@
 import { afterEach } from "vitest";
 import { cleanupAuthOverride } from "./auth-cleanup.js";
 import type { E2EHarness } from "./harness.js";
+import { withTimeout } from "./with-timeout.js";
 
 // Replaces the `let activeHarness ... afterEach(() => h.cleanup())` block that
 // was duplicated at the top of every shared spec. Usage:
@@ -37,8 +38,8 @@ export function useHarness(opts: UseHarnessOptions = {}): {
 				await cleanupAuthOverride(harness, provider);
 			}
 		}
-		await harness.cleanup();
-	});
+		await withTimeout("harness.cleanup", 5_000, () => harness.cleanup());
+	}, 30_000);
 
 	return {
 		active: () => active,

@@ -18,7 +18,7 @@ const TEST_APP_HTTP_BIN = path.resolve(here, "test-app-http/dist/test-app-http/s
 const TEST_APP_BROWSER_DIR = path.resolve(here, "test-app-browser");
 const BROWSER_VITE_PORT = 35273;
 
-const DEFAULT_MODELS = "openai:gpt-4o-mini,openai:gpt-5-mini,anthropic:claude-haiku-4-5";
+const DEFAULT_MODELS = "openai:gpt-4o-mini,openai:gpt-5-mini,anthropic:claude-haiku-4-5-20251001";
 const DEFAULT_MODEL = "gpt-4o-mini";
 
 async function waitForListening(child: ChildProcess, timeoutMs: number): Promise<number> {

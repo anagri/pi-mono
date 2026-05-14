@@ -80,7 +80,7 @@ Options:
   --data-dir <dir>      Server data directory (sessions.db + per-user workspaces).
                         Default: ./.bodhi-pi-http.
   --models <list>       Comma-separated provider:modelId pairs to pre-register at boot.
-                        Example: --models openai:gpt-4o-mini,anthropic:claude-haiku-4-5
+                        Example: --models openai:gpt-4o-mini,anthropic:claude-haiku-4-5-20251001
   --default-model <id>  Default model id used by new sessions when set.
   -h, --help            Show this help.
 

@@ -138,7 +138,7 @@ test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async
 
 test("registerProvider with real Anthropic: switching to extension-supplied model routes to Claude", async () => {
 	const openai = getModel("openai", "gpt-4o-mini");
-	const claude = getModel("anthropic", "claude-haiku-4-5");
+	const claude = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 	const h = harness.set(
 		await createE2EHarness({

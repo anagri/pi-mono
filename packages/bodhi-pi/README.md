@@ -24,8 +24,8 @@ import {
 import { getModel } from "@earendil-works/pi-ai";
 
 const factory = createBodhiPiAgent({
-	models: [getModel("anthropic", "claude-haiku-4-5")],
-	defaultModelId: "claude-haiku-4-5",
+	models: [getModel("anthropic", "claude-haiku-4-5-20251001")],
+	defaultModelId: "claude-haiku-4-5-20251001",
 	getApiKey: (provider) => process.env[`${provider.toUpperCase()}_API_KEY`],
 	sessionStore: createInMemorySessionStore(),
 	filesystem: createInMemoryFilesystem(),

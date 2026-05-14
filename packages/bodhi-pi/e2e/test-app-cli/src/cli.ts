@@ -64,7 +64,7 @@ const isRpc = argv.includes("--rpc");
 const isHeadless = argv.includes("--headless");
 
 // Parse --models and --default-model out of argv before passing the rest to
-// resolveConfig (which doesn't know these args). Format: --models openai:gpt-4o-mini,anthropic:claude-haiku-4-5
+// resolveConfig (which doesn't know these args). Format: --models openai:gpt-4o-mini,anthropic:claude-haiku-4-5-20251001
 function popArgValue(args: string[], flag: string): { value: string | undefined; rest: string[] } {
 	const idx = args.indexOf(flag);
 	if (idx === -1) return { value: undefined, rest: args };
