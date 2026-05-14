@@ -58,6 +58,7 @@ import { BODHI_PI_VERSION } from "@/version.js";
 import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "@/wire/constants.js";
 import { agentToolContentForAcp, mapStopReason, toolResultContentForAcp } from "@/wire/converters.js";
 import { validateSessionId } from "@/wire/validators.js";
+import { wireInternalEventHandlers } from "./event-wiring.js";
 
 export interface BodhiPiConfig {
 	/** Additive host-supplied models for providers not in pi-ai's built-in catalog (e.g. local Ollama). */
@@ -173,26 +174,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// asynchronously via `ensureExtensionRunner()` on first session use.
 		this.events = new EventDispatcher(config.eventHandlers, logger);
 
-		// Internal subscribers: route state-change events into spec-stable ACP
-		// `config_option_update` notifications. Demonstrates the same hook surface
-		// available to extensions — bodhi-pi's picker-refresh side-effect ships
-		// through the same bus.
-		this.events.appendHandlers("auth_change", [
-			async (e) => {
-				if (e.sessionId !== undefined) await this.emitConfigOptionUpdate(e.sessionId);
-			},
-		]);
-		this.events.appendHandlers("settings_change", [
-			async (e) => {
-				if (this.affectsPickerKey(e.key)) await this.emitConfigOptionUpdate(e.sessionId);
-			},
-		]);
-		this.events.appendHandlers("model_select", [
-			async (e) => {
-				await this.emitConfigOptionUpdate(e.sessionId);
-			},
-		]);
-
 		this.modelRegistry = new ModelRegistry({
 			...(config.models ? { hostModels: config.models } : {}),
 			...(config.defaultModelId !== undefined ? { defaultModelId: config.defaultModelId } : {}),
@@ -202,6 +183,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 			events: this.events,
 			appendEntry: this.appendEntry.bind(this),
 			extensionRunner: () => this.extensionRunner,
+		});
+
+		wireInternalEventHandlers({
+			events: this.events,
+			conn: this.conn,
+			sessions: this.sessions,
+			modelRegistry: this.modelRegistry,
 		});
 
 		this.kvService = new KvService({
@@ -247,30 +235,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 			...this.sessionInfoService.register(),
 			...this.compactionOrchestrator.register(),
 		]);
-	}
-
-	/** True for the dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */
-	private affectsPickerKey(key: string): boolean {
-		return (
-			key === "defaultModel" ||
-			key.startsWith("defaultModel.") ||
-			key === "defaultThinkingLevel" ||
-			key.startsWith("defaultThinkingLevel.")
-		);
-	}
-
-	/**
-	 * Emit the spec-stable `config_option_update` sessionUpdate so connected
-	 * clients refresh their picker without polling. No-op for sessions that
-	 * are no longer loaded (e.g., picker change targeted a closed session).
-	 */
-	private async emitConfigOptionUpdate(sessionId: string): Promise<void> {
-		if (!this.sessions.has(sessionId)) return;
-		const configOptions = await this.modelRegistry.buildAllConfigOptions(sessionId);
-		await this.conn.sessionUpdate({
-			sessionId,
-			update: { sessionUpdate: "config_option_update", configOptions },
-		});
 	}
 
 	/**
