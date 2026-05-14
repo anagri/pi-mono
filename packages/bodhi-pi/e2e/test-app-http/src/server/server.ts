@@ -9,6 +9,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { createAcpHandler } from "./acp/handler.js";
 import { wireAgentForWsConnection } from "./agent/wire-agent-ws.js";
 import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
+import { handleProvision } from "./provision.js";
 import { createStaticHandler, type StaticHandler } from "./static.js";
 import { wsToStream } from "./transport/ws-stream.js";
 
@@ -70,12 +71,17 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 	});
 
 	const here = path.dirname(fileURLToPath(import.meta.url));
-	const defaultStaticDir = path.resolve(here, "..", "..", "dist", "public");
+	// `here` (built): <test-app-http>/dist/test-app-http/src/server/
+	// dist/public lives at: <test-app-http>/dist/public/
+	const defaultStaticDir = path.resolve(here, "..", "..", "..", "public");
 	const staticDir = opts.staticDir === null ? null : (opts.staticDir ?? defaultStaticDir);
 	const serveStatic: StaticHandler | undefined = staticDir ? createStaticHandler(staticDir) : undefined;
 
+	const provisionOpts: { dataDir: string; workspaceOverride?: string } = { dataDir: opts.dataDir };
+	if (opts.workspaceOverride !== undefined) provisionOpts.workspaceOverride = opts.workspaceOverride;
+
 	const httpServer = createServer((req, res) => {
-		void handleRequest(req, res, handleAcp, serveStatic).catch((err) => {
+		void handleRequest(req, res, handleAcp, serveStatic, provisionOpts).catch((err) => {
 			console.error("[bodhi-pi-http] request handler error:", err);
 			if (!res.headersSent) {
 				res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
@@ -164,6 +170,7 @@ async function handleRequest(
 	res: ServerResponse,
 	handleAcp: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
 	serveStatic: StaticHandler | undefined,
+	provisionOpts: { dataDir: string; workspaceOverride?: string },
 ): Promise<void> {
 	if (req.url === "/healthz") {
 		const body = "ok";
@@ -177,6 +184,11 @@ async function handleRequest(
 
 	if (req.url === "/acp") {
 		await handleAcp(req, res);
+		return;
+	}
+
+	if (req.url === "/provision" && req.method === "POST") {
+		await handleProvision(req, res, provisionOpts);
 		return;
 	}
 

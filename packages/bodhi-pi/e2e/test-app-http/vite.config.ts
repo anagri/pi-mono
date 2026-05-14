@@ -8,6 +8,9 @@ export default defineConfig({
 	plugins: [react()],
 	root: path.resolve(here, "src/frontend"),
 	publicDir: path.resolve(here, "src/frontend/public"),
+	resolve: {
+		alias: [{ find: "@e2e", replacement: path.resolve(here, "..") }],
+	},
 	server: {
 		port: 5173,
 		strictPort: true,

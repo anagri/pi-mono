@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
 import App from "./App.tsx";
 import WsApp from "./pages/WsApp.tsx";
@@ -11,8 +11,9 @@ createRoot(root).render(
 	<StrictMode>
 		<BrowserRouter>
 			<Routes>
-				<Route path="/" element={<App />} />
-				<Route path="/ws/*" element={<WsApp />} />
+				<Route path="/" element={<Navigate to="/http" replace />} />
+				<Route path="/http" element={<App />} />
+				<Route path="/ws" element={<WsApp />} />
 			</Routes>
 		</BrowserRouter>
 	</StrictMode>,
