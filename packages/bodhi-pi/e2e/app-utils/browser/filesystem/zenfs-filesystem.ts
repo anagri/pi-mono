@@ -15,6 +15,10 @@ export function createZenfsFilesystem(_opts?: ZenfsFilesystemOptions): Filesyste
 			await fs.promises.writeFile(p, content, "utf-8");
 		},
 
+		async appendTextFile(p, content) {
+			await fs.promises.appendFile(p, content, "utf-8");
+		},
+
 		async list(p) {
 			const entries = (await fs.promises.readdir(p, { withFileTypes: true })) as Array<{
 				name: string;

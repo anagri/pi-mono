@@ -23,6 +23,7 @@ export function createReadOnlyFilesystemProxy(inner: Filesystem): Filesystem {
 		readTextFile: (p) => inner.readTextFile(p),
 		exists: (p) => inner.exists(p),
 		writeTextFile: block("writeTextFile"),
+		appendTextFile: block("appendTextFile"),
 		mkdir: block("mkdir"),
 		remove: block("remove"),
 		list: block("list"),

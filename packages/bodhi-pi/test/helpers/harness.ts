@@ -12,6 +12,7 @@ import {
 	type RegisteredExtension,
 	type ScriptExecutor,
 	type SessionStore,
+	type Terminal,
 } from "@/index.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
 
@@ -24,6 +25,7 @@ export interface TestHarnessOptions {
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	scriptExecutor?: ScriptExecutor;
+	terminal?: Terminal;
 	eventHandlers?: BodhiPiEventHandlers;
 	extensionFactories?: RegisteredExtension[];
 	compaction?: Partial<CompactionSettings>;
@@ -62,6 +64,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
 			...(opts.appendSystemPrompt !== undefined ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
 			...(opts.scriptExecutor ? { scriptExecutor: opts.scriptExecutor } : {}),
+			...(opts.terminal ? { terminal: opts.terminal } : {}),
 			...(opts.eventHandlers ? { eventHandlers: opts.eventHandlers } : {}),
 			...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
 			...(opts.compaction ? { compaction: opts.compaction } : {}),

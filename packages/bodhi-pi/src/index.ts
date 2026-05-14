@@ -154,6 +154,12 @@ export {
 export { loadGlobalSettings } from "./settings/settings-global.js";
 export { mergeSettings } from "./settings/settings-merge.js";
 export type { Skill } from "./skills/skill.js";
+export type {
+	Terminal,
+	TerminalCapabilities,
+	TerminalExecInput,
+	TerminalExecResult,
+} from "./terminal/terminal.js";
 export { BODHI_PI_VERSION } from "./version.js";
 export {
 	EXT_DELETE_SESSION,

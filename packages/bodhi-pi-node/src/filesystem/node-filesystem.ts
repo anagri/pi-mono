@@ -28,6 +28,10 @@ export function createNodeFilesystem(opts: NodeFilesystemOptions): Filesystem {
 			await fs.writeFile(jail(absolutePath), content, "utf-8");
 		},
 
+		async appendTextFile(absolutePath, content) {
+			await fs.appendFile(jail(absolutePath), content, "utf-8");
+		},
+
 		async list(absolutePath) {
 			const entries = await fs.readdir(jail(absolutePath), { withFileTypes: true });
 			return entries.map(

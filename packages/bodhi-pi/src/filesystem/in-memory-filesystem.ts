@@ -39,6 +39,15 @@ export function createInMemoryFilesystem(): Filesystem {
 			entries.set(np, { type: "file", content, mtimeMs: Date.now() });
 		},
 
+		async appendTextFile(p, content) {
+			const np = norm(p);
+			const existing = entries.get(np);
+			if (existing && existing.type !== "file") throw fsError("EISDIR", p);
+			if (!existing) ensureParentDir(np);
+			const prior = existing?.type === "file" ? existing.content : "";
+			entries.set(np, { type: "file", content: prior + content, mtimeMs: Date.now() });
+		},
+
 		async list(p) {
 			const np = norm(p);
 			const e = entries.get(np);

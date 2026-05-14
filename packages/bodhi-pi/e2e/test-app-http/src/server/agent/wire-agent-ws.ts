@@ -7,10 +7,12 @@ import {
 	createMultiTenantSqliteSessionStore as createSqliteSessionStore,
 	type Db,
 } from "@e2e/app-utils/cli/index.js";
+import { createJustBashTerminal } from "@e2e/app-utils/just-bash-terminal.js";
 import { createNodePackageExtensionLoader } from "@e2e/helpers/extension-loaders/index.js";
 import { createNodeFilesystem } from "@e2e/helpers/node-adapters/index.js";
 import { pickDefined } from "@e2e/helpers/pick-defined.js";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { Bash } from "just-bash";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
 
@@ -99,6 +101,7 @@ export async function wireAgentForWsConnection(opts: WireAgentWsOptions): Promis
 	const sessionStore = createSqliteSessionStore({ db: opts.db, userId: opts.user.id });
 	const extensionFactories = await createNodePackageExtensionLoader({ cwd });
 	const scriptExecutor = createNodeScriptExecutor();
+	const terminal = createJustBashTerminal(Bash, { filesystem, defaultCwd: cwd });
 	// Per-user kv dir matches per-user sessions/workspace; without it, every
 	// connecting user shares one auth/* namespace which breaks parallel e2e.
 	const kvDir = opts.kvStoreDir ? path.join(opts.kvStoreDir, String(opts.user.id)) : undefined;
@@ -110,6 +113,7 @@ export async function wireAgentForWsConnection(opts: WireAgentWsOptions): Promis
 			filesystem,
 			kvStore,
 			scriptExecutor,
+			terminal,
 			eventHandlers: eventForwardingHandlers(conn),
 			...pickDefined({
 				models: opts.models,

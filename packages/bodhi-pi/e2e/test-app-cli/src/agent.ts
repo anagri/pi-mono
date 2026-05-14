@@ -9,6 +9,7 @@ import {
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import {
+	createBashTerminal,
 	createNodeKvStore,
 	createNodeScriptExecutor,
 	createSingleTenantSqliteSessionStore as createSqliteSessionStore,
@@ -53,6 +54,7 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 		filesystem,
 		kvStore,
 		scriptExecutor: createNodeScriptExecutor(),
+		terminal: createBashTerminal(),
 		...pickDefined({
 			models: opts.models,
 			defaultModelId: opts.defaultModelId,

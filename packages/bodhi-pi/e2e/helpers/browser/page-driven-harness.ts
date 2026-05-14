@@ -153,6 +153,11 @@ export async function createPageDrivenHarness(
 				`${cfg.label}: filesystem.writeTextFile() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
 			);
 		},
+		async appendTextFile() {
+			throw new Error(
+				`${cfg.label}: filesystem.appendTextFile() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,
+			);
+		},
 		async mkdir() {
 			throw new Error(
 				`${cfg.label}: filesystem.mkdir() is disabled. Use h.setupFiles({...}) before clientConn.initialize().`,

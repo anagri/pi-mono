@@ -66,6 +66,7 @@ export async function loadProjectArtifacts(
 		filesystem: config.filesystem,
 		cwd,
 		...(config.scriptExecutor ? { scriptExecutor: config.scriptExecutor } : {}),
+		...(config.terminal ? { terminal: config.terminal } : {}),
 	});
 	const [projectCommands, skills, contextFiles, projectSettingsResult, globalSettingsResult] = await Promise.all([
 		loadProjectCommands(config.filesystem, cwd),

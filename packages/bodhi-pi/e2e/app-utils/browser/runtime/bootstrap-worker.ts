@@ -9,7 +9,9 @@
 /// <reference lib="webworker" />
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
+import { createJustBashTerminal } from "@e2e/app-utils/just-bash-terminal.js";
 import { configure, InMemory, fs as zenFs, mount as zenMount } from "@zenfs/core";
+import { Bash } from "just-bash/browser";
 import { createBrowserExtensionLoader } from "../extensions/browser-extension-loader.js";
 import { createSandboxedBrowserExtensionLoader } from "../extensions/sandboxed-browser-extension-loader.js";
 import { createZenfsFilesystem } from "../filesystem/zenfs-filesystem.js";
@@ -157,6 +159,7 @@ export function bootstrapAgentWorker(): void {
 			const filesystem = createZenfsFilesystem();
 			const sessionStore = createDexieSessionStore({ dbName: `${dbName}-sessions` });
 			const kvStore = createDexieKvStore({ dbName: `${dbName}-kv` });
+			const terminal = createJustBashTerminal(Bash, { filesystem, defaultCwd: cwd });
 			const bridge = sandboxPort ? createSandboxBridge(sandboxPort) : undefined;
 			const scriptExecutor = bridge
 				? createSandboxedBrowserScriptExecutor({ filesystem, bridge })
@@ -172,6 +175,7 @@ export function bootstrapAgentWorker(): void {
 				sessionStore,
 				kvStore,
 				scriptExecutor,
+				terminal,
 				...(models && models.length > 0 ? { models } : {}),
 				...(defaultModelId !== undefined ? { defaultModelId } : {}),
 				...(getApiKey ? { getApiKey } : {}),

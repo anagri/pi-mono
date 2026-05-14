@@ -83,7 +83,7 @@ test:
         exit 1
     fi
 
-# Same matrix as `test`, but exits on the first failed step instead of collecting failures.
+# Same matrix as `test`, but exits on the first failure instead of collecting them.
 test-failfast:
     #!/usr/bin/env bash
     set -euo pipefail

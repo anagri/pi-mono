@@ -2,6 +2,8 @@ import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import type { Terminal } from "@/terminal/terminal.js";
+import { createBashTool } from "./bash.js";
 import { createEditTool } from "./edit.js";
 import { createFindTool } from "./find.js";
 import { createGrepTool } from "./grep.js";
@@ -14,6 +16,7 @@ export interface ToolDeps {
 	filesystem: Filesystem;
 	cwd: string;
 	scriptExecutor?: ScriptExecutor;
+	terminal?: Terminal;
 }
 
 export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
@@ -27,6 +30,9 @@ export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
 	];
 	if (deps.scriptExecutor) {
 		tools.push(createRunScriptTool(deps));
+	}
+	if (deps.terminal) {
+		tools.push(createBashTool(deps));
 	}
 	return tools;
 }
@@ -44,6 +50,7 @@ export const BUILTIN_TOOL_SNIPPETS: Record<string, string> = {
 	find: "Find files matching a glob pattern under a directory",
 	grep: "Search file contents for a regex (or literal string) under a directory",
 	run_script: "Execute a JavaScript file at PATH with positional ARGS; returns stdout/stderr and exit code",
+	bash: "Execute a bash command; returns stdout, stderr, exit code, signal, durationMs, timedOut, truncated",
 };
 
 /**
@@ -67,6 +74,7 @@ export function toolKindFor(name: string): "read" | "edit" | "search" | "execute
 		case "grep":
 			return "search";
 		case "run_script":
+		case "bash":
 			return "execute";
 		default:
 			return "other";

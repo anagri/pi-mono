@@ -13,6 +13,9 @@ export interface Filesystem {
 	/** Overwrite (or create) a UTF-8 text file. Caller must ensure parent dir exists. */
 	writeTextFile(absolutePath: string, content: string): Promise<void>;
 
+	/** Append to (or create) a UTF-8 text file. Caller must ensure parent dir exists. */
+	appendTextFile(absolutePath: string, content: string): Promise<void>;
+
 	/** Direct children of the directory. Rejects if path is not a directory. */
 	list(absolutePath: string): Promise<DirEntry[]>;
 

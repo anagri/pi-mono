@@ -2,6 +2,7 @@
 // (test-app-cli, test-app-http). Single barrel so consumers import via
 // `@e2e/app-utils/cli`.
 
+export { createBashTerminal } from "./bash-terminal.js";
 export { defaultDbPath } from "./default-db-path.js";
 export { createNodeKvStore, type NodeKvStoreOptions } from "./kv-store.js";
 export { createNodeScriptExecutor } from "./script-executor.js";

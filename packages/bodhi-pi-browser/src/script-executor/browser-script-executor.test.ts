@@ -12,6 +12,9 @@ function memoryFs(files: Record<string, string>): Filesystem {
 		async writeTextFile() {
 			throw new Error("not implemented");
 		},
+		async appendTextFile() {
+			throw new Error("not implemented");
+		},
 		async list() {
 			throw new Error("not implemented");
 		},

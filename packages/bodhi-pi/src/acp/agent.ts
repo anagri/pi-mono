@@ -52,6 +52,7 @@ import type { SessionStore } from "@/sessions/session-store.js";
 import type { BodhiPiProjectSettings, ProviderOptionsEntry } from "@/settings/settings.js";
 import { SettingsService } from "@/settings/settings-service.js";
 import type { Skill } from "@/skills/skill.js";
+import type { Terminal } from "@/terminal/terminal.js";
 import { toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
 import { EXT_DELETE_SESSION } from "@/wire/constants.js";
@@ -74,6 +75,8 @@ export interface BodhiPiConfig {
 	appendSystemPrompt?: string;
 	/** When provided, the `run_script` built-in tool is registered. Hosts implement per their runtime. */
 	scriptExecutor?: ScriptExecutor;
+	/** When provided, the `bash` built-in tool is registered. Hosts implement per their runtime. */
+	terminal?: Terminal;
 	/** Lifecycle event handlers; map keyed by event type, each value an array of async handlers. */
 	eventHandlers?: BodhiPiEventHandlers;
 	/**

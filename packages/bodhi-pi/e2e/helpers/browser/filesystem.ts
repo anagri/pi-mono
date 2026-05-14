@@ -82,6 +82,9 @@ export function createBrowserFilesystem(opts: BrowserFilesystemOptions): Filesys
 		async writeTextFile(): Promise<void> {
 			return blockMutating("writeTextFile");
 		},
+		async appendTextFile(): Promise<void> {
+			return blockMutating("appendTextFile");
+		},
 		async mkdir(): Promise<void> {
 			return blockMutating("mkdir");
 		},
