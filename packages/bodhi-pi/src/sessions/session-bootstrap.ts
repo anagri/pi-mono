@@ -16,12 +16,13 @@ import {
 	type ModelThinkingLevel,
 	type ProviderResponse,
 } from "@earendil-works/pi-ai";
+import type { BodhiPiConfig } from "@/acp/agent.js";
+import { buildSystemPrompt } from "@/acp/system-prompt.js";
 import { loadProjectCommands } from "@/commands/discovery.js";
-import { type ContextFile, loadProjectContextFiles } from "@/core/resource-loader.js";
-import { buildSystemPrompt } from "@/core/system-prompt.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import { mergeCommands, mergeTools } from "@/extensions/merge.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
+import { type ModelRegistry, resolveProviderStreamOptions } from "@/models/registry.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
 import { type CompactionSettings, DEFAULT_COMPACTION_SETTINGS } from "@/sessions/compaction.js";
 import type { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.js";
@@ -33,8 +34,7 @@ import { mergeSettings } from "@/settings/settings-merge.js";
 import { loadProjectSkills } from "@/skills/discovery.js";
 import type { Skill } from "@/skills/skill.js";
 import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools } from "@/tools/index.js";
-import type { BodhiPiConfig } from "./agent.js";
-import { type ModelRegistry, resolveProviderStreamOptions } from "./model-registry.js";
+import { type ContextFile, loadProjectContextFiles } from "./resource-loader.js";
 
 export interface BootstrapDeps {
 	config: BodhiPiConfig;

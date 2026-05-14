@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { loadProjectContextFiles } from "@/core/resource-loader.js";
 import { createInMemoryFilesystem } from "@/index.js";
+import { loadProjectContextFiles } from "@/sessions/resource-loader.js";
 
 async function seed(fs: ReturnType<typeof createInMemoryFilesystem>, abspath: string, content: string) {
 	const dir = abspath.slice(0, abspath.lastIndexOf("/"));

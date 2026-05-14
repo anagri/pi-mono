@@ -302,7 +302,7 @@ export type BodhiPiEventType = BodhiPiEvent["type"];
 
 // === Handler shapes ===
 
-import type { Awaitable } from "@/_internal/awaitable.js";
+type Awaitable<T> = T | Promise<T>;
 
 /**
  * Per-event handler arrays. Handlers run sequentially in registration order.

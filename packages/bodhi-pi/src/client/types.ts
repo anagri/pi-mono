@@ -89,20 +89,7 @@ export interface KvRemoveResult {
 	key: string;
 }
 
-export interface ProviderApiKey {
-	value: string;
-	secret?: true;
-}
-
-export interface ProviderAuth {
-	api_key?: ProviderApiKey;
-	base_url?: string;
-}
-
-export interface ProviderAuthEntry {
-	provider: string;
-	config: ProviderAuth;
-}
+export type { ProviderApiKey, ProviderAuth, ProviderAuthEntry } from "@/kv/auth-format.js";
 
 export type AddProviderOptions = SessionRef;
 

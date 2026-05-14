@@ -1,10 +1,10 @@
 import type { AgentTool, Agent as PiAgent } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
-import type { ContextFile } from "@/core/resource-loader.js";
-import type { CompactionSettings } from "@/sessions/compaction.js";
 import type { BodhiPiProjectSettings } from "@/settings/settings.js";
 import type { Skill } from "@/skills/skill.js";
+import type { CompactionSettings } from "./compaction.js";
+import type { ContextFile } from "./resource-loader.js";
 
 /** Resolved per-provider stream options (retry + timeout) the session forwards into pi-ai. */
 export interface ResolvedRetryOptions {

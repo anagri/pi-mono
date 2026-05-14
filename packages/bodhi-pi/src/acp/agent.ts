@@ -34,11 +34,17 @@ import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { KvService } from "@/kv/kv-service.js";
 import type { KvStore } from "@/kv/kv-store.js";
+import { ModelRegistry } from "@/models/registry.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { extractText, extractToolCalls, formatLocationHint, isToolResultMessage } from "@/sessions/_shared.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
 import { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.js";
 import type { SessionEntry } from "@/sessions/entries.js";
+import {
+	type BootstrapDeps,
+	buildSessionState as buildSessionStateFn,
+	rehydrateSession as rehydrateSessionFn,
+} from "@/sessions/session-bootstrap.js";
 import { SessionGraphService } from "@/sessions/session-graph-service.js";
 import { SessionInfoService } from "@/sessions/session-info-service.js";
 import type { ResolvedRetryOptions, SessionState } from "@/sessions/session-state.js";
@@ -52,12 +58,6 @@ import { BODHI_PI_VERSION } from "@/version.js";
 import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "@/wire/constants.js";
 import { agentToolContentForAcp, mapStopReason, toolResultContentForAcp } from "@/wire/converters.js";
 import { validateSessionId } from "@/wire/validators.js";
-import { ModelRegistry } from "./model-registry.js";
-import {
-	type BootstrapDeps,
-	buildSessionState as buildSessionStateFn,
-	rehydrateSession as rehydrateSessionFn,
-} from "./session-bootstrap.js";
 
 export interface BodhiPiConfig {
 	/** Additive host-supplied models for providers not in pi-ai's built-in catalog (e.g. local Ollama). */

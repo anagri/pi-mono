@@ -1,4 +1,4 @@
-import type { ProviderAuth } from "../client/types.js";
+import type { ProviderAuth } from "@/kv/auth-format.js";
 
 export interface SlashArgs {
 	positionals: string[];

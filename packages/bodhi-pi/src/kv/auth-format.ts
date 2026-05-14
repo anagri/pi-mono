@@ -1,7 +1,21 @@
-import type { ProviderAuth } from "@/client/types.js";
 import { AUTH_PREFIX, type JsonValue } from "./kv-store.js";
 
 export { AUTH_PREFIX };
+
+export interface ProviderApiKey {
+	value: string;
+	secret?: true;
+}
+
+export interface ProviderAuth {
+	api_key?: ProviderApiKey;
+	base_url?: string;
+}
+
+export interface ProviderAuthEntry {
+	provider: string;
+	config: ProviderAuth;
+}
 
 /** Extract `auth.api_key.value` from the persisted `auth/<provider>` JsonValue; `undefined` on any shape mismatch. */
 export function extractAuthApiKey(auth: JsonValue): string | undefined {
