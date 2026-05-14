@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { type AgentSideConnection, RequestError } from "@agentclientprotocol/sdk";
-import type { AgentHelpers } from "@/acp/_helpers.js";
-import type { SessionState } from "@/acp/session-state.js";
 import { walkPath } from "@/sessions/build-context.js";
 import type { SessionEntry } from "@/sessions/entries.js";
+import { requireLiveSession, requireSessionRecord } from "@/sessions/resolution.js";
+import type { SessionState } from "@/sessions/session-state.js";
 import type { SessionStore } from "@/sessions/session-store.js";
 import { EXT_SESSION_CONFIG, EXT_SESSION_EXPORT, EXT_SESSION_SET_NAME, EXT_SESSION_STATS } from "@/wire/constants.js";
 import { validateSessionId } from "@/wire/validators.js";
@@ -16,7 +16,6 @@ export interface SessionInfoServiceDeps {
 	sessions: Map<string, SessionState>;
 	sessionStore: SessionStore;
 	conn: AgentSideConnection;
-	helpers: AgentHelpers;
 	appendEntry: AppendEntry;
 	getDefaultModelId: () => string | undefined;
 }
@@ -27,15 +26,15 @@ export interface SessionInfoServiceDeps {
  */
 export class SessionInfoService {
 	private readonly sessions: Map<string, SessionState>;
+	private readonly sessionStore: SessionStore;
 	private readonly conn: AgentSideConnection;
-	private readonly helpers: AgentHelpers;
 	private readonly appendEntry: AppendEntry;
 	private readonly getDefaultModelId: () => string | undefined;
 
 	constructor(deps: SessionInfoServiceDeps) {
 		this.sessions = deps.sessions;
+		this.sessionStore = deps.sessionStore;
 		this.conn = deps.conn;
-		this.helpers = deps.helpers;
 		this.appendEntry = deps.appendEntry;
 		this.getDefaultModelId = deps.getDefaultModelId;
 	}
@@ -58,8 +57,7 @@ export class SessionInfoService {
 	}
 
 	private async handleSessionConfig(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const sessionId = validateSessionId(EXT_SESSION_CONFIG, params);
-		const session = this.helpers.requireSession(EXT_SESSION_CONFIG, params);
+		const { sessionId, session } = requireLiveSession(this.sessions, EXT_SESSION_CONFIG, params);
 		return {
 			sessionId,
 			cwd: session.cwd,
@@ -102,7 +100,7 @@ export class SessionInfoService {
 	}
 
 	private async handleSessionStats(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { record } = await this.helpers.requireSessionRecord(EXT_SESSION_STATS, params);
+		const { record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_STATS, params);
 		const path = walkPath(record.entries, record.leafId ?? null);
 		let messageCount = 0;
 		let toolCallCount = 0;
@@ -130,7 +128,7 @@ export class SessionInfoService {
 	}
 
 	private async handleSessionExport(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { record } = await this.helpers.requireSessionRecord(EXT_SESSION_EXPORT, params);
+		const { record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_EXPORT, params);
 		const path = walkPath(record.entries, record.leafId ?? null);
 		const lines: string[] = [
 			JSON.stringify({

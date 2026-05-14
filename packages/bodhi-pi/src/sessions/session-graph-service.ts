@@ -1,6 +1,4 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import type { AgentHelpers } from "@/acp/_helpers.js";
-import type { SessionState } from "@/acp/session-state.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import {
 	EXT_SESSION_CLONE,
@@ -12,6 +10,8 @@ import {
 import { extractText } from "./_shared.js";
 import { buildSessionContext, walkPath } from "./build-context.js";
 import type { CompactionOrchestrator } from "./compaction-orchestrator.js";
+import { requireSessionRecord } from "./resolution.js";
+import type { SessionState } from "./session-state.js";
 import type { SessionStore } from "./session-store.js";
 
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -20,7 +20,6 @@ export interface SessionGraphServiceDeps {
 	sessions: Map<string, SessionState>;
 	sessionStore: SessionStore;
 	events: EventDispatcher;
-	helpers: AgentHelpers;
 	compactionOrchestrator: CompactionOrchestrator;
 }
 
@@ -33,14 +32,12 @@ export class SessionGraphService {
 	private readonly sessions: Map<string, SessionState>;
 	private readonly sessionStore: SessionStore;
 	private readonly events: EventDispatcher;
-	private readonly helpers: AgentHelpers;
 	private readonly compactionOrchestrator: CompactionOrchestrator;
 
 	constructor(deps: SessionGraphServiceDeps) {
 		this.sessions = deps.sessions;
 		this.sessionStore = deps.sessionStore;
 		this.events = deps.events;
-		this.helpers = deps.helpers;
 		this.compactionOrchestrator = deps.compactionOrchestrator;
 	}
 
@@ -55,7 +52,7 @@ export class SessionGraphService {
 	}
 
 	private async handleSessionTree(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { record } = await this.helpers.requireSessionRecord(EXT_SESSION_TREE, params);
+		const { record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_TREE, params);
 		const childCount = new Map<string, number>();
 		for (const entry of record.entries) {
 			if (entry.parentId) childCount.set(entry.parentId, (childCount.get(entry.parentId) ?? 0) + 1);
@@ -83,7 +80,7 @@ export class SessionGraphService {
 	}
 
 	private async handleSessionNavigate(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { sessionId, record } = await this.helpers.requireSessionRecord(EXT_SESSION_NAVIGATE, params);
+		const { sessionId, record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_NAVIGATE, params);
 		const targetEntryId = params.targetEntryId;
 		if (typeof targetEntryId !== "string") {
 			throw new RequestError(-32602, `${EXT_SESSION_NAVIGATE}: targetEntryId must be a string`);
@@ -145,7 +142,7 @@ export class SessionGraphService {
 	}
 
 	private async handleSessionEntries(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { record } = await this.helpers.requireSessionRecord(EXT_SESSION_ENTRIES, params);
+		const { record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_ENTRIES, params);
 		const path = walkPath(record.entries, record.leafId ?? null);
 		const out: { id: string; role: string; preview: string }[] = [];
 		for (const entry of path) {
@@ -160,7 +157,7 @@ export class SessionGraphService {
 	}
 
 	private async handleSessionFork(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { sessionId, record } = await this.helpers.requireSessionRecord(EXT_SESSION_FORK, params);
+		const { sessionId, record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_FORK, params);
 		const entryId = params.entryId;
 		const position = params.position === "at" ? "at" : "before";
 		if (typeof entryId !== "string") {
@@ -195,7 +192,7 @@ export class SessionGraphService {
 	}
 
 	private async handleSessionClone(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const { sessionId, record } = await this.helpers.requireSessionRecord(EXT_SESSION_CLONE, params);
+		const { sessionId, record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_CLONE, params);
 		const leafId = record.leafId ?? record.entries[record.entries.length - 1]?.id;
 		if (!leafId) throw new RequestError(-32603, "cannot clone an empty session");
 		if (!this.sessionStore.forkRecord) {

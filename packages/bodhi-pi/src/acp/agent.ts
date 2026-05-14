@@ -41,6 +41,7 @@ import { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.js";
 import type { SessionEntry } from "@/sessions/entries.js";
 import { SessionGraphService } from "@/sessions/session-graph-service.js";
 import { SessionInfoService } from "@/sessions/session-info-service.js";
+import type { ResolvedRetryOptions, SessionState } from "@/sessions/session-state.js";
 import type { SessionStore } from "@/sessions/session-store.js";
 import type { BodhiPiProjectSettings, ProviderOptionsEntry } from "@/settings/settings.js";
 import { SettingsService } from "@/settings/settings-service.js";
@@ -51,14 +52,12 @@ import { BODHI_PI_VERSION } from "@/version.js";
 import { EXT_DELETE_SESSION, MODEL_CONFIG_ID } from "@/wire/constants.js";
 import { agentToolContentForAcp, mapStopReason, toolResultContentForAcp } from "@/wire/converters.js";
 import { validateSessionId } from "@/wire/validators.js";
-import { AgentHelpers } from "./_helpers.js";
 import { ModelRegistry } from "./model-registry.js";
 import {
 	type BootstrapDeps,
 	buildSessionState as buildSessionStateFn,
 	rehydrateSession as rehydrateSessionFn,
 } from "./session-bootstrap.js";
-import type { ResolvedRetryOptions, SessionState } from "./session-state.js";
 
 export interface BodhiPiConfig {
 	/** Additive host-supplied models for providers not in pi-ai's built-in catalog (e.g. local Ollama). */
@@ -151,7 +150,6 @@ type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, un
 class BodhiPiAcpAgent implements AcpAgent {
 	private sessions = new Map<string, SessionState>();
 	private readonly events: EventDispatcher;
-	private readonly helpers: AgentHelpers;
 	private readonly logger: BodhiPiLogger;
 	private readonly modelRegistry: ModelRegistry;
 	private readonly kvService: KvService;
@@ -168,7 +166,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		private readonly config: BodhiPiConfig,
 		private readonly conn: AgentSideConnection,
 	) {
-		this.helpers = new AgentHelpers(this.sessions, config.sessionStore);
 		const logger: BodhiPiLogger = config.logger ?? console;
 		this.logger = logger;
 		// EventDispatcher is constructed once with both host-supplied handlers
@@ -216,13 +213,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 			...(config.globalFilesystem ? { globalFilesystem: config.globalFilesystem } : {}),
 			...(config.homeDir ? { homeDir: config.homeDir } : {}),
 			events: this.events,
-			helpers: this.helpers,
+			sessions: this.sessions,
 		});
 		this.sessionInfoService = new SessionInfoService({
 			sessions: this.sessions,
 			sessionStore: config.sessionStore,
 			conn: this.conn,
-			helpers: this.helpers,
 			appendEntry: this.appendEntry.bind(this),
 			getDefaultModelId: () => this.config.defaultModelId,
 		});
@@ -230,7 +226,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: this.sessions,
 			sessionStore: config.sessionStore,
 			events: this.events,
-			helpers: this.helpers,
 			appendEntry: this.appendEntry.bind(this),
 			resolveApiKey: (p: string) => this.modelRegistry.resolveProviderApiKey(p),
 			subscribeToAgent: (sid, sess, outcome) => this.subscribeToAgent(sid, sess, outcome),
@@ -241,7 +236,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: this.sessions,
 			sessionStore: config.sessionStore,
 			events: this.events,
-			helpers: this.helpers,
 			compactionOrchestrator: this.compactionOrchestrator,
 		});
 

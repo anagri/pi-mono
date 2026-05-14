@@ -3,8 +3,6 @@ import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentLoopTurnUpdate, AgentMessage, Agent as PiAgent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, StopReason as PiStopReason } from "@earendil-works/pi-ai";
 import { isContextOverflow } from "@earendil-works/pi-ai";
-import type { AgentHelpers } from "@/acp/_helpers.js";
-import type { SessionState } from "@/acp/session-state.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { StopReason } from "@/events/types.js";
 import { EXT_SESSION_COMPACT } from "@/wire/constants.js";
@@ -20,6 +18,8 @@ import {
 	runCompaction,
 } from "./compaction.js";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry } from "./entries.js";
+import { requireLiveSession, requireSessionRecord } from "./resolution.js";
+import type { SessionState } from "./session-state.js";
 import type { SessionRecord, SessionStore } from "./session-store.js";
 
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -36,7 +36,6 @@ export interface CompactionOrchestratorDeps {
 	sessions: Map<string, SessionState>;
 	sessionStore: SessionStore;
 	events: EventDispatcher;
-	helpers: AgentHelpers;
 	appendEntry: AppendEntry;
 	resolveApiKey: ResolveApiKey;
 	subscribeToAgent: SubscribeToAgent;
@@ -58,7 +57,6 @@ export class CompactionOrchestrator {
 	private readonly sessions: Map<string, SessionState>;
 	private readonly sessionStore: SessionStore;
 	private readonly events: EventDispatcher;
-	private readonly helpers: AgentHelpers;
 	private readonly appendEntry: AppendEntry;
 	private readonly resolveApiKey: ResolveApiKey;
 	private readonly subscribeToAgent: SubscribeToAgent;
@@ -68,7 +66,6 @@ export class CompactionOrchestrator {
 		this.sessions = deps.sessions;
 		this.sessionStore = deps.sessionStore;
 		this.events = deps.events;
-		this.helpers = deps.helpers;
 		this.appendEntry = deps.appendEntry;
 		this.resolveApiKey = deps.resolveApiKey;
 		this.subscribeToAgent = deps.subscribeToAgent;
@@ -150,8 +147,8 @@ export class CompactionOrchestrator {
 	}
 
 	private async handleSessionCompact(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const session = this.helpers.requireSession(EXT_SESSION_COMPACT, params);
-		const { sessionId, record } = await this.helpers.requireSessionRecord(EXT_SESSION_COMPACT, params);
+		const { session } = requireLiveSession(this.sessions, EXT_SESSION_COMPACT, params);
+		const { sessionId, record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_COMPACT, params);
 		const customInstructions = typeof params.customInstructions === "string" ? params.customInstructions : undefined;
 
 		const outcome = await this.runAndPersistCompaction(sessionId, session, "manual", {

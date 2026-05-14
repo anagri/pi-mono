@@ -25,6 +25,7 @@ import type { ExtensionRunner } from "@/extensions/runner.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
 import { type CompactionSettings, DEFAULT_COMPACTION_SETTINGS } from "@/sessions/compaction.js";
 import type { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.js";
+import type { ResolvedRetryOptions, SessionState } from "@/sessions/session-state.js";
 import type { SessionStore } from "@/sessions/session-store.js";
 import { type BodhiPiProjectSettings, loadProjectSettings } from "@/settings/settings.js";
 import { loadGlobalSettings } from "@/settings/settings-global.js";
@@ -34,7 +35,6 @@ import type { Skill } from "@/skills/skill.js";
 import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools } from "@/tools/index.js";
 import type { BodhiPiConfig } from "./agent.js";
 import { type ModelRegistry, resolveProviderStreamOptions } from "./model-registry.js";
-import type { ResolvedRetryOptions, SessionState } from "./session-state.js";
 
 export interface BootstrapDeps {
 	config: BodhiPiConfig;

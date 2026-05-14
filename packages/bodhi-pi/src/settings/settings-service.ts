@@ -1,8 +1,8 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import type { AgentHelpers } from "@/acp/_helpers.js";
-import type { SessionState } from "@/acp/session-state.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
+import { requireLiveSession } from "@/sessions/resolution.js";
+import type { SessionState } from "@/sessions/session-state.js";
 import {
 	EXT_SESSION_SETTINGS_GET,
 	EXT_SESSION_SETTINGS_LIST,
@@ -32,7 +32,7 @@ export interface SettingsServiceDeps {
 	globalFilesystem?: Filesystem;
 	homeDir?: string;
 	events: EventDispatcher;
-	helpers: AgentHelpers;
+	sessions: Map<string, SessionState>;
 }
 
 /**
@@ -44,14 +44,14 @@ export class SettingsService {
 	private readonly globalFilesystem: Filesystem | undefined;
 	private readonly homeDir: string | undefined;
 	private readonly events: EventDispatcher;
-	private readonly helpers: AgentHelpers;
+	private readonly sessions: Map<string, SessionState>;
 
 	constructor(deps: SettingsServiceDeps) {
 		this.filesystem = deps.filesystem;
 		this.globalFilesystem = deps.globalFilesystem;
 		this.homeDir = deps.homeDir;
 		this.events = deps.events;
-		this.helpers = deps.helpers;
+		this.sessions = deps.sessions;
 	}
 
 	register(): Array<[string, ExtHandler]> {
@@ -97,7 +97,7 @@ export class SettingsService {
 	}
 
 	private async handleSettingsGet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_GET, params);
+		const { session } = requireLiveSession(this.sessions, EXT_SESSION_SETTINGS_GET, params);
 		const key = requireStringParam(EXT_SESSION_SETTINGS_GET, params, "key");
 		const scope = this.parseScope(EXT_SESSION_SETTINGS_GET, params.scope, "session");
 		const path = parseDottedKey(key);
@@ -124,7 +124,7 @@ export class SettingsService {
 	}
 
 	private async handleSettingsSet(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_SET, params);
+		const { session } = requireLiveSession(this.sessions, EXT_SESSION_SETTINGS_SET, params);
 		const key = requireStringParam(EXT_SESSION_SETTINGS_SET, params, "key");
 		if (!("value" in params)) {
 			throw new RequestError(-32602, `${EXT_SESSION_SETTINGS_SET}: value is required`);
@@ -167,7 +167,7 @@ export class SettingsService {
 	}
 
 	private async handleSettingsUnset(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_UNSET, params);
+		const { session } = requireLiveSession(this.sessions, EXT_SESSION_SETTINGS_UNSET, params);
 		const key = requireStringParam(EXT_SESSION_SETTINGS_UNSET, params, "key");
 		const scope = this.parseScope(EXT_SESSION_SETTINGS_UNSET, params.scope, "session");
 		const path = parseDottedKey(key);
@@ -204,7 +204,7 @@ export class SettingsService {
 	}
 
 	private async handleSettingsList(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const session = this.helpers.requireSession(EXT_SESSION_SETTINGS_LIST, params);
+		const { session } = requireLiveSession(this.sessions, EXT_SESSION_SETTINGS_LIST, params);
 		const raw = params.scope;
 		const scope: SettingsScope | "effective" =
 			raw === undefined || raw === "effective"
