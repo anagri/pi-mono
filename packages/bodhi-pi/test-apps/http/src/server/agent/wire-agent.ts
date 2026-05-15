@@ -128,6 +128,9 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 			kvStore,
 			scriptExecutor,
 			terminal,
+			// http test-app rebuilds the agent every turn; long-lived stdio MCP
+			// sub-processes don't survive that lifecycle.
+			supportsMcpStdio: false,
 			eventHandlers: eventForwardingHandlers(conn),
 			...pickDefined({
 				models: opts.models,

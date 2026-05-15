@@ -95,6 +95,71 @@ export type AddProviderOptions = SessionRef;
 
 export type RemoveProviderOptions = SessionRef;
 
+// --- MCP --------------------------------------------------------------
+
+export type McpTransport = "http" | "stdio";
+export type McpAuthMode = "public" | "header" | "query" | "oauth-dcr" | "oauth-preregistered";
+export type McpStatus = "connected" | "disconnected" | "error";
+
+export interface McpNamedValueInput {
+	name: string;
+	value: string;
+}
+
+export interface McpAuthInput {
+	mode: McpAuthMode;
+	headers?: McpNamedValueInput[];
+	queryParams?: McpNamedValueInput[];
+}
+
+export interface McpAddHttpParams {
+	url: string;
+	auth?: McpAuthInput;
+	label?: string;
+}
+
+export interface McpAddStdioParams {
+	command: string;
+	args?: string[];
+	env?: McpNamedValueInput[];
+	label?: string;
+}
+
+export type McpAddParams = McpAddHttpParams | McpAddStdioParams;
+
+export interface McpAddResult {
+	slug: string;
+}
+
+export interface McpConnectParams extends SessionRef {
+	slug: string;
+}
+
+export interface McpConnectResult {
+	tools: string[];
+}
+
+export interface McpDisconnectResult {
+	slug: string;
+}
+
+export interface McpRemoveResult {
+	slug: string;
+}
+
+export interface McpListItem {
+	slug: string;
+	label: string;
+	transport: McpTransport;
+	status: McpStatus;
+	url?: string;
+	command?: string;
+}
+
+export interface McpToolsResult {
+	tools: string[];
+}
+
 export interface CompactSessionParams extends SessionRef {
 	customInstructions?: string;
 }

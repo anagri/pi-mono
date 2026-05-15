@@ -32,6 +32,7 @@ export interface TestHarnessOptions {
 	homeDir?: string;
 	kvStore?: KvStore;
 	defaultThinkingLevel?: ModelThinkingLevel;
+	supportsMcpStdio?: boolean;
 }
 
 export interface TestHarness {
@@ -70,6 +71,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			...(opts.compaction ? { compaction: opts.compaction } : {}),
 			...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
 			...(opts.defaultThinkingLevel !== undefined ? { defaultThinkingLevel: opts.defaultThinkingLevel } : {}),
+			...(opts.supportsMcpStdio !== undefined ? { supportsMcpStdio: opts.supportsMcpStdio } : {}),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {

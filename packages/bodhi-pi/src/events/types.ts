@@ -238,6 +238,23 @@ export interface BranchSummaryCreatedEvent {
 	summary: string;
 }
 
+// === MCP lifecycle ===
+
+export interface McpStatusChangeEvent {
+	type: "mcp_status_change";
+	sessionId: string;
+	slug: string;
+	status: "connected" | "disconnected" | "error";
+	errorMessage?: string;
+}
+
+export interface McpToolsChangeEvent {
+	type: "mcp_tools_change";
+	sessionId: string;
+	slug: string;
+	toolNames: string[];
+}
+
 // === Session navigate ===
 
 export interface SessionNavigateEvent {
@@ -296,7 +313,9 @@ export type BodhiPiEvent =
 	| BranchSummaryCreatedEvent
 	| SessionNavigateEvent
 	| SessionForkEvent
-	| SessionCloneEvent;
+	| SessionCloneEvent
+	| McpStatusChangeEvent
+	| McpToolsChangeEvent;
 
 export type BodhiPiEventType = BodhiPiEvent["type"];
 
@@ -342,4 +361,6 @@ export interface BodhiPiEventHandlers {
 	session_navigate?: ((event: SessionNavigateEvent) => Awaitable<void>)[];
 	session_fork?: ((event: SessionForkEvent) => Awaitable<void>)[];
 	session_clone?: ((event: SessionCloneEvent) => Awaitable<void>)[];
+	mcp_status_change?: ((event: McpStatusChangeEvent) => Awaitable<void>)[];
+	mcp_tools_change?: ((event: McpToolsChangeEvent) => Awaitable<void>)[];
 }

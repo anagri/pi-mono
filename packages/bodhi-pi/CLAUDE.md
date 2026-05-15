@@ -83,6 +83,22 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 - **No `node:fs` in core, but `Filesystem`-based walks are allowed.** Core never imports `node:fs`/`node:os`. Walks over project-rooted files (AGENTS.md / CLAUDE.md, `.bodhi-pi/settings.json`, `.bodhi-pi/commands/`, `.bodhi-pi/skills/`) go through the injected `Filesystem`. The walk starts at the session `cwd` and ascends ancestors using `path.posix.dirname` — terminates naturally when the host's mount root is reached (FSA-rooted browser hosts) or at `/` for Node.
 - **ACP `fs/*` methods are deliberately absent** — orthogonal to our host-injected `Filesystem`.
 
+## MCP (Model Context Protocol)
+
+First-party in `src/mcp/`. The agent owns the MCP client; UI hosts never hold a transport.
+
+| Surface | Where |
+|---|---|
+| Persisted config | KV under `mcp/<slug>` — secrets tagged `{value, secret: true}` and masked on ACP reads |
+| Hydration | `agent.ts` calls `mcpService.hydrate(sessionId, params.mcpServers)` after `buildSessionStateFn` returns. Entries with `lastKnownStatus === "connected"` auto-connect; ACP-native `mcpServers` from `NewSessionRequest` connect ephemerally |
+| Tool surface | `McpRegistry` is per-session; on connect/disconnect it rebuilds `piAgent.state.tools` as `mergeTools(session.tools, registry.getTools(sessionId))`. Tool names are namespaced `<slug>__<tool>` |
+| Slash commands | `/mcps`, `/mcp add|connect|disconnect|reconnect|remove|tools|logout` (canonical impl in `bodhi-pi-cli`) |
+| Extension methods | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,oauth/start,oauth/finish}` |
+
+**Transports.** http-streamable everywhere; stdio in node-host runtimes only. Hosts that cannot spawn (`bodhi-pi-browser`, `bodhi-pi-chrome-ext`) and stateless rebuild hosts (`bodhi-pi-http`, per-connection ws) MUST pass `supportsMcpStdio: false` when constructing the agent. `_bodhi-pi/mcp/add` with `command=` then rejects with `-32601` rather than silently saving an unusable entry.
+
+**OAuth-DCR.** `KvOAuthProvider` implements the SDK's `OAuthClientProvider` against kvStore; the host returns the authorize URL via `EXT_MCP_OAUTH_START` and exchanges the code via `EXT_MCP_OAUTH_FINISH`. The actual user redirect is host-specific (cli: loopback HTTP, web: same-origin callback + BroadcastChannel, chrome-ext: `chrome.identity.launchWebAuthFlow`) — host packages own the UX, the agent owns the state machine.
+
 ## pi-agent-core import policy
 
 `src/acp/agent.ts` imports `Agent` directly from `@earendil-works/pi-agent-core/dist/agent.js`, NOT from the package barrel. This is **intentional and must not be "fixed"** by future agents.

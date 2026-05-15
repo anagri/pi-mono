@@ -176,6 +176,7 @@ export function bootstrapAgentWorker(): void {
 				kvStore,
 				scriptExecutor,
 				terminal,
+				supportsMcpStdio: false,
 				...(models && models.length > 0 ? { models } : {}),
 				...(defaultModelId !== undefined ? { defaultModelId } : {}),
 				...(getApiKey ? { getApiKey } : {}),

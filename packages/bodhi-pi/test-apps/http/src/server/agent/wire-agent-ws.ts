@@ -112,6 +112,8 @@ export async function wireAgentForWsConnection(opts: WireAgentWsOptions): Promis
 			kvStore,
 			scriptExecutor,
 			terminal,
+			// stdio MCP scope is limited to in-memory + cli in this phase.
+			supportsMcpStdio: false,
 			eventHandlers: eventForwardingHandlers(conn),
 			...pickDefined({
 				models: opts.models,

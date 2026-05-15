@@ -18,6 +18,15 @@ import {
 	EXT_KV_LIST,
 	EXT_KV_REMOVE,
 	EXT_KV_SET,
+	EXT_MCP_ADD,
+	EXT_MCP_CONNECT,
+	EXT_MCP_DISCONNECT,
+	EXT_MCP_LIST,
+	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_START,
+	EXT_MCP_RECONNECT,
+	EXT_MCP_REMOVE,
+	EXT_MCP_TOOLS,
 	EXT_SESSION_CLONE,
 	EXT_SESSION_COMPACT,
 	EXT_SESSION_CONFIG,
@@ -53,6 +62,14 @@ import type {
 	KvRemoveResult,
 	KvSetParams,
 	KvSetResult,
+	McpAddParams,
+	McpAddResult,
+	McpConnectParams,
+	McpConnectResult,
+	McpDisconnectResult,
+	McpListItem,
+	McpRemoveResult,
+	McpToolsResult,
 	ModelConfigState,
 	NavigateSessionParams,
 	NavigateSessionResult,
@@ -270,6 +287,90 @@ export class BodhiPiClient {
 		const result = await this.ext<KvGetResult>(EXT_KV_GET, { key: providerKey(provider) });
 		const config = parseProviderAuth(result.value);
 		return config ? { provider, config } : null;
+	}
+
+	mcpAdd(params: McpAddParams): Promise<McpAddResult> {
+		const body: Record<string, unknown> = {};
+		if ("url" in params) {
+			body.url = params.url;
+		} else {
+			body.command = params.command;
+			if (params.args !== undefined) body.args = params.args;
+			if (params.env !== undefined)
+				body.env = params.env.map((e) => ({ name: e.name, value: e.value, secret: true }));
+		}
+		if ("auth" in params && params.auth !== undefined) {
+			const auth: Record<string, unknown> = { mode: params.auth.mode };
+			if (params.auth.headers !== undefined)
+				auth.headers = params.auth.headers.map((h) => ({ name: h.name, value: h.value, secret: true }));
+			if (params.auth.queryParams !== undefined)
+				auth.queryParams = params.auth.queryParams.map((q) => ({ name: q.name, value: q.value, secret: true }));
+			body.auth = auth;
+		}
+		if (params.label !== undefined) body.label = params.label;
+		return this.ext<McpAddResult>(EXT_MCP_ADD, body);
+	}
+
+	mcpRemove(params: { slug: string } & SessionRef): Promise<McpRemoveResult> {
+		return this.ext<McpRemoveResult>(EXT_MCP_REMOVE, {
+			slug: params.slug,
+			...pickDefined({ sessionId: params.sessionId }),
+		});
+	}
+
+	mcpConnect(params: McpConnectParams): Promise<McpConnectResult> {
+		return this.ext<McpConnectResult>(EXT_MCP_CONNECT, {
+			sessionId: this.requireSession(params),
+			slug: params.slug,
+		});
+	}
+
+	mcpDisconnect(params: McpConnectParams): Promise<McpDisconnectResult> {
+		return this.ext<McpDisconnectResult>(EXT_MCP_DISCONNECT, {
+			sessionId: this.requireSession(params),
+			slug: params.slug,
+		});
+	}
+
+	mcpReconnect(params: McpConnectParams): Promise<McpConnectResult> {
+		return this.ext<McpConnectResult>(EXT_MCP_RECONNECT, {
+			sessionId: this.requireSession(params),
+			slug: params.slug,
+		});
+	}
+
+	async mcpList(): Promise<McpListItem[]> {
+		const res = await this.ext<{ entries: McpListItem[] }>(EXT_MCP_LIST, {});
+		return res.entries ?? [];
+	}
+
+	async mcpTools(params: { slug: string } & SessionRef): Promise<string[]> {
+		const res = await this.ext<McpToolsResult>(EXT_MCP_TOOLS, {
+			sessionId: this.requireSession(params),
+			slug: params.slug,
+		});
+		return res.tools ?? [];
+	}
+
+	mcpOAuthStart(params: { slug: string; redirectUri: string }): Promise<{
+		authorized: boolean;
+		authorizeUrl?: string;
+	}> {
+		return this.ext(EXT_MCP_OAUTH_START, { slug: params.slug, redirectUri: params.redirectUri });
+	}
+
+	mcpOAuthFinish(params: {
+		slug: string;
+		code: string;
+		redirectUri: string;
+		sessionId?: string;
+	}): Promise<McpConnectResult> {
+		return this.ext<McpConnectResult>(EXT_MCP_OAUTH_FINISH, {
+			sessionId: this.requireSession(params),
+			slug: params.slug,
+			code: params.code,
+			redirectUri: params.redirectUri,
+		});
 	}
 
 	async listProviders(): Promise<ProviderAuthEntry[]> {

@@ -34,6 +34,7 @@ import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { KvService } from "@/kv/kv-service.js";
 import type { KvStore } from "@/kv/kv-store.js";
+import { McpService } from "@/mcp/mcp-service.js";
 import { ModelRegistry } from "@/models/registry.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { extractText, extractToolCalls, formatLocationHint, isToolResultMessage } from "@/sessions/_shared.js";
@@ -96,6 +97,11 @@ export interface BodhiPiConfig {
 	/** Host-explicit default thinking level; beats global/project settings. */
 	defaultThinkingLevel?: ModelThinkingLevel;
 	/**
+	 * When `false`, `_bodhi-pi/mcp/add` rejects `command=…` (stdio) MCP entries with a clear error.
+	 * Defaults to `true`. Browser-only / chrome-ext hosts and stateless HTTP servers should set `false`.
+	 */
+	supportsMcpStdio?: boolean;
+	/**
 	 * Host-supplied logger for non-fatal internal errors (extension factory failures, event-handler
 	 * exceptions, branch-summarisation fall-through). Defaults to `console.error` when unset.
 	 */
@@ -149,6 +155,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private readonly logger: BodhiPiLogger;
 	private readonly modelRegistry: ModelRegistry;
 	private readonly kvService: KvService;
+	private readonly mcpService: McpService;
 	private readonly settingsService: SettingsService;
 	private readonly sessionInfoService: SessionInfoService;
 	private readonly compactionOrchestrator: CompactionOrchestrator;
@@ -188,6 +195,14 @@ class BodhiPiAcpAgent implements AcpAgent {
 		this.kvService = new KvService({
 			...pickDefined({ kvStore: config.kvStore }),
 			events: this.events,
+		});
+		this.mcpService = new McpService({
+			...pickDefined({ kvStore: config.kvStore }),
+			events: this.events,
+			conn: this.conn,
+			sessions: this.sessions,
+			logger,
+			supportsStdio: config.supportsMcpStdio ?? true,
 		});
 		this.settingsService = new SettingsService({
 			filesystem: config.filesystem,
@@ -230,6 +245,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			[EXT_DELETE_SESSION, this.handleSessionDelete.bind(this)],
 			...this.sessionGraphService.register(),
 			...this.kvService.register(),
+			...this.mcpService.register(),
 			...this.settingsService.register(),
 			...this.sessionInfoService.register(),
 			...this.compactionOrchestrator.register(),
@@ -295,7 +311,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					resume: {},
 				},
 				promptCapabilities: { image: false, audio: false, embeddedContext: false },
-				mcpCapabilities: { http: false, sse: false },
+				mcpCapabilities: { http: true, sse: false },
 				_meta: {
 					"bodhi-pi": { version: BODHI_PI_VERSION },
 				},
@@ -313,6 +329,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		await buildSessionStateFn(this.bootstrapDeps(), { sessionId: record.id, model: null, cwd: record.cwd });
 		await this.advertiseSlashable(record.id);
+		await this.mcpService.hydrate(record.id, params.mcpServers);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: record.id,
@@ -394,6 +411,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 
 		await this.advertiseSlashable(params.sessionId);
+		await this.mcpService.hydrate(params.sessionId, params.mcpServers);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
@@ -410,6 +428,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// Per ACP spec: rehydrate without replaying history.
 		await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
 		await this.advertiseSlashable(params.sessionId);
+		await this.mcpService.hydrate(params.sessionId, params.mcpServers);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
@@ -440,6 +459,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const cached = this.sessions.get(params.sessionId);
 		// Per ACP session/close: drop runtime state but keep the persisted record.
 		cached?.runtime.piAgent.abort();
+		await this.mcpService.closeSession(params.sessionId);
 		this.sessions.delete(params.sessionId);
 		await this.events.emit({ type: "session_shutdown", sessionId: params.sessionId });
 		return {};
@@ -454,6 +474,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private async handleSessionDelete(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const sessionId = validateSessionId(EXT_DELETE_SESSION, params);
 		this.sessions.get(sessionId)?.runtime.piAgent.abort();
+		await this.mcpService.closeSession(sessionId);
 		this.sessions.delete(sessionId);
 		await this.config.sessionStore.delete(sessionId);
 		await this.events.emit({ type: "session_shutdown", sessionId });

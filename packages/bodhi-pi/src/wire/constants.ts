@@ -79,3 +79,22 @@ export const EXT_KV_GET = "_bodhi-pi/kv/get";
 export const EXT_KV_LIST = "_bodhi-pi/kv/list";
 /** Remove a KV entry. */
 export const EXT_KV_REMOVE = "_bodhi-pi/kv/remove";
+
+/** Persist a new MCP server entry under `mcp/<slug>`. Params: { url?, command?, args?, env?, auth?, label? }. Returns `{ slug }`. */
+export const EXT_MCP_ADD = "_bodhi-pi/mcp/add";
+/** Remove `mcp/<slug>` from KV. Disconnects in-session client first. */
+export const EXT_MCP_REMOVE = "_bodhi-pi/mcp/remove";
+/** Connect (or reuse) an MCP client for `slug`, register its tools on the active session. Returns `{ tools }`. */
+export const EXT_MCP_CONNECT = "_bodhi-pi/mcp/connect";
+/** Disconnect MCP client for `slug` and unregister its tools from the active session. */
+export const EXT_MCP_DISCONNECT = "_bodhi-pi/mcp/disconnect";
+/** Disconnect + connect for `slug`. */
+export const EXT_MCP_RECONNECT = "_bodhi-pi/mcp/reconnect";
+/** List MCP entries (slug, label, status, transport). Secret values masked. */
+export const EXT_MCP_LIST = "_bodhi-pi/mcp/list";
+/** List currently registered tools for `slug` in the active session. */
+export const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
+/** Start OAuth flow for `slug`. Returns `{ authorizeUrl, state }`. Phase 3. */
+export const EXT_MCP_OAUTH_START = "_bodhi-pi/mcp/oauth/start";
+/** Finish OAuth flow with `{ code, state }`. Returns `{ tools }`. Phase 3. */
+export const EXT_MCP_OAUTH_FINISH = "_bodhi-pi/mcp/oauth/finish";

@@ -65,6 +65,34 @@ async function spawnVitePreview(): Promise<ChildProcess> {
 	return child;
 }
 
+async function spawnMcpEverythingHttp(port: number): Promise<ChildProcess> {
+	const child = spawn("npx", ["--yes", "@modelcontextprotocol/server-everything", "streamableHttp"], {
+		env: { ...process.env, PORT: String(port), FORCE_COLOR: "0" },
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	await new Promise<void>((resolve, reject) => {
+		let buf = "";
+		const timer = setTimeout(() => reject(new Error(`mcp-everything did not bind within 30000ms`)), 30_000);
+		const onData = (chunk: Buffer | string) => {
+			buf += chunk.toString();
+			if (/listening on port/i.test(buf)) {
+				clearTimeout(timer);
+				resolve();
+			}
+		};
+		child.stdout?.on("data", onData);
+		child.stderr?.on("data", onData);
+		child.once("exit", (code) => {
+			clearTimeout(timer);
+			reject(new Error(`mcp-everything exited before binding (code=${code}); buf=${buf.slice(0, 200)}`));
+		});
+	});
+	// Keep draining stdio so the child doesn't block on backpressure for the rest of the run.
+	child.stdout?.on("data", () => {});
+	child.stderr?.on("data", () => {});
+	return child;
+}
+
 async function spawnTestAppHttp(label: string): Promise<{ child: ChildProcess; port: number; dataDir: string }> {
 	const dataDir = await mkdtemp(path.join(os.tmpdir(), `bodhi-pi-e2e-${label}-`));
 	const child = spawn(
@@ -101,11 +129,18 @@ export async function setup(): Promise<() => Promise<void>> {
 	// Vitest's projects mode invokes each project's globalSetup independently;
 	// the same env vars + spawned processes would race across projects. Bail
 	// out if a prior project's setup has already populated the env so the
-	// shared test-app instances (test-app-http × 2, vite preview, chromium)
-	// boot once for the entire run.
+	// shared test-app instances (test-app-http × 2, vite preview, chromium,
+	// mcp-everything) boot once for the entire run.
 	if (process.env.BODHI_PI_E2E_BROWSER_BASE_URL) {
 		return async () => {};
 	}
+
+	// Shared mcp-everything instance (http-streamable) for MCP e2e across all
+	// runtimes. Single port reused; tests slug-collision-resolve to keep slugs
+	// unique within each session.
+	const MCP_EVERYTHING_PORT = 33345;
+	const mcpEverything = await spawnMcpEverythingHttp(MCP_EVERYTHING_PORT);
+	process.env.BODHI_PI_E2E_MCP_EVERYTHING_HTTP_URL = `http://localhost:${MCP_EVERYTHING_PORT}/mcp`;
 
 	// Two shared test-app-http instances for the run: one for the |http| project
 	// (per-turn agent rebuild over HTTP+SSE on /acp) and one for the |ws| project
@@ -143,6 +178,11 @@ export async function setup(): Promise<() => Promise<void>> {
 		}
 		try {
 			viteChild.kill("SIGTERM");
+		} catch {
+			// already exited
+		}
+		try {
+			mcpEverything.kill("SIGTERM");
 		} catch {
 			// already exited
 		}
