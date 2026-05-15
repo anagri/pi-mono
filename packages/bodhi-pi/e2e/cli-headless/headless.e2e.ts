@@ -11,7 +11,7 @@ import { afterEach, expect, test } from "vitest";
 // the in-memory project doesn't include this directory (see vitest.e2e.config.ts).
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "test-apps", "cli", "dist", "test-app-cli", "src", "cli.js");
+const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "test-apps", "cli", "dist", "cli.js");
 
 interface HeadlessSession {
 	child: ChildProcessByStdio<NodeWritable, NodeReadable, null>;

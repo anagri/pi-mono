@@ -16,6 +16,13 @@ import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from
 const MODEL_CONFIG_ID = "model";
 const EXT_SESSION_FORK = "_bodhi-pi/session/fork";
 const EXT_SESSION_CLONE = "_bodhi-pi/session/clone";
+const EXT_MCP_ADD = "_bodhi-pi/mcp/add";
+const EXT_MCP_REMOVE = "_bodhi-pi/mcp/remove";
+const EXT_MCP_CONNECT = "_bodhi-pi/mcp/connect";
+const EXT_MCP_DISCONNECT = "_bodhi-pi/mcp/disconnect";
+const EXT_MCP_RECONNECT = "_bodhi-pi/mcp/reconnect";
+const EXT_MCP_LIST = "_bodhi-pi/mcp/list";
+const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
 
 export interface SlashState {
 	sessionId: string;
@@ -194,7 +201,160 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 			return { handled: true };
 		}
 
+		case "/mcps": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_MCP_LIST, {})) as {
+					entries: Array<{ slug: string; status: string; transport: string; url?: string; command?: string }>;
+				};
+				if (!result.entries || result.entries.length === 0) {
+					ctx.pushSystemMessage("(no MCPs configured)", { "data-mcp-event": "list-empty" });
+				} else {
+					const lines = ["mcps:"];
+					for (const e of result.entries) {
+						lines.push(`  ${e.slug}  ${e.status}  ${e.transport}  ${e.url ?? e.command ?? ""}`);
+					}
+					ctx.pushSystemMessage(lines.join("\n"), {
+						"data-mcp-event": "list",
+						"data-mcp-count": String(result.entries.length),
+					});
+				}
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/mcp": {
+			const sub = parts[1];
+			const rest = parts.slice(2);
+			return await handleMcpSubcommand(sub, rest, ctx);
+		}
+
 		default:
 			return { handled: false };
 	}
+}
+
+async function handleMcpSubcommand(
+	sub: string | undefined,
+	rest: string[],
+	ctx: SlashContext,
+): Promise<SlashOutcome> {
+	try {
+		if (sub === "add") {
+			const args = parseMcpAddArgs(rest);
+			if (args.error) {
+				ctx.pushSystemMessage(args.error);
+				return { handled: true };
+			}
+			const params: Record<string, unknown> = {};
+			if (args.url) params.url = args.url;
+			if (args.command) params.command = args.command;
+			if (args.cmdArgs) params.args = args.cmdArgs;
+			if (args.auth) params.auth = args.auth;
+			if (args.label) params.label = args.label;
+			const result = (await ctx.conn.extMethod(EXT_MCP_ADD, params)) as { slug: string };
+			ctx.pushSystemMessage(`added: ${result.slug}`, {
+				"data-mcp-event": "added",
+				"data-mcp-slug": result.slug,
+			});
+			return { handled: true };
+		}
+		const slug = rest[0];
+		if (!sub || !slug) {
+			ctx.pushSystemMessage("usage: /mcp <add|connect|disconnect|reconnect|remove|tools> [args…]");
+			return { handled: true };
+		}
+		if (sub === "connect") {
+			const result = (await ctx.conn.extMethod(EXT_MCP_CONNECT, {
+				sessionId: ctx.state.sessionId,
+				slug,
+			})) as { tools: string[] };
+			ctx.pushSystemMessage(`connected ${slug}: ${result.tools.join(", ") || "(no tools)"}`, {
+				"data-mcp-event": "connected",
+				"data-mcp-slug": slug,
+				"data-mcp-tool-count": String(result.tools.length),
+			});
+		} else if (sub === "disconnect") {
+			await ctx.conn.extMethod(EXT_MCP_DISCONNECT, { sessionId: ctx.state.sessionId, slug });
+			ctx.pushSystemMessage(`disconnected ${slug}`, {
+				"data-mcp-event": "disconnected",
+				"data-mcp-slug": slug,
+			});
+		} else if (sub === "reconnect") {
+			const result = (await ctx.conn.extMethod(EXT_MCP_RECONNECT, {
+				sessionId: ctx.state.sessionId,
+				slug,
+			})) as { tools: string[] };
+			ctx.pushSystemMessage(`reconnected ${slug}: ${result.tools.join(", ") || "(no tools)"}`, {
+				"data-mcp-event": "reconnected",
+				"data-mcp-slug": slug,
+			});
+		} else if (sub === "remove") {
+			await ctx.conn.extMethod(EXT_MCP_REMOVE, { sessionId: ctx.state.sessionId, slug });
+			ctx.pushSystemMessage(`removed ${slug}`, {
+				"data-mcp-event": "removed",
+				"data-mcp-slug": slug,
+			});
+		} else if (sub === "tools") {
+			const result = (await ctx.conn.extMethod(EXT_MCP_TOOLS, {
+				sessionId: ctx.state.sessionId,
+				slug,
+			})) as { tools: string[] };
+			if (result.tools.length === 0) {
+				ctx.pushSystemMessage(`(no tools — is ${slug} connected?)`, {
+					"data-mcp-event": "tools-empty",
+					"data-mcp-slug": slug,
+				});
+			} else {
+				ctx.pushSystemMessage(`tools for ${slug}:\n  ${result.tools.join("\n  ")}`, {
+					"data-mcp-event": "tools",
+					"data-mcp-slug": slug,
+					"data-mcp-tool-count": String(result.tools.length),
+				});
+			}
+		} else {
+			ctx.pushSystemMessage(`unknown /mcp sub-command: ${sub}`);
+		}
+	} catch (err) {
+		ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+	}
+	return { handled: true };
+}
+
+interface ParsedMcpAdd {
+	url?: string;
+	command?: string;
+	cmdArgs?: string[];
+	auth?: { mode: string; headers?: Array<{ name: string; value: string; secret: true }> };
+	label?: string;
+	error?: string;
+}
+
+function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
+	const out: ParsedMcpAdd = {};
+	const headers: Array<{ name: string; value: string; secret: true }> = [];
+	for (const tok of rest) {
+		const m = /^([a-zA-Z_][\w-]*)=(.*)$/.exec(tok);
+		if (!m) continue;
+		const key = m[1] as string;
+		const raw = m[2] as string;
+		const value = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
+		if (key === "url") out.url = value;
+		else if (key === "command") out.command = value;
+		else if (key === "label") out.label = value;
+		else if (key === "auth") {
+			out.auth = { mode: value };
+		} else if (key.startsWith("header_")) {
+			headers.push({ name: key.slice("header_".length), value, secret: true });
+		} else if (key === "api_key") {
+			headers.push({ name: "Authorization", value: `Bearer ${value}`, secret: true });
+		}
+	}
+	if (headers.length > 0) {
+		out.auth = out.auth ?? { mode: "header" };
+		out.auth.headers = headers;
+	}
+	if (!out.url && !out.command) out.error = "expected url=<url> or command=<cmd>";
+	return out;
 }
