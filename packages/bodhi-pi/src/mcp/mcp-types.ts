@@ -1,6 +1,5 @@
 import type { JsonValue } from "../kv/kv-store.js";
 
-/** KV prefix bodhi-pi reserves for MCP server entries. */
 export const MCP_PREFIX = "mcp/";
 
 export type McpTransport = "http" | "stdio";
@@ -9,7 +8,6 @@ export type McpAuthMode = "public" | "header" | "query" | "oauth-dcr" | "oauth-p
 
 export type McpStatus = "connected" | "disconnected" | "error";
 
-/** Secret-tagged value node; masked to `"***"` on ACP reads. */
 export interface SecretValue {
 	value: string;
 	secret: true;
@@ -29,7 +27,6 @@ export interface McpNamedSecret {
 export interface McpOAuthTokens {
 	access: SecretValue;
 	refresh?: SecretValue;
-	/** Absolute unix epoch (ms) at which `access` expires. */
 	expiresAt?: number;
 }
 
@@ -42,10 +39,6 @@ export interface McpAuthConfig {
 	tokens?: McpOAuthTokens;
 }
 
-/**
- * Persisted MCP server config under `mcp/<slug>`. `transport === "http"` requires
- * `url`; `transport === "stdio"` requires `command` and forbids `url`.
- */
 export interface McpServerEntry {
 	transport: McpTransport;
 	url?: string;
@@ -74,7 +67,6 @@ export interface McpListEntry {
 	error?: string;
 }
 
-/** Parse a persisted `mcp/<slug>` JsonValue back into a typed entry; `null` on shape mismatch. */
 export function parseMcpServerEntry(value: JsonValue | null | undefined): McpServerEntry | null {
 	if (value === null || value === undefined || typeof value !== "object" || Array.isArray(value)) return null;
 	const obj = value as { [k: string]: JsonValue };
@@ -110,7 +102,6 @@ export function parseMcpServerEntry(value: JsonValue | null | undefined): McpSer
 	return entry;
 }
 
-/** Build a JsonValue suitable for `kvStore.set("mcp/<slug>", ...)`. */
 export function serializeMcpServerEntry(entry: McpServerEntry): JsonValue {
 	const out: { [k: string]: JsonValue } = {
 		transport: entry.transport,

@@ -13,11 +13,6 @@ export interface ConnectedMcp {
 	close(): Promise<void>;
 }
 
-/**
- * Per-session MCP registry. Owns the live `Client` handles and the tools they expose.
- * After any add/remove, calls `applyToAgent(sessionId)` to rebuild `piAgent.state.tools`
- * as `mergeTools(session.tools, registry.getTools(sessionId))`.
- */
 export class McpRegistry {
 	private bySession = new Map<string, Map<string, ConnectedMcp>>();
 
@@ -92,7 +87,6 @@ export class McpRegistry {
 		await Promise.all(closers);
 	}
 
-	/** Rebuild `piAgent.state.tools` for the given session from `mergeTools(session.tools, …)`. */
 	applyToAgent(sessionId: string): void {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;

@@ -6,15 +6,6 @@ import type { Readable as NodeReadable, Writable as NodeWritable } from "node:st
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
 
-// cli e2e-ui for MCP public+http. Drives the test-app-cli's `--headless` slash
-// dispatcher via stdin/stdout. `/mcp*` commands emit
-// `<command-response>…</command-response>` blocks (separate from the
-// `<response>` blocks used for chat turns) so the test can frame slash
-// results without interleaving with agent output.
-//
-// mcp-everything is shared by the e2e vitest run via global-setup
-// (`BODHI_PI_E2E_MCP_EVERYTHING_HTTP_URL`).
-
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "test-apps", "cli", "dist", "cli.js");
 
@@ -22,6 +13,7 @@ interface HeadlessSlashSession {
 	child: ChildProcessByStdio<NodeWritable, NodeReadable, null>;
 	tmpDir: string;
 	sendSlash: (cmd: string) => Promise<string>;
+	sendChat: (prompt: string) => Promise<string>;
 	cleanup: () => Promise<void>;
 }
 
@@ -51,44 +43,52 @@ async function startHeadlessSlashSession(opts: { model: string; provider: string
 	});
 
 	let buffer = "";
-	const pending: Array<(text: string) => void> = [];
+	type Pending = { tag: "command-response" | "response"; resolve: (text: string) => void };
+	const pending: Pending[] = [];
 
 	child.stdout.setEncoding("utf-8");
 	child.stdout.on("data", (chunk: string) => {
 		buffer += chunk;
 		while (true) {
-			const start = buffer.indexOf("<command-response>");
-			const end = buffer.indexOf("</command-response>");
+			const next = pending[0];
+			if (!next) return;
+			const openTag = `<${next.tag}>`;
+			const closeTag = `</${next.tag}>`;
+			const start = buffer.indexOf(openTag);
+			const end = buffer.indexOf(closeTag);
 			if (start === -1 || end === -1 || end < start) break;
-			const text = buffer.slice(start + "<command-response>".length, end).trim();
-			buffer = buffer.slice(end + "</command-response>".length);
-			const resolver = pending.shift();
-			if (resolver) resolver(text);
+			const text = buffer.slice(start + openTag.length, end).trim();
+			buffer = buffer.slice(end + closeTag.length);
+			pending.shift();
+			next.resolve(text);
 		}
 	});
 
 	function sendSlash(cmd: string): Promise<string> {
 		return new Promise((resolve) => {
-			pending.push(resolve);
+			pending.push({ tag: "command-response", resolve });
 			child.stdin.write(`${cmd}\n`);
+		});
+	}
+
+	function sendChat(prompt: string): Promise<string> {
+		return new Promise((resolve) => {
+			pending.push({ tag: "response", resolve });
+			child.stdin.write(`${prompt}\n`);
 		});
 	}
 
 	const cleanup = async () => {
 		try {
 			child.stdin.end();
-		} catch {
-			// ignored
-		}
+		} catch {}
 		try {
 			child.kill("SIGTERM");
-		} catch {
-			// already exited
-		}
+		} catch {}
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	};
 
-	return { child, tmpDir, sendSlash, cleanup };
+	return { child, tmpDir, sendSlash, sendChat, cleanup };
 }
 
 let activeSession: HeadlessSlashSession | undefined;
@@ -110,36 +110,43 @@ test("cli e2e-ui: /mcp* slash commands round-trip via headless stdin/stdout", as
 	const session = await startHeadlessSlashSession({ model: "gpt-4o-mini", provider: "openai" });
 	activeSession = session;
 
-	// Step 1: add. Slug derived from URL host.
 	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
 	expect.soft(added).toMatch(/^added: /);
 	const slug = added.replace(/^added: /, "").trim();
 	expect.soft(slug.length).toBeGreaterThan(0);
 
-	// Step 2: list reflects disconnected status.
 	const listed = await session.sendSlash("/mcps");
 	expect.soft(listed).toContain(slug);
 	expect.soft(listed).toContain("disconnected");
 
-	// Step 3: connect surfaces the echo tool.
 	const connected = await session.sendSlash(`/mcp connect ${slug}`);
-	expect.soft(connected).toContain(`${slug}__echo`);
+	expect.soft(connected).toContain(`${slug}__get-sum`);
 
-	// Step 4: tools query returns the same.
 	const tools = await session.sendSlash(`/mcp tools ${slug}`);
-	expect.soft(tools).toContain(`${slug}__echo`);
+	expect.soft(tools).toContain(`${slug}__get-sum`);
 
-	// Step 5: disconnect, then tools is empty.
 	const disconnected = await session.sendSlash(`/mcp disconnect ${slug}`);
 	expect.soft(disconnected).toContain(`disconnected ${slug}`);
 	const toolsEmpty = await session.sendSlash(`/mcp tools ${slug}`);
 	expect.soft(toolsEmpty).toContain("(no tools");
 
-	// Step 6: reconnect.
 	const reconnected = await session.sendSlash(`/mcp reconnect ${slug}`);
-	expect.soft(reconnected).toContain(`${slug}__echo`);
+	expect.soft(reconnected).toContain(`${slug}__get-sum`);
 
-	// Step 7: remove.
 	const removed = await session.sendSlash(`/mcp remove ${slug}`);
 	expect.soft(removed).toContain(`removed ${slug}`);
 }, 30_000);
+
+test("cli e2e-ui LLM prompt: agent uses get-sum(20, 22) via stdio chat and replies with 42", async () => {
+	const session = await startHeadlessSlashSession({ model: "gpt-4o-mini", provider: "openai" });
+	activeSession = session;
+
+	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
+	const slug = added.replace(/^added: /, "").trim();
+	await session.sendSlash(`/mcp connect ${slug}`);
+
+	const response = await session.sendChat(
+		`Using the everything-mcp tool "${slug}__get-sum", find the sum of 20 and 22. Reply with just the number.`,
+	);
+	expect.soft(response).toContain("42");
+}, 60_000);

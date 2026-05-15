@@ -6,10 +6,6 @@ import type { Readable as NodeReadable, Writable as NodeWritable } from "node:st
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
 
-// cli e2e-ui for MCP stdio — drives `/mcp add command=npx args=…` through the
-// test-app-cli's `--headless` slash dispatcher. Same wire framing
-// (`<command-response>…</command-response>`) as `cli-headless/mcp.e2e.ts`.
-
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "test-apps", "cli", "dist", "cli.js");
 
@@ -72,14 +68,10 @@ async function startHeadlessSlashSession(opts: { model: string; provider: string
 	const cleanup = async () => {
 		try {
 			child.stdin.end();
-		} catch {
-			// ignored
-		}
+		} catch {}
 		try {
 			child.kill("SIGTERM");
-		} catch {
-			// already exited
-		}
+		} catch {}
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	};
 

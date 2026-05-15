@@ -9,11 +9,6 @@ import type { JsonValue, KvStore } from "../kv/kv-store.js";
 import { BODHI_PI_VERSION } from "../version.js";
 import { MCP_PREFIX, type McpServerEntry, parseMcpServerEntry, serializeMcpServerEntry } from "./mcp-types.js";
 
-/**
- * Per-flow ephemeral state. The `KvOAuthProvider` keeps the SDK-required
- * pieces (code_verifier, captured authorizeUrl) in-memory; persistent pieces
- * (client_id/secret, tokens) round-trip through the kvStore under `mcp/<slug>`.
- */
 interface PendingFlow {
 	authorizeUrl?: URL;
 	codeVerifier?: string;
@@ -27,12 +22,6 @@ export interface KvOAuthProviderOptions {
 	scope?: string;
 }
 
-/**
- * `OAuthClientProvider` impl that persists DCR client credentials and tokens
- * under `mcp/<slug>` in the host's kvStore. Capture-only `redirectToAuthorization`
- * — the actual user-redirect happens client-side; the agent returns the URL
- * via `_bodhi-pi/mcp/oauth/start`.
- */
 export class KvOAuthProvider implements OAuthClientProvider {
 	private readonly opts: KvOAuthProviderOptions;
 	private pending: PendingFlow = {};
@@ -146,11 +135,6 @@ export class KvOAuthProvider implements OAuthClientProvider {
 	}
 }
 
-/**
- * Drive the SDK's `auth()` to either:
- *   - kick off the auth flow (no code yet) — returns `{ authorizeUrl }` for the client to open
- *   - finish the auth flow (code provided) — returns `{}` once tokens are saved
- */
 export async function runAuthFlow(
 	provider: KvOAuthProvider,
 	serverUrl: string,

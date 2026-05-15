@@ -7,7 +7,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const CHROME_EXT_DIR = path.resolve(here, "..", "test-apps", "chrome-ext");
 
 const REQUIRED = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
-const MCP_EVERYTHING_PORT = 33346; // distinct from e2e/global-setup (33345) so suites don't collide
+const MCP_EVERYTHING_PORT = 33346;
 
 let mcpEverythingChild: ChildProcess | undefined;
 
@@ -26,9 +26,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 	return async () => {
 		try {
 			mcpEverythingChild?.kill("SIGTERM");
-		} catch {
-			// already exited
-		}
+		} catch {}
 	};
 }
 

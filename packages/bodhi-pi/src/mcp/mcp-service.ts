@@ -42,10 +42,6 @@ export interface McpServiceDeps {
 	conn: AgentSideConnection;
 	sessions: Map<string, SessionState>;
 	logger: BodhiPiLogger;
-	/**
-	 * Capability gate. Hosts that can't spawn child processes (browser, chrome-ext, stateless http)
-	 * pass `false` here so `_bodhi-pi/mcp/add` rejects `command=…` cleanly.
-	 */
 	supportsStdio?: boolean;
 }
 
@@ -82,12 +78,6 @@ export class McpService {
 		];
 	}
 
-	/**
-	 * Hydrate MCP connections for a freshly bootstrapped session. Reads kv `mcp/*` entries
-	 * with `lastKnownStatus === "connected"`, merges with any ACP-native `mcpServers` from
-	 * the session-init params, connects in parallel. Failures non-fatal: per-server status
-	 * emitted via `mcp_status_change` events.
-	 */
 	async hydrate(sessionId: string, ephemeral: McpServer[] | undefined): Promise<void> {
 		const persisted = await this.loadPersistedEntries();
 		const persistedEntries = persisted.filter(({ entry }) => entry.lastKnownStatus === "connected");
@@ -99,12 +89,9 @@ export class McpService {
 		await Promise.all(all.map((p) => this.connectOne(sessionId, p.slug, p.entry).catch(() => undefined)));
 	}
 
-	/** Tear down all MCP clients for a session. Called on session/close and session/delete. */
 	async closeSession(sessionId: string): Promise<void> {
 		await this.registry.closeSession(sessionId);
 	}
-
-	// ------------- extension handlers -------------
 
 	private async handleAdd(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKv(EXT_MCP_ADD);
@@ -203,7 +190,6 @@ export class McpService {
 			if (entry.command !== undefined) item.command = entry.command;
 			out.push(item);
 		}
-		// Cast through unknown to keep the typed shape for the client without bare `unknown` indexes.
 		return { entries: out as unknown as Record<string, unknown>[] };
 	}
 
@@ -250,15 +236,12 @@ export class McpService {
 		if (!authorized) {
 			throw new RequestError(-32603, `${EXT_MCP_OAUTH_FINISH}: token exchange did not authorize`);
 		}
-		// Tokens are now persisted; connect MCP and surface tools.
 		const refreshed = parseMcpServerEntry((await kv.get(`${MCP_PREFIX}${slug}`)) ?? null);
 		if (!refreshed) throw new RequestError(-32603, `${EXT_MCP_OAUTH_FINISH}: entry vanished after token save`);
 		const tools = await this.connectOne(sessionId, slug, refreshed);
 		await this.persistStatus(slug, refreshed, "connected");
 		return { tools };
 	}
-
-	// ------------- internals -------------
 
 	private async connectOne(sessionId: string, slug: string, entry: McpServerEntry): Promise<string[]> {
 		let connected: ConnectedClient;
@@ -298,7 +281,6 @@ export class McpService {
 			status,
 			...(errorMessage !== undefined ? { errorMessage } : {}),
 		});
-		// Fire-and-forget lifecycle notification so the client can render status without polling.
 		const params: Record<string, unknown> = {
 			type: "mcp_status_change",
 			sessionId,
@@ -306,7 +288,6 @@ export class McpService {
 			status,
 		};
 		if (errorMessage !== undefined) params.errorMessage = errorMessage;
-		// Best-effort; some hosts may not have a wired listener.
 		await this.notifyLifecycle(params);
 	}
 
@@ -317,7 +298,6 @@ export class McpService {
 
 	private async notifyLifecycle(params: Record<string, unknown>): Promise<void> {
 		try {
-			// Notifications are addressed at the connection level.
 			await (
 				this.conn as unknown as {
 					notification(params: { method: string; params: Record<string, unknown> }): Promise<void>;
@@ -388,7 +368,6 @@ function parseAuthParam(value: unknown): McpAuthConfig {
 	return out;
 }
 
-/** Convert an ACP `McpServer` into an internal `McpServerEntry` (no persistence). */
 function fromAcpMcpServer(s: McpServer): McpServerEntry | null {
 	const transport = (s as { type?: string }).type ?? ("command" in s ? "stdio" : undefined);
 	if (transport === "http") {
@@ -437,7 +416,6 @@ function sanitizeSlugForAcp(name: string): string {
 	);
 }
 
-/** Re-exported for `kv-service`-style symmetry — masks an MCP entry for client-side reads. */
 export function maskedEntry(value: JsonValue): JsonValue {
 	return maskSecrets(value);
 }

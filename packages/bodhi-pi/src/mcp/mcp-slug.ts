@@ -1,16 +1,6 @@
 import type { KvStore } from "../kv/kv-store.js";
 import { MCP_PREFIX } from "./mcp-types.js";
 
-/**
- * Derive a candidate slug from a server URL.
- *
- * Strategy: take the leftmost non-generic label from the host.
- *   https://mcp.github.com/...   → "github"
- *   https://api.example.io/mcp   → "example"
- *   https://foo.bar.baz.com      → "bar"
- *
- * Returns empty string if no usable label can be extracted.
- */
 export function slugifyUrl(url: string): string {
 	let host: string;
 	try {
@@ -27,16 +17,6 @@ export function slugifyUrl(url: string): string {
 	return sanitize(pick);
 }
 
-/**
- * Derive a candidate slug from a stdio command.
- *
- *   npx -y @modelcontextprotocol/server-github stdio   → "server-github"
- *   npx @scope/foo                                     → "foo"
- *   /usr/bin/my-mcp                                    → "my-mcp"
- *
- * Strategy: prefer a token that looks like a package ref (contains `/` or starts with `@`)
- * since those are unambiguous server identities; fall back to the last non-flag token.
- */
 export function slugifyCommand(command: string, args: string[] | undefined): string {
 	const all = [command, ...(args ?? [])];
 	const nonFlag = all.filter((t) => t && !t.startsWith("-"));
@@ -47,10 +27,6 @@ export function slugifyCommand(command: string, args: string[] | undefined): str
 	return sanitize(trimmed);
 }
 
-/**
- * Resolve a candidate slug to one that does not collide with any existing
- * `mcp/<slug>` entry in `kvStore`. On collision, append `-<5-char random hex>`.
- */
 export async function resolveUniqueSlug(candidate: string, kvStore: KvStore): Promise<string> {
 	const base = candidate.length > 0 ? candidate : "mcp";
 	const existing = new Set((await kvStore.list(MCP_PREFIX)).map((e) => e.key.slice(MCP_PREFIX.length)));

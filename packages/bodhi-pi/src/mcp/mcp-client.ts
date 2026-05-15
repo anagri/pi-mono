@@ -6,9 +6,7 @@ import { applyQueryParams, resolveHttpAuth, resolveStdioEnv } from "./mcp-auth.j
 import type { McpServerEntry, McpToolInfo } from "./mcp-types.js";
 
 const CLIENT_INFO = { name: "bodhi-pi", version: BODHI_PI_VERSION };
-// Replace the SDK's default Ajv validator (uses `new Function`) with a parser
-// that doesn't generate code at runtime — required by MV3 chrome extensions and
-// any other CSP-restricted runtime that forbids `unsafe-eval`.
+// MV3 chrome ext / other CSP-restricted runtimes forbid `new Function` (Ajv default).
 const SCHEMA_VALIDATOR = new CfWorkerJsonSchemaValidator();
 
 export interface ConnectedClient {
@@ -17,13 +15,6 @@ export interface ConnectedClient {
 	close(): Promise<void>;
 }
 
-/**
- * Connect to an MCP server defined by `entry` and discover its tools.
- *
- * - `transport === "http"` uses `StreamableHTTPClientTransport`. SSE fallback is intentionally
- *   not implemented here (deprecated upstream).
- * - `transport === "stdio"` dynamically imports the stdio transport (node-only path).
- */
 export async function connectMcp(entry: McpServerEntry): Promise<ConnectedClient> {
 	const client = new Client(CLIENT_INFO, { jsonSchemaValidator: SCHEMA_VALIDATOR });
 	if (entry.transport === "http") {
@@ -36,6 +27,7 @@ export async function connectMcp(entry: McpServerEntry): Promise<ConnectedClient
 		await client.connect(transport);
 	} else {
 		if (!entry.command) throw new Error("stdio MCP entry missing command");
+		// dynamic import keeps node:child_process out of browser bundles.
 		const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
 		const transport = new StdioClientTransport({
 			command: entry.command,

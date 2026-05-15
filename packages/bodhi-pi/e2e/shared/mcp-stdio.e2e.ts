@@ -1,19 +1,16 @@
 import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
+import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
+import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { isRuntime } from "../helpers/runtime.js";
 import { useHarness } from "../helpers/use-harness.js";
 
-// Coverage for stdio-transport MCP via `_bodhi-pi/mcp/*`. Drives `mcp-everything`
-// as a stdio child process (npx). Limited to in-memory and cli — per scope
-// clamp, http/ws/browser/chrome-ext don't spawn child processes (browser/ext
-// can't, http/ws stateless rebuild can't reuse them).
-
 const harness = useHarness();
 
 test.runIf(isRuntime("in-memory") || isRuntime("cli"))(
-	"mcp stdio: add → connect → tools (with echo) → disconnect → reconnect → remove (via _bodhi-pi/mcp/*)",
+	"mcp stdio: add → connect → tools → disconnect → reconnect → remove (via _bodhi-pi/mcp/*)",
 	async () => {
 		const model = getModel("openai", "gpt-4o-mini");
 		const h = harness.set(
@@ -33,23 +30,64 @@ test.runIf(isRuntime("in-memory") || isRuntime("cli"))(
 		expect.soft(added.slug).toBe("server-everything");
 
 		const connectResult = await h.client.mcpConnect({ slug: added.slug, sessionId });
-		expect.soft(connectResult.tools).toContain(`${added.slug}__echo`);
+		expect.soft(connectResult.tools).toContain(`${added.slug}__get-sum`);
 
 		const tools = await h.client.mcpTools({ slug: added.slug, sessionId });
 		expect.soft(tools).toEqual(connectResult.tools);
 
 		await h.client.mcpDisconnect({ slug: added.slug, sessionId });
-		const toolsAfterDisconnect = await h.client.mcpTools({ slug: added.slug, sessionId });
-		expect.soft(toolsAfterDisconnect).toEqual([]);
+		expect.soft(await h.client.mcpTools({ slug: added.slug, sessionId })).toEqual([]);
 
 		const reconnected = await h.client.mcpReconnect({ slug: added.slug, sessionId });
-		expect.soft(reconnected.tools).toContain(`${added.slug}__echo`);
+		expect.soft(reconnected.tools).toContain(`${added.slug}__get-sum`);
 
 		await h.client.mcpRemove({ slug: added.slug, sessionId });
-		const listAfterRemove = await h.client.mcpList();
-		expect.soft(listAfterRemove.find((e) => e.slug === added.slug)).toBeUndefined();
+		expect.soft((await h.client.mcpList()).find((e) => e.slug === added.slug)).toBeUndefined();
 	},
-	60_000, // 60s: stdio spawn (npx -y) can take ~10s on cold cache
+	60_000,
+);
+
+test.runIf(isRuntime("in-memory") || isRuntime("cli"))(
+	"mcp stdio: LLM prompts agent to use get-sum(20, 22) over stdio MCP and gets 42",
+	async () => {
+		const model = getModel("openai", "gpt-4o-mini");
+		const h = harness.set(
+			await createE2EHarness({
+				models: [model],
+				defaultModelId: model.id,
+				getApiKey: envKeysFor("openai"),
+			}),
+		);
+		await h.clientConn.initialize(stdInitParams);
+		const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+
+		const { slug } = await h.client.mcpAdd({
+			command: "npx",
+			args: ["--yes", "@modelcontextprotocol/server-everything", "stdio"],
+		});
+		await h.client.mcpConnect({ slug, sessionId });
+
+		const result = await h.clientConn.prompt({
+			sessionId,
+			prompt: [
+				{
+					type: "text",
+					text: `Using the everything-mcp tool "${slug}__get-sum", find the sum of 20 and 22. Reply with just the number.`,
+				},
+			],
+		});
+		expect.soft(result.stopReason).toBe("end_turn");
+
+		const sumResult = h.updates
+			.filter((u) => u.update.sessionUpdate === "tool_call_update")
+			.find((u) => {
+				const c = (u.update as { content?: Array<{ type?: string; content?: { text?: string } }> }).content;
+				return Array.isArray(c) && c.some((b) => b?.content?.text?.includes("42"));
+			});
+		expect.soft(sumResult).toBeDefined();
+		expect.soft(chunkedAgentText(h.updates)).toContain("42");
+	},
+	90_000,
 );
 
 test.runIf(isRuntime("http") || isRuntime("ws") || isRuntime("browser") || isRuntime("chrome-ext"))(

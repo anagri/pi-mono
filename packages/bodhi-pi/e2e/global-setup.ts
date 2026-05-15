@@ -77,7 +77,7 @@ async function spawnMcpEverythingHttp(port: number): Promise<ChildProcess> {
 			reject(new Error(`mcp-everything exited before binding (code=${code}); buf=${buf.slice(0, 200)}`));
 		});
 	});
-	// Keep draining stdio so the child doesn't block on backpressure for the rest of the run.
+	// drain stdio so the child doesn't block on backpressure for the rest of the run
 	child.stdout?.on("data", () => {});
 	child.stderr?.on("data", () => {});
 	return child;
@@ -125,9 +125,6 @@ export async function setup(): Promise<() => Promise<void>> {
 		return async () => {};
 	}
 
-	// Shared mcp-everything instance (http-streamable) for MCP e2e across all
-	// runtimes. Single port reused; tests slug-collision-resolve to keep slugs
-	// unique within each session.
 	const MCP_EVERYTHING_PORT = 33345;
 	const mcpEverything = await spawnMcpEverythingHttp(MCP_EVERYTHING_PORT);
 	process.env.BODHI_PI_E2E_MCP_EVERYTHING_HTTP_URL = `http://localhost:${MCP_EVERYTHING_PORT}/mcp`;
