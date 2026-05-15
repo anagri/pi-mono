@@ -14,17 +14,7 @@ import {
 const REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_HTTP_BIN = path.resolve(
-	here,
-	"..",
-	"test-apps",
-	"http",
-	"dist",
-	"test-app-http",
-	"src",
-	"server",
-	"index.js",
-);
+const TEST_APP_HTTP_BIN = path.resolve(here, "..", "test-apps", "http", "dist", "index.js");
 const TEST_APP_BROWSER_DIR = path.resolve(here, "..", "test-apps", "browser");
 const BROWSER_VITE_PORT = 35273;
 

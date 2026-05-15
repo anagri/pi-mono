@@ -23,18 +23,7 @@ import { createReadOnlyFilesystemProxy, seedFilesViaFilesystem } from "../test-f
 import { pipeLifecycleEvents } from "./lifecycle-stderr.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_CLI_BIN = path.resolve(
-	here,
-	"..",
-	"..",
-	"..",
-	"test-apps",
-	"cli",
-	"dist",
-	"test-app-cli",
-	"src",
-	"cli.js",
-);
+const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "..", "test-apps", "cli", "dist", "cli.js");
 
 export async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarness> {
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-cli-"));

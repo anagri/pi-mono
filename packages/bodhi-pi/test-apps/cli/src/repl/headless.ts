@@ -43,7 +43,15 @@ function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
 		if (key === "url") out.url = value;
 		else if (key === "command") out.command = value;
 		else if (key === "label") out.label = value;
-		else if (key === "auth") {
+		else if (key === "args") {
+			try {
+				const parsed = JSON.parse(value);
+				if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) out.cmdArgs = parsed as string[];
+				else out.error = "args must be a JSON string[]";
+			} catch {
+				out.cmdArgs = value.split(/\s+/).filter((s) => s.length > 0);
+			}
+		} else if (key === "auth") {
 			if (value === "public" || value === "header" || value === "query" || value === "oauth-dcr" || value === "oauth-preregistered") {
 				out.auth = { mode: value };
 			} else {

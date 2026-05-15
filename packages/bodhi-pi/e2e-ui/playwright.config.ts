@@ -27,7 +27,7 @@ export default defineConfig({
 	},
 	webServer: [
 		{
-			command: `cd "${TEST_APP_HTTP}" && npm run build && node dist/test-app-http/src/server/index.js --port ${HTTP_PORT} --models openai:gpt-4o-mini,anthropic:claude-haiku-4-5-20251001 --default-model gpt-4o-mini --data-dir .e2e-ui-data`,
+			command: `cd "${TEST_APP_HTTP}" && npm run build && node dist/index.js --port ${HTTP_PORT} --models openai:gpt-4o-mini,anthropic:claude-haiku-4-5-20251001 --default-model gpt-4o-mini --data-dir .e2e-ui-data`,
 			url: `http://localhost:${HTTP_PORT}/healthz`,
 			reuseExistingServer: false,
 			timeout: 180_000,
