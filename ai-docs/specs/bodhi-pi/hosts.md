@@ -1,6 +1,6 @@
 # Hosts
 
-Four reference Hosts under `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`. Each proves the agent surface against a distinct runtime profile. Two shared infrastructure packages (`in-memory/`, `app-utils/`) provide the adapters every Host consumes.
+Four reference Hosts under `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`. Each proves the agent surface against a distinct runtime profile. Two shared infrastructure packages (`node-adapters/`, `app-utils/`) provide the adapters every Host consumes.
 
 > **Deprecated reference**: `packages/bodhi-pi-{cli,web,http,ws-server,ws-frontend,chrome-ext,node,browser}/` were the previous generation of test apps. They are **not maintained** and exist only for historical reference. New features land in `test-apps/`. Mentioned here once for breadcrumb only.
 

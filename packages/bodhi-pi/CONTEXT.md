@@ -106,7 +106,7 @@ A tool registered by an Extension via `registerTool`; adapted into the pi-agent-
 ### Persistence
 
 **SessionStore**:
-Host-injected interface for session CRUD + append + leaf tracking + list/pagination. Implementations: in-memory (`createInMemorySessionStore`), Node SQLite (`in-memory` test-app's wrappers), Dexie (browser).
+Host-injected interface for session CRUD + append + leaf tracking + list/pagination. Implementations: in-memory (`createInMemorySessionStore`), Node SQLite (`node-adapters` test-app's wrappers), Dexie (browser).
 
 **KvStore**:
 Host-injected key-value primitive with a `secret` hint. Values tagged `secret: true` are **masked to `***` on ACP reads** but readable unmasked by internal callers (e.g. `getApiKey`). Stores: API keys (`auth/<provider>`), MCP entries (`mcp/<slug>`), MCP OAuth credentials if/when re-introduced.

@@ -81,6 +81,9 @@ src/
 │   ├── prompt-loop.ts    runPromptLoop + subscribeToAgent
 │   ├── notifications.ts  ACP-shape helpers + guards
 │   └── system-prompt.ts  buildSystemPrompt composer
+├── client/           Client-side SDK seed (BodhiPiClient, createBodhiPiClient,
+│                     model + auth + slash-arg helpers consumed by Hosts'
+│                     client/ folders — see client-sdk-seed.md)
 ├── commands/         project-defined prompt-template discovery (.bodhi-pi/commands/*.md)
 ├── events/           EventDispatcher + handler types
 ├── extensions/       host-loaded factory runtime (types, runner, merge, tool-adapter, events-bus)

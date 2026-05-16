@@ -16,7 +16,7 @@ Living architecture map for `packages/bodhi-pi/`. Optimised for **AI coding assi
 
 ## Source-of-truth pointers
 
-- Live reference Hosts: `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`. Shared infrastructure: `test-apps/{in-memory,app-utils}/`.
+- Live reference Hosts: `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`. Shared infrastructure: `test-apps/{node-adapters,app-utils}/`.
 - **Deprecated**: `packages/bodhi-pi-{cli,web,http,ws-server,ws-frontend,chrome-ext,node,browser}/` are old test apps kept for historical reference only; they are not maintained. New work must land under `test-apps/`.
 - Recent major change: MCP refactor decomposing `McpService` into `McpStore` + `McpConnectionLifecycle` + `McpRegistry` + per-tenant `McpConnectionProvider` injection. See [mcp.md](./mcp.md).
 - Recent OAuth removal: `_bodhi-pi/mcp/oauth/*` extension methods and the `KvOAuthProvider` machinery were removed; only `auth.mode = "public"` is supported. See [mcp.md § Auth](./mcp.md#auth) and `ai-docs/plans/2026-05-16-mcp-target-spec.md` for the target shape that drove the removal.
