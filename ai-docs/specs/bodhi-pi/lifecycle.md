@@ -207,7 +207,7 @@ defaults
                  └─ overlay: setSessionConfigOption (live mutations)
 ```
 
-The merge happens via `mergeSettings(...)`. Per-key effective value + source (`global` / `project` / `session` / `default`) is reported by `_bodhi-pi/session/settings/get`. See [acp.md § Settings methods](./acp.md#settings-methods).
+The merge happens via `mergeSettings(...)`. Per-key effective value + source (`global` / `project` / `session` / `default`) is reported by `_bodhi-pi/session/settings/get`. See [acp.md § Settings methods](./acp.md#settings-methods) and the full layered story in [configuration.md](./configuration.md).
 
 ## See also
 
