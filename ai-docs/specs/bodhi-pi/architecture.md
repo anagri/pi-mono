@@ -2,15 +2,18 @@
 
 bodhi-pi is an embeddable, runtime-agnostic ACP agent. Every platform concern is **injected** by the Host; the package itself owns the LLM loop, session state, ACP wire, and tool registry.
 
-## The four roles
+## The three roles
+
+bodhi-pi has **three** roles — Agent, Host, Client — separated by the ACP Transport seam. **UI** (rendering layer) is a sub-concept inside Client, not a fourth peer role.
 
 ```
-┌────────────────────────────── UI ──────────────────────────────┐
-│  REPL · React app · chrome-ext page                            │
-└────────────────────────────┬───────────────────────────────────┘
-                             │ user input / render
-┌────────────────────────────▼ Client (ClientSideConnection) ────┐
-│  ACP requests (prompt, extMethod, …) + sessionUpdate consumer  │
+┌────────────────── Client ──────────────────────────────────────┐
+│  ClientSideConnection peer (sends prompt/extMethod;            │
+│  consumes sessionUpdate)                                       │
+│  + UI: REPL · React app · chrome-ext page                      │
+│  + transport-client adapters (http fetch+SSE / ws stream /     │
+│    MessagePort)                                                │
+│  Lives under test-apps/<host>/src/client/{react,acp,deps,lib}/ │
 └────────────────────────────┬───────────────────────────────────┘
                              │ Transport (stdio / WS / HTTP+SSE /
                              │ MessagePort / in-process pair)
@@ -19,6 +22,7 @@ bodhi-pi is an embeddable, runtime-agnostic ACP agent. Every platform concern is
 │  Adapters: Filesystem · SessionStore · KvStore ·               │
 │            ScriptExecutor · Terminal · McpConnectionProvider · │
 │            ExtensionFactories                                  │
+│  Lives under test-apps/<host>/src/host/                        │
 └────────────────────────────┬───────────────────────────────────┘
                              │ ACP method dispatch
 ┌────────────────────────────▼ Agent (BodhiPiAcpAgent) ──────────┐
@@ -29,7 +33,7 @@ bodhi-pi is an embeddable, runtime-agnostic ACP agent. Every platform concern is
 └────────────────────────────────────────────────────────────────┘
 ```
 
-In single-process Hosts (cli, browser-worker, chrome-ext) **UI ≡ Client** and they share the page/worker boundary with the Host via in-process or `MessagePort` Transport. In split Hosts (http) the UI/Client lives in the browser tab; the Host lives in a Node.js server process; the Transport is HTTP+SSE.
+In single-process Hosts (cli, browser-worker, chrome-ext) Host and Client run in the same OS process linked by an in-process or `MessagePort` Transport. In split Hosts (http) the Client runs in a browser tab; the Host lives in a Node.js server process; the Transport is HTTP+SSE or WebSocket.
 
 ## Dependency injection contract
 

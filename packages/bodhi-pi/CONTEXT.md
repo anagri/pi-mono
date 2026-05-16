@@ -15,12 +15,10 @@ The process that **embeds** the Agent. Builds the dependency graph (Filesystem, 
 _Avoid_: "server", "backend" (a Host may be a CLI process or a Web Worker — not a server).
 
 **Client**:
-The ACP peer on the other side of the Transport — an `ClientSideConnection`. Sends requests (`prompt`, `extMethod`, …) and consumes `sessionUpdate` notifications.
-_Avoid_: "frontend" (a Frontend is one kind of UI; Client is a protocol role).
+Everything on the Client side of the ACP **Transport** — the `ClientSideConnection` peer that sends requests (`prompt`, `extMethod`, …) and consumes `sessionUpdate` notifications, **plus** the transport-client adapters (http fetch+SSE, ws stream, MessagePort wiring) and **plus** the user-facing rendering surface (REPL, React app, popup, chrome-ext page) and slash UX. In each Reference Host the Client-side code lives under `test-apps/<host>/src/client/` with canonical sub-folders `client/{react,acp,deps,lib}/`. In single-process Hosts (cli, browser-worker, chrome-ext) Host and Client run in the same OS process linked by an in-process Transport; in split Hosts (http, ws) the Client runs in a remote browser tab.
+- **UI** is the rendering subset of Client (React components, REPL renderer, popup pages). Lives under `client/react/` (or equivalent). The folder name is `client/` because the broader concept is what owns the seam; `ui/` would understate scope.
 
-**UI**:
-The user-facing surface (REPL, React app, popup, chrome-ext page). In some runtimes UI ≡ Client (cli, browser-worker, chrome-ext); in split runtimes (http, ws) the UI process **contains** the Client and talks to a remote Host.
-_Avoid_: "client" when you mean rendering layer.
+_Avoid_: "frontend" alone (a Frontend is the rendering layer = UI = a subset of Client); "client" lowercase when you mean the rendering layer (use **UI**).
 
 **Reference Host**:
 One of the four canonical Hosts shipped under `test-apps/`: cli, http, browser, chrome-ext. Each proves end-to-end feature parity for a distinct runtime profile.
@@ -137,8 +135,8 @@ Host-injected interface that owns MCP transport lifecycle and per-`<host, slug>`
 
 ## Flagged ambiguities
 
-- **"Client"**: was used to mean both "ACP peer that calls the Agent" and "the UI half of a test-app". Resolved: **Client** is the ACP role (`ClientSideConnection`); **UI** is the user-facing surface. In single-process Hosts (cli, browser, chrome-ext) Client ≡ UI; in split Hosts (http, ws) they live in different processes.
+- **"Client" vs "UI"**: previously distinguished as two separate concepts (Client = ACP protocol role; UI = rendering surface). **Resolved by collapse**: **Client** is the broader concept that owns the seam — everything on the Client side of the Transport, including ClientSideConnection, transport-client adapters, slash UX, and the rendering surface. **UI** is a sub-concept of Client (the rendering layer specifically). The operational consequence is the folder split `test-apps/<host>/src/{host,client}/` (NOT `src/{host,ui}/`) tracked by `ai-docs/prompts/2026-05-17-bodhi-pi-test-apps-host-client-split.md`. The future SDK packaging `@bodhiapps/bodhi-pi-client-{...}` follows the same naming.
 - **"Host"**: was sometimes used to mean "server". Resolved: **Host** is the agent-embedding process regardless of network topology. A CLI binary and a Node HTTP server are both Hosts.
 - **"MCP"**: was overloaded for the protocol, the server, and the connection. Resolved: use **MCP server**, **MCP connection**, **MCP tool** — never bare "MCP".
-- **"Custom" vs "extension"**: the `extension` SessionEntry variant is the same concept coding-agent calls `custom`. Resolved: bodhi-pi keeps **extension** for the entry discriminator (`ExtensionEntry`) because the name is wired through five store impls plus the `ExtensionRunner` contract; rename is a separate change.
+- **"Custom" vs "extension"**: the `extension` SessionEntry variant is the same concept coding-agent calls `custom`. **Resolved by formalised divergence**: bodhi-pi keeps **extension** for the entry discriminator (`ExtensionEntry`). The name is wired through five store impls plus the `ExtensionRunner` contract; rename would touch the wire shape with no behaviour gain. The divergence from coding-agent is intentional and stable — do not propose a rename.
 - **"Reference Host" vs "test-app"**: previously `packages/bodhi-pi-cli` etc. were called reference hosts; they are now **deprecated**. The live reference Hosts are `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`.

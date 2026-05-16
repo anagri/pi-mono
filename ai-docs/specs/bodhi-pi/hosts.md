@@ -26,9 +26,9 @@ All four host packages are `private: true`. None is published to npm.
   - `createBashTerminal()` (just-bash)
   - `createNodePackageExtensionLoader()` (optional)
 - **ACP transport**: in `cli.ts` an `AgentSideConnection` wraps `ndJsonStream(stdout, stdin)`. In RPC mode the Client lives in another process; in REPL/headless mode the Client is a co-process inside the binary.
-- **Host vs UI**:
+- **Host vs Client**:
   - HOST: `cli.ts`, `agent.ts`, `config.ts`
-  - UI: `repl/repl.ts`, `repl/commands.ts`, `repl/render.ts`, `repl/headless.ts`
+  - CLIENT: `repl/repl.ts`, `repl/commands.ts`, `repl/render.ts`, `repl/headless.ts`
 - **Quirks**: Single-tenant. Agent lifetime = process lifetime. MCP in-process connections live as long as the CLI. In RPC mode the test harness drives slash commands from outside.
 
 ## http (`test-apps/http/`)
@@ -48,9 +48,9 @@ The deployment-portability lens — proves the agent works under per-turn rebuil
   - HTTP+SSE: `AgentSideConnection` instantiated per request in `server/acp/handler.ts`, paired with `createHttpAcpConn()` (`server/acp/http-acp-conn.ts`). Notifications forwarded via `extNotification` to SSE writer.
   - WebSocket sibling: `server/auth/upgrade.ts` + `server/agent/wire-agent-ws.ts` provide a persistent path that doesn't re-build per turn — same `bodhi-pi` agent, different lifetime profile.
   - Client side: `frontend/lib/acp-http-client.ts` + `frontend/lib/sse-parser.ts` + `frontend/lib/ws/transport.ts`.
-- **Host vs UI**:
+- **Host vs Client**:
   - HOST: `server/index.ts`, `server/server.ts`, `server/cli-args.ts`, `server/static.ts`, `server/provision.ts`, `server/agent/wire-agent*.ts`, `server/acp/*`, `server/auth/*`, `server/filesystem/user-workspace.ts`, `server/mcp/server-mcp-store.ts`, `server/transport/ws-stream.ts`
-  - UI: `frontend/main.tsx`, `frontend/App.tsx`, `frontend/adapter-http.ts`, `frontend/adapter-ws.ts`, `frontend/lib/*`, `frontend/index.html`, `frontend/index.css`
+  - CLIENT: `frontend/main.tsx`, `frontend/App.tsx`, `frontend/adapter-http.ts`, `frontend/adapter-ws.ts`, `frontend/lib/*`, `frontend/index.html`, `frontend/index.css`
   - Split is clean — no mixed-concern files.
 - **Quirks**: Per-turn rebuild = the agent is **stateless across requests**. State durability lives entirely in `SessionStore`, `KvStore`, `ServerMcpStore`. Validates the rest of the codebase's "no hidden in-memory state" discipline.
 
@@ -69,10 +69,10 @@ The deployment-portability lens — proves the agent works under per-turn rebuil
 - **ACP transport**:
   - HOST (Worker side): `AgentSideConnection` wired to `ndJsonStream(writable, readable)` derived from `createMessagePortStream(agentPort)` (`ui-lib/transport/message-port-stream.ts`).
   - Client (main thread): receives `agentPort: MessagePort` from worker init message, runs `ClientSideConnection` to the same ndjson stream.
-- **Host vs UI**:
+- **Host vs Client**:
   - HOST: `frontend/worker.ts`, `ui-lib/runtime/bootstrap-worker.ts`, `ui-lib/runtime/adapter.ts`, `ui-lib/runtime/types.ts`, `ui-lib/runtime/wire-tap.ts`
   - Adapters (HOST-side, reused by chrome-ext): `ui-lib/filesystem/zenfs-filesystem.ts`, `ui-lib/sessions/{dexie-session-store.ts, db.ts}`, `ui-lib/kv/dexie-kv-store.ts`, `ui-lib/script-executor/*`, `ui-lib/extensions/*`, `ui-lib/sandbox/sandbox-bridge.ts`
-  - UI: `frontend/main.tsx`, `frontend/App.tsx`, `frontend/adapter.ts`, `frontend/lib/crypto-shim.ts`, `ui-lib/ui/**/*.tsx`
+  - CLIENT: `frontend/main.tsx`, `frontend/App.tsx`, `frontend/adapter.ts`, `frontend/lib/crypto-shim.ts`, `ui-lib/ui/**/*.tsx`
 - **Quirks**: Web Worker boundary forces every Agent/Client interaction through async message passing. ZenFS is async-only (vs Node's sync `fs`). Dexie schema migration is the upgrade path for SessionEntry shape changes. MCP slugs reconnect from KV on worker restart.
 
 ## chrome-ext (`test-apps/chrome-ext/`)
@@ -82,9 +82,9 @@ The deployment-portability lens — proves the agent works under per-turn rebuil
   - Sandboxed script executor + extension loader because MV3 CSP forbids `unsafe-eval` in the service worker — eval routed through the sandbox iframe.
   - Crypto shim (`src/agent/crypto-shim.ts`) for `SubtleCrypto` in the sandbox context.
 - **ACP transport**: `MessagePort` ndjson over chrome runtime messaging; same `createMessagePortStream` as browser.
-- **Host vs UI**:
+- **Host vs Client**:
   - HOST: `worker.ts`, `agent/sandbox.ts`, `agent/crypto-shim.ts`, `sandbox/sandbox.ts`
-  - UI: `main.tsx`, `App.tsx`, `adapter.ts`
+  - CLIENT: `main.tsx`, `App.tsx`, `adapter.ts`
   - Plus everything inherited from `test-apps/browser/src/ui-lib/`.
 - **Quirks**: MV3 service worker shutdown ≈ Dexie + KV persistence assumption. Sandbox iframe is the only place arbitrary user-supplied JS (skill scripts, extension factories) can execute. Identity OAuth flows would land on `chrome.identity.launchWebAuthFlow` (if/when OAuth is re-introduced).
 
@@ -125,7 +125,7 @@ If a future Host is added (e.g. a desktop Electron wrapper or a Bun-native CLI),
 2. Choose an ACP transport — anything that gives an async byte stream pair (stdio, MessagePort, WebSocket, HTTP+SSE).
 3. Set `supportsMcpStdio` correctly. Wrong value here = silent UX bug (`add` succeeds but `connect` fails later).
 4. Pass `extensionFactories` discovered by the runtime's own discovery mechanism (Node: `jiti`; browser: data-URL ESM).
-5. Mirror the **Host vs UI** folder split — the spec assumes hosts grow toward `src/{host,ui}/` per the kickoff prompt at `ai-docs/prompts/folder-split-plan.md`.
+5. Mirror the **Host vs Client** folder split — `src/{host,client}/` with canonical `client/{react,acp,deps,lib}/` sub-folders. See the kickoff prompt at `ai-docs/prompts/2026-05-17-bodhi-pi-test-apps-host-client-split.md`.
 
 ## See also
 
