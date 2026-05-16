@@ -8003,23 +8003,6 @@ export const MODELS = {
 			contextWindow: 262144,
 			maxTokens: 65536,
 		} satisfies Model<"anthropic-messages">,
-		"ring-2.6-1t-free": {
-			id: "ring-2.6-1t-free",
-			name: "Ring 2.6 1T Free",
-			api: "openai-completions",
-			provider: "opencode",
-			baseUrl: "https://opencode.ai/zen/v1",
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 262000,
-			maxTokens: 66000,
-		} satisfies Model<"openai-completions">,
 	},
 	"opencode-go": {
 		"deepseek-v4-flash": {
@@ -9004,8 +8987,8 @@ export const MODELS = {
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
-			contextWindow: 256000,
-			maxTokens: 256000,
+			contextWindow: 1048576,
+			maxTokens: 384000,
 		} satisfies Model<"openai-completions">,
 		"deepseek/deepseek-v4-pro": {
 			id: "deepseek/deepseek-v4-pro",
@@ -9057,7 +9040,7 @@ export const MODELS = {
 				cacheRead: 0.024999999999999998,
 				cacheWrite: 0.08333333333333334,
 			},
-			contextWindow: 1048576,
+			contextWindow: 1000000,
 			maxTokens: 8192,
 		} satisfies Model<"openai-completions">,
 		"google/gemini-2.0-flash-lite-001": {
@@ -10091,11 +10074,11 @@ export const MODELS = {
 			cost: {
 				input: 0.74,
 				output: 3.5,
-				cacheRead: 0.25,
+				cacheRead: 0.37,
 				cacheWrite: 0,
 			},
-			contextWindow: 262142,
-			maxTokens: 262142,
+			contextWindow: 262144,
+			maxTokens: 65535,
 		} satisfies Model<"openai-completions">,
 		"nex-agi/deepseek-v3.1-nex-n1": {
 			id: "nex-agi/deepseek-v3.1-nex-n1",
@@ -11444,7 +11427,7 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.06,
+				input: 0.09999999999999999,
 				output: 0.24,
 				cacheRead: 0,
 				cacheWrite: 0,
@@ -11956,7 +11939,7 @@ export const MODELS = {
 			cost: {
 				input: 0.39,
 				output: 2.34,
-				cacheRead: 0,
+				cacheRead: 0.195,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
@@ -12719,13 +12702,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 1.0499999999999998,
-				output: 3.5,
-				cacheRead: 0.5249999999999999,
+				input: 0.98,
+				output: 3.08,
+				cacheRead: 0.182,
 				cacheWrite: 0,
 			},
 			contextWindow: 202752,
-			maxTokens: 65535,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"z-ai/glm-5v-turbo": {
 			id: "z-ai/glm-5v-turbo",
@@ -12840,11 +12823,11 @@ export const MODELS = {
 			cost: {
 				input: 0.74,
 				output: 3.5,
-				cacheRead: 0.25,
+				cacheRead: 0.37,
 				cacheWrite: 0,
 			},
-			contextWindow: 262142,
-			maxTokens: 262142,
+			contextWindow: 262144,
+			maxTokens: 65535,
 		} satisfies Model<"openai-completions">,
 		"~openai/gpt-latest": {
 			id: "~openai/gpt-latest",
@@ -15226,7 +15209,7 @@ export const MODELS = {
 		} satisfies Model<"anthropic-messages">,
 		"openai/gpt-oss-20b": {
 			id: "openai/gpt-oss-20b",
-			name: "GPT OSS 120B",
+			name: "GPT OSS 20B",
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
