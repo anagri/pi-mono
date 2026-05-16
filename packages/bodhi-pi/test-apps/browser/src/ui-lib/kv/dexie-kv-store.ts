@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/kv/dexie-kv-store.ts
 import type { JsonValue, KvStore } from "@bodhiapp/bodhi-pi";
 import Dexie, { type Table } from "dexie";
 

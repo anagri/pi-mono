@@ -1,5 +1,3 @@
-// ported from packages/bodhi-pi-chrome-ext/src/agent/sandbox.ts
-
 /**
  * Boots the sandbox iframe and returns a `MessagePort` connected to it.
  * MV3 forbids `unsafe-eval` in extension pages and dedicated workers, but

@@ -1,8 +1,6 @@
-// ported from packages/bodhi-pi-browser/src/sandbox/sandbox-bridge.ts —
-// extended (vs production) with tools/commands/providers RPC surfaces so the
-// shared extensions.e2e.ts test (which exercises registerTool + register-
-// Provider) can run under chrome-ext. Production bodhi-pi-chrome-ext only
-// proxies pi.on today; the e2e port widens the surface.
+// Wider RPC surface (tools / commands / providers) than a minimal production
+// host so the shared extensions.e2e.ts suite can exercise registerTool +
+// registerProvider end-to-end under chrome-ext MV3 CSP.
 
 /**
  * Request/reply RPC over a `MessagePort` connecting the bodhi-pi worker to a

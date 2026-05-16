@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/script-executor/browser-script-executor.ts
 import type { Filesystem, ScriptExecutor } from "@bodhiapp/bodhi-pi";
 
 const AsyncFunctionCtor = Object.getPrototypeOf(async () => {}).constructor as new (

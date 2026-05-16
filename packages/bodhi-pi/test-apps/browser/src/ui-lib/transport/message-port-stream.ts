@@ -1,5 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/transport/message-port-stream.ts
-
 export interface PortByteStream {
 	readable: ReadableStream<Uint8Array>;
 	writable: WritableStream<Uint8Array>;

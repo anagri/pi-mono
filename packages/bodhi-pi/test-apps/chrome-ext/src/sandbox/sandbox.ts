@@ -1,7 +1,6 @@
-// ported from packages/bodhi-pi-chrome-ext/src/sandbox/sandbox.ts —
-// extended with registerTool / registerCommand / registerProvider proxies
-// (the e2e bridge surface is wider than production chrome-ext today so the
-// shared extensions.e2e.ts suite can run end-to-end under MV3 CSP).
+// Wider sandbox-bridge surface than a minimal production host:
+// includes registerTool / registerCommand / registerProvider proxies so the
+// shared extensions.e2e.ts suite can run end-to-end under MV3 CSP.
 
 /**
  * Sandbox iframe entrypoint for the chrome-extension host. Receives a

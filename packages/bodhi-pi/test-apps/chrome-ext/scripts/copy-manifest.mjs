@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// ported from packages/bodhi-pi-chrome-ext/scripts/copy-manifest.mjs —
-// no background.js entry in test-app-chrome-ext (Playwright opens the URL
+// No background.js entry in this test-app (Playwright opens the URL
 // directly; no action click needed), so the required-files check omits it.
 
 /** Post-build copy of manifest.json + public/icons/* into dist/. */

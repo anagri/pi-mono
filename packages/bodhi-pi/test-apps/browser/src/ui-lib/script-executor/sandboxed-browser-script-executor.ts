@@ -1,5 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/script-executor/sandboxed-browser-script-executor.ts
-
 import type { Filesystem, ScriptExecutor } from "@bodhiapp/bodhi-pi";
 import type { SandboxBridge } from "../sandbox/sandbox-bridge.js";
 

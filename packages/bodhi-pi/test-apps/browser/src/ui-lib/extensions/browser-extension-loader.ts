@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/extensions/browser-extension-loader.ts
 import type { ExtensionFactory, Filesystem, RegisteredExtension } from "@bodhiapp/bodhi-pi";
 
 export interface BrowserExtensionLoaderOptions {

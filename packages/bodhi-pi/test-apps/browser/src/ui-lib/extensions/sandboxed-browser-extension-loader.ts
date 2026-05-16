@@ -1,6 +1,6 @@
-// ported from packages/bodhi-pi-browser/src/extensions/sandboxed-browser-extension-loader.ts —
-// extended with tools/commands/providers proxies (the e2e variant has a
-// widened sandbox-bridge surface; see sandbox/sandbox-bridge.ts).
+// Extended with tools / commands / providers proxies so the shared
+// extensions.e2e.ts suite can exercise registerTool + registerProvider
+// under MV3 CSP. See sandbox/sandbox-bridge.ts for the widened surface.
 
 import type {
 	BodhiPiEvent,

@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/sessions/dexie-session-store.ts
 import type {
 	ExtensionEntry,
 	ListSessionsRequest,

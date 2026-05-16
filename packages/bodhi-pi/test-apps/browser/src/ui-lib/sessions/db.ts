@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/sessions/db.ts
 import type { SessionEntry } from "@bodhiapp/bodhi-pi";
 import Dexie, { type Table } from "dexie";
 

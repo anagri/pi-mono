@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// ported from packages/bodhi-pi-chrome-ext/scripts/gen-ext-key.mjs
 
 /**
  * Generates a stable Chrome extension keypair so chrome-extension://<id>/ stays

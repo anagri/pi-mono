@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/filesystem/zenfs-filesystem.ts
 import type { DirEntry, FileStat, Filesystem } from "@bodhiapp/bodhi-pi";
 import { fs } from "@zenfs/core";
 

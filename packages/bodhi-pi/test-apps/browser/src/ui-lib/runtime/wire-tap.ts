@@ -1,4 +1,3 @@
-// ported from packages/bodhi-pi-browser/src/runtime/wire-tap.ts
 type FrameSink = (line: string) => void;
 
 function makeFrameSplitter(onFrame: FrameSink): {
