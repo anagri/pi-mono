@@ -74,7 +74,7 @@ The 6-step feature workflow (`packages/bodhi-pi/CLAUDE.md`):
 
 1. Failing **integration test** in `bodhi-pi/test/*.test.ts` (faux provider + in-memory adapters) → make it pass in `src/`.
 2. **Agent e2e** in `bodhi-pi/e2e/*.e2e.ts` (real `gpt-4o-mini`).
-3. If host-side adapter changes: implement in `test-apps/in-memory/` + unit tests there.
+3. If host-side adapter changes: implement in `test-apps/node-adapters/` + unit tests there.
 4. If browser adapter changes: implement in `test-apps/browser/src/ui-lib/` (or chrome-ext extension surface) + tests.
 5. **Per-Host e2e** in each `test-apps/{cli,http,browser,chrome-ext}/e2e/`.
 6. Update PARITY.md to reflect the new feature across the matrix.

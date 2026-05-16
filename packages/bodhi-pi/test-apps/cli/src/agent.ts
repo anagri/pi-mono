@@ -14,7 +14,7 @@ import {
 	createNodeKvStore,
 	createNodeScriptExecutor,
 	createSingleTenantSqliteSessionStore as createSqliteSessionStore,
-} from "@bodhiapp/bodhi-pi-test-app-in-memory";
+} from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import { pickDefined } from "@bodhiapp/bodhi-pi-test-app-utils/pick-defined";
 import type { Api, Model } from "@earendil-works/pi-ai";
 

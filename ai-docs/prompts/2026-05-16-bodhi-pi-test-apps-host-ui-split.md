@@ -36,7 +36,7 @@ For the four hosts the rough mapping (verify against current code before encodin
 | browser | `frontend/worker.ts`, `ui-lib/runtime/`, `ui-lib/filesystem/`, `ui-lib/sessions/`, `ui-lib/kv/`, `ui-lib/script-executor/`, `ui-lib/extensions/`, `ui-lib/sandbox/`, `ui-lib/transport/` | `frontend/main.tsx`, `frontend/App.tsx`, `frontend/adapter.ts`, `frontend/lib/crypto-shim.ts`, `ui-lib/ui/**` |
 | chrome-ext | `worker.ts`, `agent/`, `sandbox/` | `main.tsx`, `App.tsx`, `adapter.ts` |
 
-`test-apps/in-memory/` and `test-apps/app-utils/` are **shared infrastructure**, not Hosts; they stay as-is.
+`test-apps/node-adapters/` and `test-apps/app-utils/` are **shared infrastructure**, not Hosts; they stay as-is.
 
 The browser case is the messy one because `ui-lib/` currently mixes Host-side adapters and UI components. The plan must commit to a decision: either (a) keep `ui-lib/` and reshape into `ui-lib/host/` + `ui-lib/ui/`, OR (b) flatten `ui-lib/host/*` directly into `src/host/*` and `ui-lib/ui/*` into `src/ui/*`. Recommend (a) so chrome-ext can continue importing `@bodhiapp/bodhi-pi-test-app-browser/ui-lib/host/...` as a shared infrastructure layer — but justify.
 
@@ -61,7 +61,7 @@ The browser case is the messy one because `ui-lib/` currently mixes Host-side ad
 ## Anti-patterns to avoid
 
 - Don't propose renaming the folders to `agent-side/client-side/`; the user-facing spec uses `host/ui/`.
-- Don't pull adapter packages out of `test-apps/in-memory/` or `test-apps/app-utils/`. Those are not Hosts.
+- Don't pull adapter packages out of `test-apps/node-adapters/` or `test-apps/app-utils/`. Those are not Hosts.
 - Don't touch `packages/bodhi-pi-*` (deprecated; the cleanup plan may deprecate-and-remove them later).
 - Don't add new behaviour or "while we're here" refactors. Pure moves.
 

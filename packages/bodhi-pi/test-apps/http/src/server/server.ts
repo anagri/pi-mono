@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import { type Db, openDb, upsertUser } from "@bodhiapp/bodhi-pi-test-app-in-memory";
+import { type Db, openDb, upsertUser } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type Database from "better-sqlite3";
 import { type WebSocket, WebSocketServer } from "ws";

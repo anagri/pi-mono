@@ -18,7 +18,7 @@ All four host packages are `private: true`. None is published to npm.
 ## cli (`test-apps/cli/`)
 
 - **Entrypoint**: `src/cli.ts` (shebang Node entry). Three modes: interactive REPL, headless one-shot, RPC (ndjson over stdio).
-- **Agent construction**: `src/agent.ts` calls `createBodhiPiAgent({...})` with adapters from `test-apps/in-memory/` + `test-apps/app-utils/`:
+- **Agent construction**: `src/agent.ts` calls `createBodhiPiAgent({...})` with adapters from `test-apps/node-adapters/` + `test-apps/app-utils/`:
   - `createNodeFilesystem()`
   - `createSingleTenantSqliteSessionStore({ dbPath })`
   - `createNodeKvStore()`
@@ -36,7 +36,7 @@ All four host packages are `private: true`. None is published to npm.
 The deployment-portability lens — proves the agent works under per-turn rebuild from SQLite.
 
 - **Entrypoint**: `src/server/index.ts` (Node HTTP entry). Frontend at `src/frontend/main.tsx`.
-- **Agent construction** (rebuilt **per request**): `src/server/agent/wire-agent-shared.ts:97` → `buildAgentFactory(opts, label)` → `createBodhiPiAgent({...})` with adapters from `test-apps/in-memory/`:
+- **Agent construction** (rebuilt **per request**): `src/server/agent/wire-agent-shared.ts:97` → `buildAgentFactory(opts, label)` → `createBodhiPiAgent({...})` with adapters from `test-apps/node-adapters/`:
   - `createNodeFilesystem({ rootCwd })` — per-user workspace under `server/filesystem/user-workspace.ts`
   - `createMultiTenantSqliteSessionStore({ db, userId })`
   - `createNodeKvStore({ dir })` — per-user
@@ -92,9 +92,9 @@ The deployment-portability lens — proves the agent works under per-turn rebuil
 
 These two packages provide adapter implementations consumed by Hosts and integration tests. They are **not** Hosts — they construct no agent themselves.
 
-### `test-apps/in-memory/` — `@bodhiapp/bodhi-pi-test-app-in-memory`
+### `test-apps/node-adapters/` — `@bodhiapp/bodhi-pi-test-app-node-adapters`
 
-Node-side adapter implementations (despite the name — predates the rename).
+Node-side adapter implementations.
 
 Exports:
 - `createNodeFilesystem()`

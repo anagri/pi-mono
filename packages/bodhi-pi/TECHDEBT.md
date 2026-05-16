@@ -21,7 +21,7 @@ Living register of debts taken on deliberately. Each entry: what, why deferred, 
 **What:** The SDK ships an `McpConnectionProvider` interface (`src/mcp/mcp-connection-provider.ts`) and a default `createInProcessMcpConnectionProvider()` factory. Hosts inject their own implementation via `BodhiPiConfig.mcpConnectionProvider` when their lifecycle differs from the default.
 
 **Host implementations in this repo:**
-- **`bodhi-pi-cli` / test-apps/in-memory / test-apps/cli**: omit the field, use the SDK default. Connections live with the process.
+- **`test-apps/cli` / `test-apps/node-adapters`**: omit the field, use the SDK default. Connections live with the process.
 - **`test-apps/http` (HTTP + SSE per-request rebuild)**: `ServerMcpStore` (`src/server/mcp/server-mcp-store.ts`) maintains a process-scoped `Map<userId, McpConnectionProvider>`. Each per-request agent gets the user's persistent provider so connections survive rebuild.
 - **`test-apps/http` (WS, same store)**: same `ServerMcpStore` reused — a user's WS and HTTP sessions share the same connection cache.
 - **`test-apps/browser` (Web Worker)**: default in-process provider, but the worker's boot routine (`bootstrap-worker.ts`'s `restoreConnectedMcps`) reads kv on startup and reconnects every entry with `lastKnownStatus === "connected"`. Survives page refresh because kv (Dexie) persists in IndexedDB.

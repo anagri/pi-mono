@@ -28,7 +28,7 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 | `packages/bodhi-pi/test-apps/http` | HTTP+SSE Host (with WebSocket sibling) — multi-tenant SQLite, **per-turn agent rebuild** (proves serialize/deserialize deployment) |
 | `packages/bodhi-pi/test-apps/browser` | Browser Host (Vite/React + Web Worker, ZenFS + Dexie, `MessagePort` Transport) |
 | `packages/bodhi-pi/test-apps/chrome-ext` | Chrome MV3 extension Host — same browser adapters + sandbox iframe for unsafe-eval |
-| `packages/bodhi-pi/test-apps/in-memory` | **Shared infrastructure** — Node-side adapters (`createNodeFilesystem`, `createNodeKvStore`, SQLite session stores, `createNodePackageExtensionLoader`, `createBashTerminal`) consumed by cli + http |
+| `packages/bodhi-pi/test-apps/node-adapters` | **Shared infrastructure** — Node-side adapters (`createNodeFilesystem`, `createNodeKvStore`, SQLite session stores, `createNodePackageExtensionLoader`, `createBashTerminal`) consumed by cli + http |
 | `packages/bodhi-pi/test-apps/app-utils` | **Shared infrastructure** — cross-runtime utilities (`pickDefined`, just-bash adapters) consumed by all four Hosts |
 
 See `ai-docs/specs/bodhi-pi/hosts.md` for full per-Host wiring + Host/UI role split per file.
@@ -51,7 +51,7 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 
 1. **`packages/bodhi-pi/test/*.test.ts`** — failing integration test against an in-process ACP pair using faux providers / aimock + in-memory adapters from `src/`. Make it pass in `src/`.
 2. **`packages/bodhi-pi/e2e/*.e2e.ts`** — gpt-4o-mini round-trip proving the feature reaches a real LLM. Use real adapter helpers (not mocks).
-3. **`packages/bodhi-pi/test-apps/in-memory/`** — if the feature requires a Node-side adapter (FS, sessions, scripts, terminal, KV), implement it here. Add unit tests under the same package.
+3. **`packages/bodhi-pi/test-apps/node-adapters/`** — if the feature requires a Node-side adapter (FS, sessions, scripts, terminal, KV), implement it here. Add unit tests under the same package.
 4. **`packages/bodhi-pi/test-apps/browser/src/ui-lib/`** — same surface, browser-shaped (ZenFS, Dexie, AsyncFunction). Add unit tests (vitest + fake-indexeddb). chrome-ext consumes the same shared `ui-lib/` so changes flow there automatically.
 5. **`packages/bodhi-pi/test-apps/cli/e2e/*.e2e.ts`** — cli Host wires through the new feature. Real LLM, real adapters, asserts the feature reaches the user.
 6. **`packages/bodhi-pi/test-apps/browser/e2e/*.spec.ts`** + **`packages/bodhi-pi/test-apps/chrome-ext/e2e/*.spec.ts`** — Playwright specs, same shape as the cli e2e but driven through Chrome + the Worker. Real LLM, seeded workspace.

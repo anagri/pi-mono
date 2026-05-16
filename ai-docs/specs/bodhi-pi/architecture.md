@@ -125,7 +125,7 @@ src/
 | browser (`test-apps/browser/`) | browser tab + Web Worker | `MessagePort` between worker and main thread | ZenFS Filesystem (FSA-backed) + Dexie SessionStore + Dexie KvStore + AsyncFunction ScriptExecutor; no stdio MCPs |
 | chrome-ext (`test-apps/chrome-ext/`) | extension worker + popup + sandbox iframe | `MessagePort` via chrome messaging + sandboxed eval | Same browser adapters + sandbox-bridged AsyncFunction executor; no stdio MCPs |
 
-Detail per Host in [hosts.md](./hosts.md). Shared adapters in `test-apps/in-memory/` + `test-apps/app-utils/`.
+Detail per Host in [hosts.md](./hosts.md). Shared adapters in `test-apps/node-adapters/` + `test-apps/app-utils/`.
 
 ## Where to read next
 

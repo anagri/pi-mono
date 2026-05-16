@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { type Db, upsertUser } from "@bodhiapp/bodhi-pi-test-app-in-memory";
+import { type Db, upsertUser } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { type WireAgentResult, wireAgentForRequest } from "../agent/wire-agent.js";
 import { authenticateRequest, reject401 } from "../auth/middleware.js";

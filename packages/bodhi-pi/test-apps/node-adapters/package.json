@@ -1,8 +1,8 @@
 {
-	"name": "@bodhiapp/bodhi-pi-test-app-in-memory",
+	"name": "@bodhiapp/bodhi-pi-test-app-node-adapters",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Node-side in-process adapters for bodhi-pi test-apps: Filesystem, KvStore, ScriptExecutor, SessionStore (single + multi tenant), extension loader. Consumed by test-app-cli and test-app-http server.",
+	"description": "Node-side adapters for bodhi-pi test-apps: Filesystem, KvStore, ScriptExecutor, SessionStore (single + multi tenant SQLite), extension loader, bash terminal. Consumed by test-app-cli and test-app-http server.",
 	"type": "module",
 	"main": "./dist/index.js",
 	"exports": {

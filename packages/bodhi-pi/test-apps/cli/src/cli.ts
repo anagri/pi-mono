@@ -3,7 +3,7 @@ import os from "node:os";
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
-import { createNodePackageExtensionLoader } from "@bodhiapp/bodhi-pi-test-app-in-memory";
+import { createNodePackageExtensionLoader } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";

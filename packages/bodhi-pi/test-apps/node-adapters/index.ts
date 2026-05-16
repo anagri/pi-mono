@@ -1,6 +1,6 @@
 // Node-side adapters + session stores shared across the Node test-apps
 // (test-app-cli, test-app-http server). Consumers import via
-// `@bodhiapp/bodhi-pi-test-app-in-memory`.
+// `@bodhiapp/bodhi-pi-test-app-node-adapters`.
 
 export { createBashTerminal } from "./bash-terminal.js";
 export { defaultDbPath } from "./default-db-path.js";
