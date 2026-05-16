@@ -1,5 +1,8 @@
 # Kickoff: plan the `test-apps/*/src/{host,ui}/` folder split
 
+> **⚠️ SUPERSEDED** by [`2026-05-17-bodhi-pi-test-apps-host-client-split.md`](./2026-05-17-bodhi-pi-test-apps-host-client-split.md). The Client-side folder is now named `client/` (not `ui/`) — matches the ACP role name and the future SDK packaging (`@bodhiapps/bodhi-pi-client-{...}`). Kept for history. Do not use as the active kickoff.
+
+
 **Output**: a written plan in `ai-docs/plans/YYYY-MM-DD-bodhi-pi-test-apps-host-ui-split.md` following the same shape as recent plans (`ai-docs/plans/20260514-solid-bodhi-pi-2.md`, `ai-docs/plans/20260515-mcp-3-connection.md`). Plan only — no code changes in this round.
 
 ## Authority
