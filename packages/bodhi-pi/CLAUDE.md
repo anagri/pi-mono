@@ -100,7 +100,7 @@ First-party in `src/mcp/`. Decomposed into `McpService` (ACP methods) + `McpStor
 | Slash commands | `/mcps`, `/mcp add|connect|disconnect|reconnect|remove|tools|include|exclude` |
 | Extension methods | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,include,exclude}` |
 
-**Connections are global per `<Host, slug>`; visibility is per-session.** Multi-tenant Hosts (`test-apps/http`) inject a per-user `McpConnectionProvider` so connections survive per-turn agent rebuild.
+**Connections are global per `<Host-instance, slug>`; visibility is per-session.** A stateless server Host (per-turn rebuild) loses every connection if it relies on the in-process default provider — each turn would reconnect from KV. Such Hosts MUST inject an `McpConnectionProvider` whose lifetime spans agent rebuilds. The reference implementation is `test-apps/http/src/server/mcp/server-mcp-store.ts`, which keys connections by `userId` and survives the per-turn agent rebuild. Single-tenant Hosts (cli, browser, chrome-ext) use the in-process default provider — connections die with the process / worker.
 
 **Transports.** http-streamable everywhere; stdio in Node-spawnable Hosts only. Hosts that cannot spawn (`test-apps/browser`, `test-apps/chrome-ext`) and stateless rebuild Hosts (`test-apps/http`) MUST pass `supportsMcpStdio: false` when constructing the agent. `_bodhi-pi/mcp/add` with `command=` then rejects with `-32601` rather than silently saving an unusable entry.
 
