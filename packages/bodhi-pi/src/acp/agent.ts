@@ -100,7 +100,11 @@ export interface BodhiPiConfig {
 	defaultThinkingLevel?: ModelThinkingLevel;
 	/**
 	 * When `false`, `_bodhi-pi/mcp/add` rejects `command=…` (stdio) MCP entries with a clear error.
-	 * Defaults to `true`. Browser-only / chrome-ext hosts and stateless HTTP servers should set `false`.
+	 *
+	 * Defaults to `true`. **Hosts that cannot spawn child processes MUST set this to `false` explicitly**
+	 * — otherwise the agent silently accepts stdio MCP entries that subsequent `_bodhi-pi/mcp/connect`
+	 * calls cannot fulfill. The wrong default is a silent UX bug, not a runtime error. Applies to:
+	 * `test-apps/browser`, `test-apps/chrome-ext`, and stateless HTTP rebuild Hosts.
 	 */
 	supportsMcpStdio?: boolean;
 	/**

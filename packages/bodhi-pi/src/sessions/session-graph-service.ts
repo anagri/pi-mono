@@ -114,6 +114,9 @@ export class SessionGraphService {
 				});
 				return { leafId: session.runtime.leafId };
 			}
+			// Cross-branch but summary failed (LLM error, no API key, etc.): fall
+			// through to the plain-navigate path below. `crossedBranches:true`
+			// is still emitted so the Client knows context may be lost.
 		}
 
 		await this.sessionStore.setLeafId?.(sessionId, targetEntryId);
