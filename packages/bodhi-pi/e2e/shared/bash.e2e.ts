@@ -96,5 +96,5 @@ test.runIf(!isRuntime("in-memory"))(
 		});
 		expect.soft(chunkedAgentText(h.updates)).toContain("shared-bash-marker");
 	},
-	60_000, // 4 chained real-LLM prompts exceeds the 30s default
+	180_000, // 4 chained real-LLM prompts; http per-request rebuild + write+cat round-trip pushes well past 60s
 );

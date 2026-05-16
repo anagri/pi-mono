@@ -1,97 +1,80 @@
 import type { AgentTool, Agent as PiAgent } from "@earendil-works/pi-agent-core";
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { mergeTools } from "../extensions/merge.js";
 import type { SessionState } from "../sessions/session-state.js";
-import { adaptMcpTool } from "./mcp-tool-adapter.js";
-import type { McpToolInfo } from "./mcp-types.js";
+import type { McpConnectionProvider } from "./mcp-connection-provider.js";
 
-export interface ConnectedMcp {
-	slug: string;
-	client: Client;
-	tools: AgentTool[];
-	toolInfos: McpToolInfo[];
-	close(): Promise<void>;
-}
-
+/**
+ * Per-agent registry for **inclusion** (which slugs each session has opted in
+ * to surface tools from). Connection ownership lives entirely in the
+ * host-injected `McpConnectionProvider`; this class only tracks per-session
+ * inclusion and fans out `piAgent.state.tools` refreshes.
+ */
 export class McpRegistry {
-	private bySession = new Map<string, Map<string, ConnectedMcp>>();
+	private inclusion = new Map<string, Set<string>>();
 
-	constructor(private readonly sessions: Map<string, SessionState>) {}
+	constructor(
+		private readonly sessions: Map<string, SessionState>,
+		private readonly provider: McpConnectionProvider,
+	) {}
 
-	add(
-		sessionId: string,
-		slug: string,
-		client: Client,
-		toolInfos: McpToolInfo[],
-		close: () => Promise<void>,
-	): ConnectedMcp {
-		const tools = toolInfos.map((info) => adaptMcpTool(slug, info, client));
-		const connected: ConnectedMcp = { slug, client, tools, toolInfos, close };
-		const map = this.bySession.get(sessionId) ?? new Map<string, ConnectedMcp>();
-		map.set(slug, connected);
-		this.bySession.set(sessionId, map);
-		this.applyToAgent(sessionId);
-		return connected;
+	setInclusion(sessionId: string, slugs: Iterable<string>): void {
+		this.inclusion.set(sessionId, new Set(slugs));
+		this.applyToSession(sessionId);
 	}
 
-	get(sessionId: string, slug: string): ConnectedMcp | undefined {
-		return this.bySession.get(sessionId)?.get(slug);
+	addInclusion(sessionId: string, slug: string): void {
+		const set = this.inclusion.get(sessionId) ?? new Set<string>();
+		set.add(slug);
+		this.inclusion.set(sessionId, set);
+		this.applyToSession(sessionId);
 	}
 
-	has(sessionId: string, slug: string): boolean {
-		return this.bySession.get(sessionId)?.has(slug) ?? false;
+	removeInclusion(sessionId: string, slug: string): void {
+		const set = this.inclusion.get(sessionId);
+		if (!set) return;
+		set.delete(slug);
+		this.applyToSession(sessionId);
 	}
 
-	listSlugs(sessionId: string): string[] {
-		const m = this.bySession.get(sessionId);
-		return m ? Array.from(m.keys()) : [];
+	getInclusion(sessionId: string): string[] {
+		const set = this.inclusion.get(sessionId);
+		return set ? Array.from(set) : [];
 	}
 
-	getTools(sessionId: string): AgentTool[] {
-		const map = this.bySession.get(sessionId);
-		if (!map) return [];
+	clearInclusion(sessionId: string): void {
+		this.inclusion.delete(sessionId);
+	}
+
+	/** Tools visible to `sessionId`: union over (included ∩ connected) slugs. */
+	getVisibleTools(sessionId: string): AgentTool[] {
+		const set = this.inclusion.get(sessionId);
+		if (!set || set.size === 0) return [];
 		const out: AgentTool[] = [];
-		for (const c of map.values()) out.push(...c.tools);
+		for (const slug of set) {
+			const tools = this.provider.getTools(slug);
+			if (tools) out.push(...tools);
+		}
 		return out;
 	}
 
-	getToolInfos(sessionId: string, slug: string): McpToolInfo[] {
-		return this.bySession.get(sessionId)?.get(slug)?.toolInfos ?? [];
+	/** Tool names for `(sessionId, slug)`. Returns [] when slug isn't included OR isn't connected. */
+	getVisibleToolNames(sessionId: string, slug: string): string[] {
+		const set = this.inclusion.get(sessionId);
+		if (!set || !set.has(slug)) return [];
+		return this.provider.getToolNames(slug) ?? [];
 	}
 
-	async remove(sessionId: string, slug: string): Promise<void> {
-		const map = this.bySession.get(sessionId);
-		const connected = map?.get(slug);
-		if (!connected) return;
-		try {
-			await connected.close();
-		} catch {
-			// best-effort
-		}
-		map?.delete(slug);
-		if (map && map.size === 0) this.bySession.delete(sessionId);
-		this.applyToAgent(sessionId);
-	}
-
-	async closeSession(sessionId: string): Promise<void> {
-		const map = this.bySession.get(sessionId);
-		if (!map) return;
-		const closers = Array.from(map.values()).map(async (c) => {
-			try {
-				await c.close();
-			} catch {
-				// best-effort
-			}
-		});
-		this.bySession.delete(sessionId);
-		await Promise.all(closers);
-	}
-
-	applyToAgent(sessionId: string): void {
+	applyToSession(sessionId: string): void {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
-		const merged = mergeTools(session.tools, this.getTools(sessionId));
+		const merged = mergeTools(session.tools, this.getVisibleTools(sessionId));
 		setAgentTools(session.runtime.piAgent, merged);
+	}
+
+	applyToAllSessions(): void {
+		for (const sessionId of this.sessions.keys()) {
+			this.applyToSession(sessionId);
+		}
 	}
 }
 

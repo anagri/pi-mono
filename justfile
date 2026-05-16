@@ -71,6 +71,8 @@ test:
     # playwright spec set was already failing on main pre-port and Playwright
     # surface tests are deferred sitewide.
 
+    run "@bodhiapp/bodhi-pi-e2e-ui  — playwright (http,ws,browser,chrome-ext)" npm --workspace @bodhiapp/bodhi-pi-e2e-ui test
+
     echo
     if [ ${#failures[@]} -eq 0 ]; then
         echo "✅ All steps passed."
@@ -123,5 +125,16 @@ test-failfast:
 
     run "bodhi-pi-ws-frontend  — build"                    npm --workspace bodhi-pi-ws-frontend run build
 
+    run "@bodhiapp/bodhi-pi-e2e-ui  — playwright (http,ws,browser,chrome-ext)" npm --workspace @bodhiapp/bodhi-pi-e2e-ui test
+
     echo
     echo "✅ All steps passed."
+
+# Run @bodhiapp/bodhi-pi's vitest e2e suite (e2e/ folder).
+test-e2e:
+    npm --workspace @bodhiapp/bodhi-pi run test:e2e
+
+# Run @bodhiapp/bodhi-pi-e2e-ui's playwright suite (e2e-ui/ folder, all projects).
+# Pass extra Playwright flags after `--`, e.g. `just test-e2e-ui -- --headed --project=browser`.
+test-e2e-ui *ARGS:
+    npm --workspace @bodhiapp/bodhi-pi-e2e-ui test -- {{ARGS}}

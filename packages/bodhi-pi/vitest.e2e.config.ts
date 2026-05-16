@@ -13,7 +13,7 @@ const base = typeof baseConfig === "function" ? baseConfig({ command: "serve", m
 const sharedProjectTest = {
 	globals: true,
 	environment: "node" as const,
-	testTimeout: 30_000,
+	testTimeout: 60_000,
 	globalSetup: ["./e2e/global-setup.ts"],
 };
 

@@ -15,7 +15,7 @@ const BROWSER_PORT = 35473;
 export default defineConfig({
 	testDir: "./shared",
 	globalSetup: "./global-setup.ts",
-	timeout: 120_000,
+	timeout: 30_000,
 	expect: { timeout: 30_000 },
 	fullyParallel: false,
 	retries: 0,

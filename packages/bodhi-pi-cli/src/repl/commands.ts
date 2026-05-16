@@ -646,26 +646,34 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			}
 			const slug = rest[0];
 			if (!slug) {
-				process.stdout.write("usage: /mcp <add|connect|disconnect|reconnect|remove|tools> [args…]\n");
+				process.stdout.write(
+					"usage: /mcp <add|connect|disconnect|reconnect|remove|include|exclude|tools> [args…]\n",
+				);
 				return false;
 			}
 			try {
 				if (sub === "connect") {
-					const result = await ctx.client.mcpConnect({ slug, sessionId: ctx.state.sessionId });
+					const result = await ctx.client.mcpConnect({ slug });
 					process.stdout.write(`connected ${slug}: ${result.tools.join(", ") || "(no tools)"}\n`);
 				} else if (sub === "disconnect") {
-					await ctx.client.mcpDisconnect({ slug, sessionId: ctx.state.sessionId });
+					await ctx.client.mcpDisconnect({ slug });
 					process.stdout.write(`disconnected ${slug}\n`);
 				} else if (sub === "reconnect") {
-					const result = await ctx.client.mcpReconnect({ slug, sessionId: ctx.state.sessionId });
+					const result = await ctx.client.mcpReconnect({ slug });
 					process.stdout.write(`reconnected ${slug}: ${result.tools.join(", ") || "(no tools)"}\n`);
 				} else if (sub === "remove") {
-					await ctx.client.mcpRemove({ slug, sessionId: ctx.state.sessionId });
+					await ctx.client.mcpRemove({ slug });
 					process.stdout.write(`removed ${slug}\n`);
+				} else if (sub === "include") {
+					const result = await ctx.client.mcpInclude({ slug, sessionId: ctx.state.sessionId });
+					process.stdout.write(`included ${slug}: ${result.tools.join(", ") || "(no tools visible)"}\n`);
+				} else if (sub === "exclude") {
+					await ctx.client.mcpExclude({ slug, sessionId: ctx.state.sessionId });
+					process.stdout.write(`excluded ${slug}\n`);
 				} else if (sub === "tools") {
 					const tools = await ctx.client.mcpTools({ slug, sessionId: ctx.state.sessionId });
 					if (tools.length === 0) {
-						process.stdout.write(`  (no tools — is ${slug} connected?)\n`);
+						process.stdout.write(`  (no tools — is ${slug} connected and included?)\n`);
 					} else {
 						for (const t of tools) process.stdout.write(`  ${t}\n`);
 					}

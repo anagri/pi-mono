@@ -29,6 +29,10 @@ export type {
 	McpConnectParams,
 	McpConnectResult,
 	McpDisconnectResult,
+	McpExcludeParams,
+	McpExcludeResult,
+	McpIncludeParams,
+	McpIncludeResult,
 	McpListItem,
 	McpNamedValueInput,
 	McpRemoveResult,
@@ -128,6 +132,10 @@ export {
 	type KvStore,
 	maskSecrets,
 } from "./kv/kv-store.js";
+export { createInProcessMcpConnectionProvider } from "./mcp/in-process-provider.js";
+export type { McpConnectionProvider, McpProviderConnectResult } from "./mcp/mcp-connection-provider.js";
+export type { McpServerEntry, McpToolInfo } from "./mcp/mcp-types.js";
+export { MCP_PREFIX, parseMcpServerEntry } from "./mcp/mcp-types.js";
 export type {
 	ScriptExecuteParams,
 	ScriptExecuteResult,

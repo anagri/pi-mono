@@ -28,6 +28,17 @@ export interface ThinkingChangeEntry extends BaseEntry {
 	level: ModelThinkingLevel;
 }
 
+/**
+ * Per-session MCP inclusion snapshot. Written by `_bodhi-pi/mcp/include` and
+ * `_bodhi-pi/mcp/exclude` and by the `mcpServers`-shortcut path on session/new.
+ * Replayed on session/load + session/resume to restore the previously-included
+ * slugs (matches `model_change` snapshot semantics).
+ */
+export interface McpInclusionEntry extends BaseEntry {
+	type: "mcp_inclusion_set";
+	slugs: string[];
+}
+
 export interface CompactionDetails {
 	readFiles: string[];
 	modifiedFiles: string[];
@@ -84,6 +95,7 @@ export type SessionEntry =
 	| MessageEntry
 	| ModelChangeEntry
 	| ThinkingChangeEntry
+	| McpInclusionEntry
 	| CompactionEntry
 	| BranchSummaryEntry
 	| SessionInfoEntry

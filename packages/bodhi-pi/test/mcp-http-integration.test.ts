@@ -7,7 +7,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "vitest";
-import { EXT_MCP_ADD, EXT_MCP_CONNECT, EXT_MCP_TOOLS } from "@/wire/constants.js";
+import { EXT_MCP_ADD, EXT_MCP_CONNECT, EXT_MCP_INCLUDE, EXT_MCP_TOOLS } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
 
@@ -61,15 +61,13 @@ test("MCP http-streamable: add → connect surfaces server tools on piAgent.stat
 	const { slug } = (await harness.clientConn.extMethod(EXT_MCP_ADD, { url: baseUrl })) as { slug: string };
 	expect(slug.length).toBeGreaterThan(0);
 
-	const { tools } = (await harness.clientConn.extMethod(EXT_MCP_CONNECT, {
-		sessionId,
-		slug,
-	})) as { tools: string[] };
+	const { tools } = (await harness.clientConn.extMethod(EXT_MCP_CONNECT, { slug })) as { tools: string[] };
 	expect(tools.length).toBeGreaterThan(0);
 	expect(tools.every((t) => t.startsWith(`${slug}__`))).toBe(true);
 	// mcp-everything ships an `echo` tool; we expect at least that to be present.
 	expect(tools).toContain(`${slug}__echo`);
 
+	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug });
 	const listed = (await harness.clientConn.extMethod(EXT_MCP_TOOLS, { sessionId, slug })) as {
 		tools: string[];
 	};

@@ -1,14 +1,18 @@
+import { randomUUID } from "node:crypto";
 import type { AgentSideConnection, McpServer } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
 import type { JsonValue, KvStore } from "../kv/kv-store.js";
 import { maskSecrets } from "../kv/kv-store.js";
+import type { AppendEntry } from "../models/registry.js";
 import type { SessionState } from "../sessions/session-state.js";
 import {
 	EXT_MCP_ADD,
 	EXT_MCP_CONNECT,
 	EXT_MCP_DISCONNECT,
+	EXT_MCP_EXCLUDE,
+	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
 	EXT_MCP_OAUTH_FINISH,
 	EXT_MCP_OAUTH_START,
@@ -17,12 +21,11 @@ import {
 	EXT_MCP_TOOLS,
 	LIFECYCLE_EVENT_METHOD,
 } from "../wire/constants.js";
-import { optionalSessionId, requireStringParam, validateSessionId } from "../wire/validators.js";
-import { type ConnectedClient, connectMcp } from "./mcp-client.js";
+import { requireStringParam, validateSessionId } from "../wire/validators.js";
+import type { McpConnectionProvider } from "./mcp-connection-provider.js";
 import { KvOAuthProvider, runAuthFlow } from "./mcp-oauth-host-api.js";
 import { McpRegistry } from "./mcp-registry.js";
 import { resolveUniqueSlug, slugifyCommand, slugifyUrl } from "./mcp-slug.js";
-import { toolName } from "./mcp-tool-adapter.js";
 import {
 	MCP_PREFIX,
 	type McpAuthConfig,
@@ -43,6 +46,8 @@ export interface McpServiceDeps {
 	sessions: Map<string, SessionState>;
 	logger: BodhiPiLogger;
 	supportsStdio?: boolean;
+	provider: McpConnectionProvider;
+	appendEntry: AppendEntry;
 }
 
 export class McpService {
@@ -53,6 +58,8 @@ export class McpService {
 	private readonly logger: BodhiPiLogger;
 	private readonly supportsStdio: boolean;
 	private readonly sessions: Map<string, SessionState>;
+	private readonly provider: McpConnectionProvider;
+	private readonly appendEntry: AppendEntry;
 
 	constructor(deps: McpServiceDeps) {
 		this.kvStore = deps.kvStore;
@@ -61,7 +68,13 @@ export class McpService {
 		this.logger = deps.logger;
 		this.sessions = deps.sessions;
 		this.supportsStdio = deps.supportsStdio ?? true;
-		this.registry = new McpRegistry(deps.sessions);
+		this.provider = deps.provider;
+		this.appendEntry = deps.appendEntry;
+		this.registry = new McpRegistry(deps.sessions, deps.provider);
+		// When the host's provider mutates its connection map, refresh
+		// piAgent.state.tools for every loaded session so newly-available /
+		// removed tools propagate.
+		this.provider.onChange(() => this.registry.applyToAllSessions());
 	}
 
 	register(): Array<[string, ExtHandler]> {
@@ -73,24 +86,62 @@ export class McpService {
 			[EXT_MCP_RECONNECT, this.handleReconnect.bind(this)],
 			[EXT_MCP_LIST, this.handleList.bind(this)],
 			[EXT_MCP_TOOLS, this.handleTools.bind(this)],
+			[EXT_MCP_INCLUDE, this.handleInclude.bind(this)],
+			[EXT_MCP_EXCLUDE, this.handleExclude.bind(this)],
 			[EXT_MCP_OAUTH_START, this.handleOAuthStart.bind(this)],
 			[EXT_MCP_OAUTH_FINISH, this.handleOAuthFinish.bind(this)],
 		];
 	}
 
-	async hydrate(sessionId: string, ephemeral: McpServer[] | undefined): Promise<void> {
+	/**
+	 * Set the session's inclusion based on `ephemeral` and the session-stored
+	 * `restoredSlugs`. Precedence:
+	 *   `ephemeral === undefined` → restoredSlugs (session-stored wins; no new entry written)
+	 *   `ephemeral === []`        → empty (writes new snapshot entry)
+	 *   `ephemeral === [A, B...]` → connect+include named slugs that exist in kv (writes new snapshot entry).
+	 *                                Unknown slugs are silently skipped.
+	 */
+	async hydrate(sessionId: string, ephemeral: McpServer[] | undefined, restoredSlugs: string[] | null): Promise<void> {
+		if (ephemeral === undefined) {
+			const slugs = restoredSlugs ?? [];
+			this.registry.setInclusion(sessionId, slugs);
+			return;
+		}
+
+		if (ephemeral.length === 0) {
+			this.registry.setInclusion(sessionId, []);
+			// Only persist when there was a prior non-empty inclusion to override.
+			// session/new with `[]` is the natural default; writing it would
+			// pollute brand-new sessions with a noisy zero-state entry.
+			if (restoredSlugs && restoredSlugs.length > 0) {
+				await this.persistInclusion(sessionId, []);
+			}
+			return;
+		}
+
 		const persisted = await this.loadPersistedEntries();
-		const persistedEntries = persisted.filter(({ entry }) => entry.lastKnownStatus === "connected");
-		const ephemeralEntries = (ephemeral ?? []).flatMap((s) => {
-			const entry = fromAcpMcpServer(s);
-			return entry ? [{ slug: sanitizeSlugForAcp(s.name), entry }] : [];
-		});
-		const all = [...persistedEntries, ...ephemeralEntries];
-		await Promise.all(all.map((p) => this.connectOne(sessionId, p.slug, p.entry).catch(() => undefined)));
+		const persistedBySlug = new Map(persisted.map((p) => [p.slug, p.entry] as const));
+		const referenced: string[] = [];
+		for (const s of ephemeral) {
+			const slug = sanitizeSlugForAcp(s.name);
+			const entry = persistedBySlug.get(slug);
+			if (!entry) continue;
+			referenced.push(slug);
+			if (!this.provider.isConnected(slug)) {
+				try {
+					await this.provider.connect(slug, entry);
+					await this.persistStatus(slug, entry, "connected");
+				} catch {
+					// best-effort; surface via mcp_status_change below
+				}
+			}
+		}
+		this.registry.setInclusion(sessionId, referenced);
+		await this.persistInclusion(sessionId, referenced);
 	}
 
-	async closeSession(sessionId: string): Promise<void> {
-		await this.registry.closeSession(sessionId);
+	closeSession(sessionId: string): void {
+		this.registry.clearInclusion(sessionId);
 	}
 
 	private async handleAdd(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -128,48 +179,50 @@ export class McpService {
 	private async handleRemove(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKv(EXT_MCP_REMOVE);
 		const slug = requireStringParam(EXT_MCP_REMOVE, params, "slug");
-		const sessionId = optionalSessionId(params);
-		if (sessionId !== undefined) {
-			await this.registry.remove(sessionId, slug);
-		} else {
-			for (const sid of this.sessions.keys()) {
-				if (this.registry.has(sid, slug)) await this.registry.remove(sid, slug);
-			}
-		}
+		await this.provider.disconnect(slug);
 		await kv.remove(`${MCP_PREFIX}${slug}`);
+		await this.emitStatusBroadcast(slug, "disconnected");
 		return { slug };
 	}
 
 	private async handleConnect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKv(EXT_MCP_CONNECT);
 		const slug = requireStringParam(EXT_MCP_CONNECT, params, "slug");
-		const sessionId = validateSessionId(EXT_MCP_CONNECT, params);
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
 		if (!entry) throw new RequestError(-32602, `${EXT_MCP_CONNECT}: unknown mcp ${slug}`);
-		if (this.registry.has(sessionId, slug)) {
-			return { tools: namesFor(slug, this.registry.getToolInfos(sessionId, slug)) };
+		if (this.provider.isConnected(slug)) {
+			return { tools: this.provider.getToolNames(slug) ?? [] };
 		}
-		const tools = await this.connectOne(sessionId, slug, entry);
+		const result = await this.tryProviderConnect(slug, entry);
 		await this.persistStatus(slug, entry, "connected");
-		return { tools };
+		await this.emitStatusBroadcast(slug, "connected");
+		await this.emitToolsBroadcast(slug, result.toolNames);
+		return { tools: result.toolNames };
 	}
 
 	private async handleDisconnect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const kv = this.requireKv(EXT_MCP_DISCONNECT);
 		const slug = requireStringParam(EXT_MCP_DISCONNECT, params, "slug");
-		const sessionId = validateSessionId(EXT_MCP_DISCONNECT, params);
-		await this.registry.remove(sessionId, slug);
+		await this.provider.disconnect(slug);
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
 		if (entry) await this.persistStatus(slug, entry, "disconnected");
-		await this.emitStatus(sessionId, slug, "disconnected");
+		await this.emitStatusBroadcast(slug, "disconnected");
 		return { slug };
 	}
 
 	private async handleReconnect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		await this.handleDisconnect(params);
-		return this.handleConnect(params);
+		const kv = this.requireKv(EXT_MCP_RECONNECT);
+		const slug = requireStringParam(EXT_MCP_RECONNECT, params, "slug");
+		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
+		const entry = parseMcpServerEntry(raw ?? null);
+		if (!entry) throw new RequestError(-32602, `${EXT_MCP_RECONNECT}: unknown mcp ${slug}`);
+		const result = await this.tryProviderReconnect(slug, entry);
+		await this.persistStatus(slug, entry, "connected");
+		await this.emitStatusBroadcast(slug, "connected");
+		await this.emitToolsBroadcast(slug, result.toolNames);
+		return { tools: result.toolNames };
 	}
 
 	private async handleList(_params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -180,11 +233,12 @@ export class McpService {
 			const entry = parseMcpServerEntry(e.value);
 			if (!entry) continue;
 			const slug = e.key.slice(MCP_PREFIX.length);
+			const liveStatus = this.provider.isConnected(slug) ? "connected" : entry.lastKnownStatus;
 			const item: McpListEntry = {
 				slug,
 				label: entry.label,
 				transport: entry.transport,
-				status: entry.lastKnownStatus,
+				status: liveStatus,
 			};
 			if (entry.url !== undefined) item.url = entry.url;
 			if (entry.command !== undefined) item.command = entry.command;
@@ -196,8 +250,27 @@ export class McpService {
 	private async handleTools(params: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const slug = requireStringParam(EXT_MCP_TOOLS, params, "slug");
 		const sessionId = validateSessionId(EXT_MCP_TOOLS, params);
-		const infos = this.registry.getToolInfos(sessionId, slug);
-		return { tools: namesFor(slug, infos) };
+		return { tools: this.registry.getVisibleToolNames(sessionId, slug) };
+	}
+
+	private async handleInclude(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.requireKv(EXT_MCP_INCLUDE);
+		const slug = requireStringParam(EXT_MCP_INCLUDE, params, "slug");
+		const sessionId = validateSessionId(EXT_MCP_INCLUDE, params);
+		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
+		const entry = parseMcpServerEntry(raw ?? null);
+		if (!entry) throw new RequestError(-32602, `${EXT_MCP_INCLUDE}: unknown mcp ${slug}`);
+		this.registry.addInclusion(sessionId, slug);
+		await this.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
+		return { slug, tools: this.provider.isConnected(slug) ? (this.provider.getToolNames(slug) ?? []) : [] };
+	}
+
+	private async handleExclude(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const slug = requireStringParam(EXT_MCP_EXCLUDE, params, "slug");
+		const sessionId = validateSessionId(EXT_MCP_EXCLUDE, params);
+		this.registry.removeInclusion(sessionId, slug);
+		await this.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
+		return { slug };
 	}
 
 	private async handleOAuthStart(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -224,7 +297,6 @@ export class McpService {
 		const slug = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "slug");
 		const code = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "code");
 		const redirectUri = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "redirectUri");
-		const sessionId = validateSessionId(EXT_MCP_OAUTH_FINISH, params);
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
 		if (!entry) throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: unknown mcp ${slug}`);
@@ -238,25 +310,33 @@ export class McpService {
 		}
 		const refreshed = parseMcpServerEntry((await kv.get(`${MCP_PREFIX}${slug}`)) ?? null);
 		if (!refreshed) throw new RequestError(-32603, `${EXT_MCP_OAUTH_FINISH}: entry vanished after token save`);
-		const tools = await this.connectOne(sessionId, slug, refreshed);
+		const result = await this.tryProviderConnect(slug, refreshed);
 		await this.persistStatus(slug, refreshed, "connected");
-		return { tools };
+		await this.emitStatusBroadcast(slug, "connected");
+		await this.emitToolsBroadcast(slug, result.toolNames);
+		return { tools: result.toolNames };
 	}
 
-	private async connectOne(sessionId: string, slug: string, entry: McpServerEntry): Promise<string[]> {
-		let connected: ConnectedClient;
+	private async tryProviderConnect(slug: string, entry: McpServerEntry): Promise<{ toolNames: string[] }> {
 		try {
-			connected = await connectMcp(entry);
+			return await this.provider.connect(slug, entry);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			this.logger.error(`[bodhi-pi mcp] connect ${slug} failed:`, message);
-			await this.emitStatus(sessionId, slug, "error", message);
+			await this.emitStatusBroadcast(slug, "error", message);
 			throw new RequestError(-32603, `mcp/${slug}: ${message}`);
 		}
-		this.registry.add(sessionId, slug, connected.client, connected.tools, connected.close);
-		await this.emitStatus(sessionId, slug, "connected");
-		await this.emitToolsChange(sessionId, slug, namesFor(slug, connected.tools));
-		return namesFor(slug, connected.tools);
+	}
+
+	private async tryProviderReconnect(slug: string, entry: McpServerEntry): Promise<{ toolNames: string[] }> {
+		try {
+			return await this.provider.reconnect(slug, entry);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			this.logger.error(`[bodhi-pi mcp] reconnect ${slug} failed:`, message);
+			await this.emitStatusBroadcast(slug, "error", message);
+			throw new RequestError(-32603, `mcp/${slug}: ${message}`);
+		}
 	}
 
 	private async persistStatus(
@@ -268,32 +348,50 @@ export class McpService {
 		await this.kvStore?.set(`${MCP_PREFIX}${slug}`, serializeMcpServerEntry(next));
 	}
 
-	private async emitStatus(
-		sessionId: string,
+	private async persistInclusion(sessionId: string, slugs: string[]): Promise<void> {
+		const session = this.sessions.get(sessionId);
+		if (!session) return;
+		const sorted = slugs.slice().sort();
+		await this.appendEntry(sessionId, session, {
+			type: "mcp_inclusion_set",
+			id: randomUUID(),
+			parentId: session.runtime.leafId,
+			timestamp: Date.now(),
+			slugs: sorted,
+		});
+	}
+
+	private async emitStatusBroadcast(
 		slug: string,
 		status: "connected" | "disconnected" | "error",
 		errorMessage?: string,
 	): Promise<void> {
-		await this.events.emit({
-			type: "mcp_status_change",
-			sessionId,
-			slug,
-			status,
-			...(errorMessage !== undefined ? { errorMessage } : {}),
-		});
-		const params: Record<string, unknown> = {
-			type: "mcp_status_change",
-			sessionId,
-			slug,
-			status,
-		};
-		if (errorMessage !== undefined) params.errorMessage = errorMessage;
-		await this.notifyLifecycle(params);
+		const sids = this.sessions.size === 0 ? [""] : Array.from(this.sessions.keys());
+		for (const sessionId of sids) {
+			await this.events.emit({
+				type: "mcp_status_change",
+				sessionId,
+				slug,
+				status,
+				...(errorMessage !== undefined ? { errorMessage } : {}),
+			});
+			const params: Record<string, unknown> = {
+				type: "mcp_status_change",
+				sessionId,
+				slug,
+				status,
+			};
+			if (errorMessage !== undefined) params.errorMessage = errorMessage;
+			await this.notifyLifecycle(params);
+		}
 	}
 
-	private async emitToolsChange(sessionId: string, slug: string, toolNames: string[]): Promise<void> {
-		await this.events.emit({ type: "mcp_tools_change", sessionId, slug, toolNames });
-		await this.notifyLifecycle({ type: "mcp_tools_change", sessionId, slug, toolNames });
+	private async emitToolsBroadcast(slug: string, toolNames: string[]): Promise<void> {
+		const sids = this.sessions.size === 0 ? [""] : Array.from(this.sessions.keys());
+		for (const sessionId of sids) {
+			await this.events.emit({ type: "mcp_tools_change", sessionId, slug, toolNames });
+			await this.notifyLifecycle({ type: "mcp_tools_change", sessionId, slug, toolNames });
+		}
 	}
 
 	private async notifyLifecycle(params: Record<string, unknown>): Promise<void> {
@@ -326,10 +424,6 @@ export class McpService {
 		}
 		return out;
 	}
-}
-
-function namesFor(slug: string, infos: { name: string }[]): string[] {
-	return infos.map((i) => toolName(slug, i.name));
 }
 
 function parseStringArray(value: unknown, errPrefix: string): string[] {
@@ -366,45 +460,6 @@ function parseAuthParam(value: unknown): McpAuthConfig {
 	const queryParams = parseNamedSecretListParam(obj.queryParams);
 	if (queryParams.length > 0) out.queryParams = queryParams;
 	return out;
-}
-
-function fromAcpMcpServer(s: McpServer): McpServerEntry | null {
-	const transport = (s as { type?: string }).type ?? ("command" in s ? "stdio" : undefined);
-	if (transport === "http") {
-		const http = s as { url: string; headers: Array<{ name: string; value: string }>; name: string };
-		const headers: McpNamedSecret[] = (http.headers ?? []).map((h) => ({
-			name: h.name,
-			value: h.value,
-			secret: true,
-		}));
-		return {
-			transport: "http",
-			url: http.url,
-			auth: headers.length > 0 ? { mode: "header", headers } : { mode: "public" },
-			label: http.name,
-			addedAt: new Date().toISOString(),
-			lastKnownStatus: "connected",
-		};
-	}
-	if (transport === "stdio" || "command" in s) {
-		const stdio = s as { command: string; args: string[]; env: Array<{ name: string; value: string }>; name: string };
-		const env: McpNamedSecret[] = (stdio.env ?? []).map((e) => ({
-			name: e.name,
-			value: e.value,
-			secret: true,
-		}));
-		return {
-			transport: "stdio",
-			command: stdio.command,
-			args: stdio.args ?? [],
-			...(env.length > 0 ? { env } : {}),
-			auth: { mode: "public" },
-			label: stdio.name,
-			addedAt: new Date().toISOString(),
-			lastKnownStatus: "connected",
-		};
-	}
-	return null;
 }
 
 function sanitizeSlugForAcp(name: string): string {

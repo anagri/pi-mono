@@ -9,6 +9,8 @@ export interface SessionContext {
 	currentModelId: string | null;
 	currentThinkingLevel: ModelThinkingLevel | null;
 	name: string | null;
+	/** Last persisted MCP inclusion snapshot. `null` when the session has never written one. */
+	mcpInclusion: string[] | null;
 }
 
 /**
@@ -80,7 +82,7 @@ export function buildSessionContext(
 	const entries = record.entries;
 	const targetLeaf = leafId !== undefined ? leafId : (record.leafId ?? null);
 	if (targetLeaf === null && entries.length === 0) {
-		return { messages: [], currentModelId: null, currentThinkingLevel: null, name: null };
+		return { messages: [], currentModelId: null, currentThinkingLevel: null, name: null, mcpInclusion: null };
 	}
 
 	const path = walkPath(entries, targetLeaf);
@@ -88,6 +90,7 @@ export function buildSessionContext(
 	let currentModelId: string | null = null;
 	let currentThinkingLevel: ModelThinkingLevel | null = null;
 	let name: string | null = null;
+	let mcpInclusion: string[] | null = null;
 	let compaction: CompactionEntry | null = null;
 	for (const entry of path) {
 		if (entry.type === "model_change") {
@@ -96,6 +99,8 @@ export function buildSessionContext(
 			currentThinkingLevel = entry.level;
 		} else if (entry.type === "session_info" && entry.name !== undefined) {
 			name = entry.name;
+		} else if (entry.type === "mcp_inclusion_set") {
+			mcpInclusion = entry.slugs.slice();
 		} else if (entry.type === "compaction") {
 			compaction = entry;
 		}
@@ -128,5 +133,5 @@ export function buildSessionContext(
 		for (const entry of path) appendIfMessage(entry);
 	}
 
-	return { messages, currentModelId, currentThinkingLevel, name };
+	return { messages, currentModelId, currentThinkingLevel, name, mcpInclusion };
 }

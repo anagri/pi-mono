@@ -15,7 +15,12 @@ export interface ConnectedClient {
 	close(): Promise<void>;
 }
 
-export async function connectMcp(entry: McpServerEntry): Promise<ConnectedClient> {
+export interface ConnectOptions {
+	/** Invoked once when the underlying transport closes unexpectedly (network drop, server crash). Not fired on explicit close(). */
+	onTransportClose?: () => void;
+}
+
+export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {}): Promise<ConnectedClient> {
 	const client = new Client(CLIENT_INFO, { jsonSchemaValidator: SCHEMA_VALIDATOR });
 	if (entry.transport === "http") {
 		if (!entry.url) throw new Error("http MCP entry missing url");
@@ -37,10 +42,19 @@ export async function connectMcp(entry: McpServerEntry): Promise<ConnectedClient
 		await client.connect(transport);
 	}
 	const tools = await listTools(client);
+	let closedExplicitly = false;
+	if (opts.onTransportClose) {
+		const cb = opts.onTransportClose;
+		client.onclose = () => {
+			if (closedExplicitly) return;
+			cb();
+		};
+	}
 	return {
 		client,
 		tools,
 		close: async () => {
+			closedExplicitly = true;
 			try {
 				await client.close();
 			} catch {

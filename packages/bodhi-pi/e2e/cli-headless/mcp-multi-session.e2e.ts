@@ -17,7 +17,7 @@ interface HeadlessSlashSession {
 }
 
 async function startHeadlessSlashSession(opts: { model: string; provider: string }): Promise<HeadlessSlashSession> {
-	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-ui-cli-mcp-stdio-"));
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bodhi-pi-e2e-ui-cli-mcp-multi-"));
 	const dbPath = path.join(tmpDir, "sessions.db");
 	const homeDir = path.join(tmpDir, ".home");
 	await fs.mkdir(homeDir, { recursive: true });
@@ -87,30 +87,65 @@ afterEach(async () => {
 	}
 });
 
-test("cli e2e-ui (stdio): /mcp add command=npx … round-trip via headless stdin/stdout", async () => {
+function mcpEverythingUrl(): string {
+	const url = process.env.BODHI_PI_E2E_MCP_EVERYTHING_HTTP_URL;
+	if (!url) throw new Error("BODHI_PI_E2E_MCP_EVERYTHING_HTTP_URL not set");
+	return url;
+}
+
+// One cli process, two sessions: confirm that a global disconnect from one
+// session removes the tools from the other session immediately.
+test("cli multi-session: /mcp disconnect from session B drops tools in session A", async () => {
 	const session = await startHeadlessSlashSession({ model: "gpt-4o-mini", provider: "openai" });
 	activeSession = session;
 
-	const added = await session.sendSlash(
-		`/mcp add command=npx args=["--yes","@modelcontextprotocol/server-everything","stdio"]`,
-	);
-	expect.soft(added).toMatch(/^added: /);
+	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
 	const slug = added.replace(/^added: /, "").trim();
-	expect.soft(slug).toBe("server-everything");
+	await session.sendSlash(`/mcp connect ${slug}`);
 
-	const connected = await session.sendSlash(`/mcp connect ${slug}`);
-	expect.soft(connected).toContain(`${slug}__echo`);
+	// session A: created at startup. Include the MCP and confirm tools are visible.
+	await session.sendSlash(`/mcp include ${slug}`);
+	const aTools = await session.sendSlash(`/mcp tools ${slug}`);
+	expect.soft(aTools).toContain(`${slug}__get-sum`);
+
+	// Create session B and switch into it. Session B's inclusion set is empty by
+	// default (client wrapper sends mcpServers: []), so an explicit /mcp include
+	// is required to surface the globally-connected MCP.
+	const created = await session.sendSlash(`/session new`);
+	const sidB = created
+		.replace(/^session\s+/, "")
+		.replace(/\s+\(active\)$/, "")
+		.trim();
+	expect.soft(sidB.length).toBeGreaterThan(0);
 
 	await session.sendSlash(`/mcp include ${slug}`);
-	const tools = await session.sendSlash(`/mcp tools ${slug}`);
-	expect.soft(tools).toContain(`${slug}__echo`);
+	const bTools = await session.sendSlash(`/mcp tools ${slug}`);
+	expect.soft(bTools).toContain(`${slug}__get-sum`);
 
-	const disconnected = await session.sendSlash(`/mcp disconnect ${slug}`);
-	expect.soft(disconnected).toContain(`disconnected ${slug}`);
+	// Global disconnect from session B's context must drop tools for session A too.
+	await session.sendSlash(`/mcp disconnect ${slug}`);
+	const bAfter = await session.sendSlash(`/mcp tools ${slug}`);
+	expect.soft(bAfter).toContain("(no tools");
 
-	const reconnected = await session.sendSlash(`/mcp reconnect ${slug}`);
-	expect.soft(reconnected).toContain(`${slug}__echo`);
-
-	const removed = await session.sendSlash(`/mcp remove ${slug}`);
-	expect.soft(removed).toContain(`removed ${slug}`);
-}, 60_000); // npx -y cold start can take ~10s
+	// Switch back to A — its inclusion set still has the slug, but the connection
+	// is gone, so tools must be empty.
+	const sidA =
+		(await session.sendSlash(`/session list`))
+			.split("\n")
+			.find((l) => l.trim().startsWith("*"))
+			?.slice(2)
+			.trim() ?? "";
+	void sidA;
+	// /session list ordering: first session at top, second at bottom; new ones get
+	// active by default. Switching to the first listed (oldest = A).
+	const allLines = (await session.sendSlash(`/session list`))
+		.split("\n")
+		.map((l) => l.replace(/^[\s*]+/, "").trim())
+		.filter(Boolean);
+	const firstSession = allLines[0];
+	if (firstSession) {
+		await session.sendSlash(`/session switch ${firstSession}`);
+	}
+	const aAfter = await session.sendSlash(`/mcp tools ${slug}`);
+	expect.soft(aAfter).toContain("(no tools");
+}, 30_000);

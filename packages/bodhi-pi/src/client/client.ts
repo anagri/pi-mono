@@ -21,6 +21,8 @@ import {
 	EXT_MCP_ADD,
 	EXT_MCP_CONNECT,
 	EXT_MCP_DISCONNECT,
+	EXT_MCP_EXCLUDE,
+	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
 	EXT_MCP_OAUTH_FINISH,
 	EXT_MCP_OAUTH_START,
@@ -67,6 +69,10 @@ import type {
 	McpConnectParams,
 	McpConnectResult,
 	McpDisconnectResult,
+	McpExcludeParams,
+	McpExcludeResult,
+	McpIncludeParams,
+	McpIncludeResult,
 	McpListItem,
 	McpRemoveResult,
 	McpToolsResult,
@@ -311,29 +317,31 @@ export class BodhiPiClient {
 		return this.ext<McpAddResult>(EXT_MCP_ADD, body);
 	}
 
-	mcpRemove(params: { slug: string } & SessionRef): Promise<McpRemoveResult> {
-		return this.ext<McpRemoveResult>(EXT_MCP_REMOVE, {
-			slug: params.slug,
-			...pickDefined({ sessionId: params.sessionId }),
-		});
+	mcpRemove(params: { slug: string }): Promise<McpRemoveResult> {
+		return this.ext<McpRemoveResult>(EXT_MCP_REMOVE, { slug: params.slug });
 	}
 
 	mcpConnect(params: McpConnectParams): Promise<McpConnectResult> {
-		return this.ext<McpConnectResult>(EXT_MCP_CONNECT, {
-			sessionId: this.requireSession(params),
-			slug: params.slug,
-		});
+		return this.ext<McpConnectResult>(EXT_MCP_CONNECT, { slug: params.slug });
 	}
 
 	mcpDisconnect(params: McpConnectParams): Promise<McpDisconnectResult> {
-		return this.ext<McpDisconnectResult>(EXT_MCP_DISCONNECT, {
+		return this.ext<McpDisconnectResult>(EXT_MCP_DISCONNECT, { slug: params.slug });
+	}
+
+	mcpReconnect(params: McpConnectParams): Promise<McpConnectResult> {
+		return this.ext<McpConnectResult>(EXT_MCP_RECONNECT, { slug: params.slug });
+	}
+
+	mcpInclude(params: McpIncludeParams): Promise<McpIncludeResult> {
+		return this.ext<McpIncludeResult>(EXT_MCP_INCLUDE, {
 			sessionId: this.requireSession(params),
 			slug: params.slug,
 		});
 	}
 
-	mcpReconnect(params: McpConnectParams): Promise<McpConnectResult> {
-		return this.ext<McpConnectResult>(EXT_MCP_RECONNECT, {
+	mcpExclude(params: McpExcludeParams): Promise<McpExcludeResult> {
+		return this.ext<McpExcludeResult>(EXT_MCP_EXCLUDE, {
 			sessionId: this.requireSession(params),
 			slug: params.slug,
 		});
@@ -359,14 +367,8 @@ export class BodhiPiClient {
 		return this.ext(EXT_MCP_OAUTH_START, { slug: params.slug, redirectUri: params.redirectUri });
 	}
 
-	mcpOAuthFinish(params: {
-		slug: string;
-		code: string;
-		redirectUri: string;
-		sessionId?: string;
-	}): Promise<McpConnectResult> {
+	mcpOAuthFinish(params: { slug: string; code: string; redirectUri: string }): Promise<McpConnectResult> {
 		return this.ext<McpConnectResult>(EXT_MCP_OAUTH_FINISH, {
-			sessionId: this.requireSession(params),
 			slug: params.slug,
 			code: params.code,
 			redirectUri: params.redirectUri,

@@ -82,19 +82,23 @@ export const EXT_KV_REMOVE = "_bodhi-pi/kv/remove";
 
 /** Persist a new MCP server entry under `mcp/<slug>`. Params: { url?, command?, args?, env?, auth?, label? }. Returns `{ slug }`. */
 export const EXT_MCP_ADD = "_bodhi-pi/mcp/add";
-/** Remove `mcp/<slug>` from KV. Disconnects in-session client first. */
+/** Remove `mcp/<slug>` from KV and close any live global connection. Per-session inclusion sets are untouched. */
 export const EXT_MCP_REMOVE = "_bodhi-pi/mcp/remove";
-/** Connect (or reuse) an MCP client for `slug`, register its tools on the active session. Returns `{ tools }`. */
+/** Establish (or reuse) the global MCP connection for `slug`. Does NOT alter any session's inclusion set. Returns `{ tools }`. */
 export const EXT_MCP_CONNECT = "_bodhi-pi/mcp/connect";
-/** Disconnect MCP client for `slug` and unregister its tools from the active session. */
+/** Close the global MCP connection for `slug`. Tools disappear for every session that includes it; inclusion sets untouched. */
 export const EXT_MCP_DISCONNECT = "_bodhi-pi/mcp/disconnect";
-/** Disconnect + connect for `slug`. */
+/** Disconnect + connect for `slug` (global). */
 export const EXT_MCP_RECONNECT = "_bodhi-pi/mcp/reconnect";
-/** List MCP entries (slug, label, status, transport). Secret values masked. */
+/** List MCP entries (slug, label, status, transport, connected). Secret values masked. */
 export const EXT_MCP_LIST = "_bodhi-pi/mcp/list";
-/** List currently registered tools for `slug` in the active session. */
+/** List the tools currently visible to `sessionId` for `slug` (i.e., included AND globally connected). */
 export const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
+/** Add `slug` to a session's inclusion set. Slug must already exist in kv; if not globally connected, tools surface when it next connects. */
+export const EXT_MCP_INCLUDE = "_bodhi-pi/mcp/include";
+/** Remove `slug` from a session's inclusion set. No-op if absent. Does NOT close the global connection. */
+export const EXT_MCP_EXCLUDE = "_bodhi-pi/mcp/exclude";
 /** Start OAuth flow for `slug`. Returns `{ authorizeUrl, state }`. Phase 3. */
 export const EXT_MCP_OAUTH_START = "_bodhi-pi/mcp/oauth/start";
-/** Finish OAuth flow with `{ code, state }`. Returns `{ tools }`. Phase 3. */
+/** Finish OAuth flow with `{ code, state }`. Connects globally on success. Returns `{ tools }`. Phase 3. */
 export const EXT_MCP_OAUTH_FINISH = "_bodhi-pi/mcp/oauth/finish";

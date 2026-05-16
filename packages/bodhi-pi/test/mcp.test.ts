@@ -6,7 +6,15 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { EXT_KV_GET, EXT_KV_LIST, EXT_MCP_ADD, EXT_MCP_LIST, EXT_MCP_REMOVE } from "@/wire/constants.js";
+import {
+	EXT_KV_GET,
+	EXT_KV_LIST,
+	EXT_MCP_ADD,
+	EXT_MCP_EXCLUDE,
+	EXT_MCP_INCLUDE,
+	EXT_MCP_LIST,
+	EXT_MCP_REMOVE,
+} from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
 
@@ -135,6 +143,71 @@ test("_bodhi-pi/mcp/add rejects stdio commands when supportsMcpStdio=false", asy
 	await expect(
 		harness.clientConn.extMethod(EXT_MCP_ADD, { command: "npx", args: ["@modelcontextprotocol/server-everything"] }),
 	).rejects.toThrow(/stdio MCPs are not supported/);
+});
+
+test("/mcp include writes an mcp_inclusion_set session entry; /mcp exclude writes a new snapshot", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	// Add two MCP entries (don't need to connect; include() doesn't auto-connect).
+	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.a.com/mcp" });
+	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.b.com/mcp" });
+
+	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "a" });
+	let record = await harness.sessionStore.load(sessionId);
+	const inclusionEntriesAfterA = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
+	expect(inclusionEntriesAfterA).toHaveLength(1);
+	expect((inclusionEntriesAfterA[0] as { slugs: string[] }).slugs).toEqual(["a"]);
+
+	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "b" });
+	record = await harness.sessionStore.load(sessionId);
+	const inclusionEntriesAfterB = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
+	expect(inclusionEntriesAfterB).toHaveLength(2);
+	expect((inclusionEntriesAfterB[1] as { slugs: string[] }).slugs).toEqual(["a", "b"]);
+
+	await harness.clientConn.extMethod(EXT_MCP_EXCLUDE, { sessionId, slug: "a" });
+	record = await harness.sessionStore.load(sessionId);
+	const inclusionEntriesAfterExclude = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
+	expect(inclusionEntriesAfterExclude).toHaveLength(3);
+	expect((inclusionEntriesAfterExclude[2] as { slugs: string[] }).slugs).toEqual(["b"]);
+});
+
+test("session/resume restores inclusion from the last mcp_inclusion_set entry when mcpServers is omitted", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.x.com/mcp" });
+	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "x" });
+
+	// resume with mcpServers omitted should fall back to the session-stored inclusion.
+	await harness.clientConn.resumeSession({ sessionId, cwd: "/proj" } as never);
+
+	// resume does not write a new entry (session-stored wins; no override).
+	const record = await harness.sessionStore.load(sessionId);
+	const inclusionEntries = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
+	expect(inclusionEntries).toHaveLength(1);
+});
+
+test("session/resume with mcpServers: [] overrides session-stored inclusion and writes a new snapshot", async () => {
+	const model = newFaux();
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.y.com/mcp" });
+	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "y" });
+
+	await harness.clientConn.resumeSession({ sessionId, cwd: "/proj", mcpServers: [] } as never);
+
+	const record = await harness.sessionStore.load(sessionId);
+	const inclusionEntries = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
+	// 1 from /mcp include + 1 from the explicit empty override on resume
+	expect(inclusionEntries).toHaveLength(2);
+	expect((inclusionEntries[1] as { slugs: string[] }).slugs).toEqual([]);
 });
 
 test("session hydration calls McpService.hydrate; no auto-connect for disconnected entries", async () => {

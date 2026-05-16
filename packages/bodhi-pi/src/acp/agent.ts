@@ -34,6 +34,8 @@ import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { KvService } from "@/kv/kv-service.js";
 import type { KvStore } from "@/kv/kv-store.js";
+import { createInProcessMcpConnectionProvider } from "@/mcp/in-process-provider.js";
+import type { McpConnectionProvider } from "@/mcp/mcp-connection-provider.js";
 import { McpService } from "@/mcp/mcp-service.js";
 import { ModelRegistry } from "@/models/registry.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
@@ -101,6 +103,14 @@ export interface BodhiPiConfig {
 	 * Defaults to `true`. Browser-only / chrome-ext hosts and stateless HTTP servers should set `false`.
 	 */
 	supportsMcpStdio?: boolean;
+	/**
+	 * Host-injected MCP connection provider. When omitted, the SDK installs a
+	 * process-local default (`createInProcessMcpConnectionProvider()`) — fine for
+	 * single-tenant embedded hosts (cli, in-memory). Multi-tenant server hosts
+	 * (http, ws-server) inject a provider bound to a server-level per-user store
+	 * so connections survive per-request agent rebuild.
+	 */
+	mcpConnectionProvider?: McpConnectionProvider;
 	/**
 	 * Host-supplied logger for non-fatal internal errors (extension factory failures, event-handler
 	 * exceptions, branch-summarisation fall-through). Defaults to `console.error` when unset.
@@ -203,6 +213,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: this.sessions,
 			logger,
 			supportsStdio: config.supportsMcpStdio ?? true,
+			provider: config.mcpConnectionProvider ?? createInProcessMcpConnectionProvider(),
+			appendEntry: this.appendEntry.bind(this),
 		});
 		this.settingsService = new SettingsService({
 			filesystem: config.filesystem,
@@ -329,7 +341,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		await buildSessionStateFn(this.bootstrapDeps(), { sessionId: record.id, model: null, cwd: record.cwd });
 		await this.advertiseSlashable(record.id);
-		await this.mcpService.hydrate(record.id, params.mcpServers);
+		// New session: no prior `mcp_inclusion_set` entry, so restoredSlugs=null.
+		await this.mcpService.hydrate(record.id, params.mcpServers, null);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: record.id,
@@ -411,7 +424,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 
 		await this.advertiseSlashable(params.sessionId);
-		await this.mcpService.hydrate(params.sessionId, params.mcpServers);
+		await this.mcpService.hydrate(params.sessionId, params.mcpServers, restored.mcpInclusion);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
@@ -426,9 +439,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
 		await this.ensureExtensionRunner();
 		// Per ACP spec: rehydrate without replaying history.
-		await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
+		const restored = await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
 		await this.advertiseSlashable(params.sessionId);
-		await this.mcpService.hydrate(params.sessionId, params.mcpServers);
+		await this.mcpService.hydrate(params.sessionId, params.mcpServers, restored.mcpInclusion);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,

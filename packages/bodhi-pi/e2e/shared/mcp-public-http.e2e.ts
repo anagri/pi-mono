@@ -4,7 +4,6 @@ import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
-import { isRuntime } from "../helpers/runtime.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
@@ -15,7 +14,7 @@ function mcpEverythingUrl(): string {
 	return url;
 }
 
-test("mcp public+http: add → connect → tools → disconnect → reconnect → remove (via _bodhi-pi/mcp/*)", async () => {
+test("mcp public+http: add → connect → include → tools → disconnect → reconnect → remove", async () => {
 	const model = getModel("openai", "gpt-4o-mini");
 	const h = harness.set(
 		await createE2EHarness({
@@ -36,8 +35,14 @@ test("mcp public+http: add → connect → tools → disconnect → reconnect �
 	expect.soft(entry?.status).toBe("disconnected");
 	expect.soft(entry?.transport).toBe("http");
 
-	const connectResult = await h.client.mcpConnect({ slug, sessionId });
+	const connectResult = await h.client.mcpConnect({ slug });
 	expect.soft(connectResult.tools).toContain(`${slug}__get-sum`);
+
+	// connect is global — this session sees nothing until /mcp include
+	expect.soft(await h.client.mcpTools({ slug, sessionId })).toEqual([]);
+
+	const includeResult = await h.client.mcpInclude({ slug, sessionId });
+	expect.soft(includeResult.tools).toEqual(connectResult.tools);
 
 	const tools = await h.client.mcpTools({ slug, sessionId });
 	expect.soft(tools).toEqual(connectResult.tools);
@@ -45,13 +50,14 @@ test("mcp public+http: add → connect → tools → disconnect → reconnect �
 	const listedAfterConnect = await h.client.mcpList();
 	expect.soft(listedAfterConnect.find((e) => e.slug === slug)?.status).toBe("connected");
 
-	await h.client.mcpDisconnect({ slug, sessionId });
+	await h.client.mcpDisconnect({ slug });
 	expect.soft(await h.client.mcpTools({ slug, sessionId })).toEqual([]);
 
-	const reconnected = await h.client.mcpReconnect({ slug, sessionId });
+	const reconnected = await h.client.mcpReconnect({ slug });
 	expect.soft(reconnected.tools).toContain(`${slug}__get-sum`);
+	expect.soft(await h.client.mcpTools({ slug, sessionId })).toEqual(reconnected.tools);
 
-	await h.client.mcpRemove({ slug, sessionId });
+	await h.client.mcpRemove({ slug });
 	expect.soft((await h.client.mcpList()).find((e) => e.slug === slug)).toBeUndefined();
 });
 
@@ -68,8 +74,9 @@ test("mcp public+http: LLM prompts agent to use get-sum(20, 22) and gets 42 stre
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
 	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl() });
-	const connectResult = await h.client.mcpConnect({ slug, sessionId });
+	const connectResult = await h.client.mcpConnect({ slug });
 	expect.soft(connectResult.tools).toContain(`${slug}__get-sum`);
+	await h.client.mcpInclude({ slug, sessionId });
 
 	const result = await h.clientConn.prompt({
 		sessionId,
@@ -106,32 +113,52 @@ test("mcp public+http: LLM prompts agent to use get-sum(20, 22) and gets 42 stre
 	expect.soft(chunkedAgentText(h.updates)).toContain("42");
 }, 60_000);
 
-// http rebuilds the agent per request, dropping the in-memory McpRegistry between
-// session/new (where ephemeral mcpServers connect) and the follow-up _bodhi-pi/mcp/tools.
-test.runIf(!isRuntime("http"))(
-	"mcp public+http: ACP-native `mcpServers` on session/new hydrates ephemeral MCPs",
-	async () => {
-		const model = getModel("openai", "gpt-4o-mini");
-		const h = harness.set(
-			await createE2EHarness({
-				models: [model],
-				defaultModelId: model.id,
-				getApiKey: () => "ignored-no-prompts",
-			}),
-		);
-		await h.clientConn.initialize(stdInitParams);
+test("mcp public+http: ACP-native `mcpServers: [name]` on session/new connects + includes by slug reference", async () => {
+	const model = getModel("openai", "gpt-4o-mini");
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: () => "ignored-no-prompts",
+		}),
+	);
+	await h.clientConn.initialize(stdInitParams);
 
-		const url = mcpEverythingUrl();
-		const { sessionId } = await h.clientConn.newSession({
-			cwd: h.cwd,
-			mcpServers: [{ type: "http", name: "ephemeral-everything", url, headers: [] }],
-		});
+	const url = mcpEverythingUrl();
+	const { slug } = await h.client.mcpAdd({ url, label: "everything-by-name" });
 
-		const slug = "ephemeral-everything";
-		const tools = await h.client.mcpTools({ slug, sessionId });
-		expect.soft(tools).toContain(`${slug}__get-sum`);
+	const { sessionId } = await h.clientConn.newSession({
+		cwd: h.cwd,
+		mcpServers: [{ type: "http", name: slug, url, headers: [] }],
+	});
 
-		const kvList = await h.client.kv.list({ prefix: "mcp/" });
-		expect.soft(kvList.entries.find((e) => e.key === `mcp/${slug}`)).toBeUndefined();
-	},
-);
+	const tools = await h.client.mcpTools({ slug, sessionId });
+	expect.soft(tools).toContain(`${slug}__get-sum`);
+
+	const listed = await h.client.mcpList();
+	expect.soft(listed.find((e) => e.slug === slug)?.status).toBe("connected");
+});
+
+test("mcp public+http: unknown slug in session/new mcpServers is silently ignored (no kv promotion)", async () => {
+	const model = getModel("openai", "gpt-4o-mini");
+	const h = harness.set(
+		await createE2EHarness({
+			models: [model],
+			defaultModelId: model.id,
+			getApiKey: () => "ignored-no-prompts",
+		}),
+	);
+	await h.clientConn.initialize(stdInitParams);
+
+	const url = mcpEverythingUrl();
+	const { sessionId } = await h.clientConn.newSession({
+		cwd: h.cwd,
+		mcpServers: [{ type: "http", name: "unknown-slug-xyz", url, headers: [] }],
+	});
+
+	const tools = await h.client.mcpTools({ slug: "unknown-slug-xyz", sessionId });
+	expect.soft(tools).toEqual([]);
+
+	const kvList = await h.client.kv.list({ prefix: "mcp/" });
+	expect.soft(kvList.entries.find((e) => e.key === `mcp/unknown-slug-xyz`)).toBeUndefined();
+});

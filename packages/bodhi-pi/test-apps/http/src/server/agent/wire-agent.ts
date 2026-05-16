@@ -15,6 +15,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { Bash } from "just-bash";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
+import type { ServerMcpStore } from "../mcp/server-mcp-store.js";
 
 export interface WireAgentOptions {
 	user: UserCtx;
@@ -29,6 +30,9 @@ export interface WireAgentOptions {
 	workspaceOverride?: string;
 	/** Optional override for the KV store directory; defaults to ~/.bodhi-pi/kv. */
 	kvStoreDir?: string;
+	/** Server-process-scoped MCP store. Provides per-user connection persistence
+	 *  so MCP connections survive the per-request agent rebuild. */
+	mcpStore: ServerMcpStore;
 }
 
 export type AgentFactory = (conn: AgentSideConnection) => Agent;
@@ -116,9 +120,14 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 	const scriptExecutor = createNodeScriptExecutor();
 	const terminal = createJustBashTerminal(Bash, { filesystem, defaultCwd: cwd });
 	// Per-user kv dir matches per-user sessions/workspace; without it, every
-	// connecting user shares one auth/* namespace which breaks parallel e2e.
-	const kvDir = opts.kvStoreDir ? path.join(opts.kvStoreDir, String(opts.user.id)) : undefined;
-	const kvStore = createNodeKvStore(kvDir ? { dir: kvDir } : {});
+	// connecting user shares one auth/* + mcp/* namespace which breaks
+	// multi-tenant isolation. Default to <dataDir>/kv/<userId> when the host
+	// doesn't pass `kvStoreDir` explicitly.
+	const kvRoot = opts.kvStoreDir ?? path.join(opts.dataDir, "kv");
+	const kvDir = path.join(kvRoot, String(opts.user.id));
+	const kvStore = createNodeKvStore({ dir: kvDir });
+
+	const mcpConnectionProvider = opts.mcpStore.getProviderForUser(String(opts.user.id));
 
 	const factory: AgentFactory = (conn) => {
 		// Inner factory built here so eventHandlers close over the per-request conn.
@@ -131,6 +140,9 @@ export async function wireAgentForRequest(opts: WireAgentOptions): Promise<WireA
 			// http test-app rebuilds the agent every turn; long-lived stdio MCP
 			// sub-processes don't survive that lifecycle.
 			supportsMcpStdio: false,
+			// Server-process-scoped MCP connections so per-request rebuild doesn't
+			// lose them. See test-apps/http/src/server/mcp/server-mcp-store.ts.
+			mcpConnectionProvider,
 			eventHandlers: eventForwardingHandlers(conn),
 			...pickDefined({
 				models: opts.models,

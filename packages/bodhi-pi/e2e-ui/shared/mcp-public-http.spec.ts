@@ -25,6 +25,10 @@ test("mcp public+http LLM prompt: agent uses get-sum(20, 22) and replies with 42
 	await chat.send(`/mcp connect ${slug}`);
 	await expect(await lastSystemEvent(page, "connected")).toBeVisible();
 
+	// connect is global; this UI session must explicitly include the slug to see its tools.
+	await chat.send(`/mcp include ${slug}`);
+	await expect(await lastSystemEvent(page, "included")).toBeVisible();
+
 	await chat.send(
 		`Using the everything-mcp tool "${slug}__get-sum", find the sum of 20 and 22. Reply with just the number.`,
 	);
@@ -56,6 +60,14 @@ test("mcp public+http via /mcp* slash commands: add → list → connect → too
 	const connected = await lastSystemEvent(page, "connected");
 	await expect(connected).toContainText(`${slug}__get-sum`);
 
+	// Before include: tools-empty (connect-only doesn't make a session see them).
+	await chat.send(`/mcp tools ${slug}`);
+	await expect(await lastSystemEvent(page, "tools-empty")).toBeVisible();
+
+	await chat.send(`/mcp include ${slug}`);
+	const included = await lastSystemEvent(page, "included");
+	await expect(included).toContainText(`${slug}__get-sum`);
+
 	await chat.send(`/mcp tools ${slug}`);
 	const tools = await lastSystemEvent(page, "tools");
 	await expect(tools).toContainText(`${slug}__get-sum`);
@@ -68,6 +80,10 @@ test("mcp public+http via /mcp* slash commands: add → list → connect → too
 	await chat.send(`/mcp reconnect ${slug}`);
 	const reconnected = await lastSystemEvent(page, "reconnected");
 	await expect(reconnected).toContainText(`${slug}__get-sum`);
+	// inclusion was untouched across disconnect/reconnect; tools come back automatically.
+	await chat.send(`/mcp tools ${slug}`);
+	const toolsAfterReconnect = await lastSystemEvent(page, "tools");
+	await expect(toolsAfterReconnect).toContainText(`${slug}__get-sum`);
 
 	await chat.send(`/mcp remove ${slug}`);
 	await expect(await lastSystemEvent(page, "removed")).toBeVisible();

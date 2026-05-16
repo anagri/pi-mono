@@ -122,6 +122,13 @@ test("cli e2e-ui: /mcp* slash commands round-trip via headless stdin/stdout", as
 	const connected = await session.sendSlash(`/mcp connect ${slug}`);
 	expect.soft(connected).toContain(`${slug}__get-sum`);
 
+	// connect is global-only now; inclusion is required to see tools in this session.
+	const toolsBeforeInclude = await session.sendSlash(`/mcp tools ${slug}`);
+	expect.soft(toolsBeforeInclude).toContain("(no tools");
+
+	const included = await session.sendSlash(`/mcp include ${slug}`);
+	expect.soft(included).toContain(`${slug}__get-sum`);
+
 	const tools = await session.sendSlash(`/mcp tools ${slug}`);
 	expect.soft(tools).toContain(`${slug}__get-sum`);
 
@@ -132,6 +139,9 @@ test("cli e2e-ui: /mcp* slash commands round-trip via headless stdin/stdout", as
 
 	const reconnected = await session.sendSlash(`/mcp reconnect ${slug}`);
 	expect.soft(reconnected).toContain(`${slug}__get-sum`);
+	// inclusion was untouched across disconnect/reconnect; tools come back automatically.
+	const toolsAfterReconnect = await session.sendSlash(`/mcp tools ${slug}`);
+	expect.soft(toolsAfterReconnect).toContain(`${slug}__get-sum`);
 
 	const removed = await session.sendSlash(`/mcp remove ${slug}`);
 	expect.soft(removed).toContain(`removed ${slug}`);
@@ -144,6 +154,7 @@ test("cli e2e-ui LLM prompt: agent uses get-sum(20, 22) via stdio chat and repli
 	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
 	const slug = added.replace(/^added: /, "").trim();
 	await session.sendSlash(`/mcp connect ${slug}`);
+	await session.sendSlash(`/mcp include ${slug}`);
 
 	const response = await session.sendChat(
 		`Using the everything-mcp tool "${slug}__get-sum", find the sum of 20 and 22. Reply with just the number.`,

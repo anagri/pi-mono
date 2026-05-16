@@ -15,6 +15,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { Bash } from "just-bash";
 import type { UserCtx } from "../auth/token.js";
 import { resolveUserWorkspace } from "../filesystem/user-workspace.js";
+import type { ServerMcpStore } from "../mcp/server-mcp-store.js";
 
 export interface WireAgentWsOptions {
 	user: UserCtx;
@@ -29,6 +30,10 @@ export interface WireAgentWsOptions {
 	workspaceOverride?: string;
 	/** Optional override for the KV store directory; defaults to ~/.bodhi-pi/kv. */
 	kvStoreDir?: string;
+	/** Server-process-scoped MCP store. Shared with /acp so a user's WS and
+	 *  HTTP sessions see the same connection map. Page-refresh-via-WS keeps
+	 *  connections alive. */
+	mcpStore: ServerMcpStore;
 }
 
 export type AgentFactory = (conn: AgentSideConnection) => Agent;
@@ -100,10 +105,12 @@ export async function wireAgentForWsConnection(opts: WireAgentWsOptions): Promis
 	const extensionFactories = await createNodePackageExtensionLoader({ cwd });
 	const scriptExecutor = createNodeScriptExecutor();
 	const terminal = createJustBashTerminal(Bash, { filesystem, defaultCwd: cwd });
-	// Per-user kv dir matches per-user sessions/workspace; without it, every
-	// connecting user shares one auth/* namespace which breaks parallel e2e.
-	const kvDir = opts.kvStoreDir ? path.join(opts.kvStoreDir, String(opts.user.id)) : undefined;
-	const kvStore = createNodeKvStore(kvDir ? { dir: kvDir } : {});
+	// Per-user kv dir matches per-user sessions/workspace. Default to
+	// <dataDir>/kv/<userId> when the host doesn't pass `kvStoreDir` explicitly.
+	const kvRoot = opts.kvStoreDir ?? path.join(opts.dataDir, "kv");
+	const kvDir = path.join(kvRoot, String(opts.user.id));
+	const kvStore = createNodeKvStore({ dir: kvDir });
+	const mcpConnectionProvider = opts.mcpStore.getProviderForUser(String(opts.user.id));
 
 	const factory: AgentFactory = (conn) => {
 		const innerFactory = createBodhiPiAgent({
@@ -114,6 +121,7 @@ export async function wireAgentForWsConnection(opts: WireAgentWsOptions): Promis
 			terminal,
 			// stdio MCP scope is limited to in-memory + cli in this phase.
 			supportsMcpStdio: false,
+			mcpConnectionProvider,
 			eventHandlers: eventForwardingHandlers(conn),
 			...pickDefined({
 				models: opts.models,

@@ -8,7 +8,14 @@
 
 /// <reference lib="webworker" />
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent } from "@bodhiapp/bodhi-pi";
+import {
+	type BodhiPiEvent,
+	type BodhiPiEventHandlers,
+	createBodhiPiAgent,
+	createInProcessMcpConnectionProvider,
+	MCP_PREFIX,
+	parseMcpServerEntry,
+} from "@bodhiapp/bodhi-pi";
 import { createJustBashTerminal } from "@bodhiapp/bodhi-pi-test-app-utils/just-bash-terminal";
 import { configure, InMemory, fs as zenFs, mount as zenMount } from "@zenfs/core";
 import { Bash } from "just-bash/browser";
@@ -62,6 +69,29 @@ function eventForwardingHandlers(): BodhiPiEventHandlers {
 		tool_result: [post],
 		model_select: [post],
 	};
+}
+
+async function restoreConnectedMcps(
+	kvStore: ReturnType<typeof createDexieKvStore>,
+	provider: ReturnType<typeof createInProcessMcpConnectionProvider>,
+): Promise<void> {
+	let rows: Awaited<ReturnType<typeof kvStore.list>>;
+	try {
+		rows = await kvStore.list(MCP_PREFIX);
+	} catch (err) {
+		console.error("[bodhi-pi browser-adapter worker] mcp restore kv.list failed:", err);
+		return;
+	}
+	for (const row of rows) {
+		const entry = parseMcpServerEntry(row.value);
+		if (!entry || entry.lastKnownStatus !== "connected") continue;
+		const slug = row.key.slice(MCP_PREFIX.length);
+		try {
+			await provider.connect(slug, entry);
+		} catch (err) {
+			console.error(`[bodhi-pi browser-adapter worker] mcp restore failed for ${slug}:`, err);
+		}
+	}
 }
 
 function postWireFrame(direction: "in" | "out", line: string): void {
@@ -170,6 +200,12 @@ export function bootstrapAgentWorker(): void {
 
 			const getApiKey = apiKeys ? (provider: string) => apiKeys[provider] : undefined;
 
+			// Worker-scoped MCP connection provider. Worker dies on page refresh,
+			// so connections die too — but kv (Dexie/IndexedDB) survives, so we
+			// auto-reconnect any entry with `lastKnownStatus === "connected"`
+			// below. Restore is host policy; the SDK never auto-rehydrates.
+			const mcpConnectionProvider = createInProcessMcpConnectionProvider();
+
 			const factory = createBodhiPiAgent({
 				filesystem,
 				sessionStore,
@@ -177,6 +213,7 @@ export function bootstrapAgentWorker(): void {
 				scriptExecutor,
 				terminal,
 				supportsMcpStdio: false,
+				mcpConnectionProvider,
 				...(models && models.length > 0 ? { models } : {}),
 				...(defaultModelId !== undefined ? { defaultModelId } : {}),
 				...(getApiKey ? { getApiKey } : {}),
@@ -192,6 +229,11 @@ export function bootstrapAgentWorker(): void {
 			const teedWritable = tapWritable(writable, (line) => postWireFrame("out", line));
 			const conn = new AgentSideConnection(factory, ndJsonStream(teedWritable, teedReadable));
 			void conn;
+			// Host-side MCP restore: kv (Dexie) survives page refresh, but the
+			// worker's in-process connection map doesn't. Reconnect entries
+			// whose lastKnownStatus is "connected" so prior MCP state is
+			// transparently restored on reload.
+			await restoreConnectedMcps(kvStore, mcpConnectionProvider);
 			const ready: WorkerReadyMessage = { type: "bodhi-pi-ready" };
 			self.postMessage(ready);
 		})().catch((err) => {

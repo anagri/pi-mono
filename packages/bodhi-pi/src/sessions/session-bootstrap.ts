@@ -318,6 +318,7 @@ export async function rehydrateSession(
 ): Promise<{
 	entries: NonNullable<Awaited<ReturnType<SessionStore["load"]>>>["entries"];
 	currentModelId: string | null;
+	mcpInclusion: string[] | null;
 }> {
 	const record = await deps.config.sessionStore.load(sessionId);
 	if (!record) throw new RequestError(-32602, `unknown session: ${sessionId}`);
@@ -339,5 +340,9 @@ export async function rehydrateSession(
 		leafId,
 		initialThinkingLevel: ctx.currentThinkingLevel,
 	});
-	return { entries: record.entries, currentModelId: restoredModel?.id ?? null };
+	return {
+		entries: record.entries,
+		currentModelId: restoredModel?.id ?? null,
+		mcpInclusion: ctx.mcpInclusion,
+	};
 }

@@ -29,19 +29,20 @@ test.runIf(isRuntime("in-memory") || isRuntime("cli"))(
 		});
 		expect.soft(added.slug).toBe("server-everything");
 
-		const connectResult = await h.client.mcpConnect({ slug: added.slug, sessionId });
+		const connectResult = await h.client.mcpConnect({ slug: added.slug });
 		expect.soft(connectResult.tools).toContain(`${added.slug}__get-sum`);
 
+		await h.client.mcpInclude({ slug: added.slug, sessionId });
 		const tools = await h.client.mcpTools({ slug: added.slug, sessionId });
 		expect.soft(tools).toEqual(connectResult.tools);
 
-		await h.client.mcpDisconnect({ slug: added.slug, sessionId });
+		await h.client.mcpDisconnect({ slug: added.slug });
 		expect.soft(await h.client.mcpTools({ slug: added.slug, sessionId })).toEqual([]);
 
-		const reconnected = await h.client.mcpReconnect({ slug: added.slug, sessionId });
+		const reconnected = await h.client.mcpReconnect({ slug: added.slug });
 		expect.soft(reconnected.tools).toContain(`${added.slug}__get-sum`);
 
-		await h.client.mcpRemove({ slug: added.slug, sessionId });
+		await h.client.mcpRemove({ slug: added.slug });
 		expect.soft((await h.client.mcpList()).find((e) => e.slug === added.slug)).toBeUndefined();
 	},
 	60_000,
@@ -65,7 +66,8 @@ test.runIf(isRuntime("in-memory") || isRuntime("cli"))(
 			command: "npx",
 			args: ["--yes", "@modelcontextprotocol/server-everything", "stdio"],
 		});
-		await h.client.mcpConnect({ slug, sessionId });
+		await h.client.mcpConnect({ slug });
+		await h.client.mcpInclude({ slug, sessionId });
 
 		const result = await h.clientConn.prompt({
 			sessionId,

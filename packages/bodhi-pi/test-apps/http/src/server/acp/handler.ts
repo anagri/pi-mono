@@ -3,6 +3,7 @@ import { type Db, upsertUser } from "@bodhiapp/bodhi-pi-test-app-in-memory";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { type WireAgentResult, wireAgentForRequest } from "../agent/wire-agent.js";
 import { authenticateRequest, reject401 } from "../auth/middleware.js";
+import type { ServerMcpStore } from "../mcp/server-mcp-store.js";
 import { createHttpAcpConn } from "./http-acp-conn.js";
 import { createInflightRegistry, type InflightRegistry } from "./inflight.js";
 import { writeSseEvent, writeSseHeaders } from "./sse.js";
@@ -16,6 +17,7 @@ export interface AcpHandlerOptions {
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
 	workspaceOverride?: string;
+	mcpStore: ServerMcpStore;
 }
 
 interface JsonRpcRequest {
@@ -120,6 +122,7 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 			user,
 			dataDir: opts.dataDir,
 			db: opts.db,
+			mcpStore: opts.mcpStore,
 			...(opts.models !== undefined ? { models: opts.models } : {}),
 			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
 			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
@@ -165,7 +168,10 @@ export function createAcpHandler(opts: AcpHandlerOptions) {
 			// applies the same rule for session/prompt and session/load.
 			const sid = (params as { sessionId?: unknown }).sessionId;
 			if (typeof sid === "string" && agent.resumeSession) {
-				await agent.resumeSession({ sessionId: sid, cwd: wired.cwd, mcpServers: [] } as never);
+				// Omit `mcpServers` so the SDK falls back to the session-stored
+				// inclusion (mcp_inclusion_set entry). The per-user
+				// ServerMcpStore keeps connections alive across rebuild.
+				await agent.resumeSession({ sessionId: sid, cwd: wired.cwd } as never);
 			}
 			const result = await dispatchJsonMethod(agent, body.method, params);
 			// Inject captured availableCommands into newSession's response so the
@@ -235,20 +241,29 @@ async function handleSseMethod(
 			if (!sessionId) {
 				throw new Error("session/prompt: sessionId is required");
 			}
+			// Track whether an abort fired before agent.prompt actually starts. Two
+			// races are at play under the per-request rebuild model:
+			//   1. `addEventListener` on an already-aborted signal does NOT fire the
+			//      listener (per WHATWG spec), so if cancel arrives during
+			//      resumeSession we must catch the aborted state explicitly.
+			//   2. `prompt-loop.ts` resets `session.runtime.cancelled = false` at the
+			//      start of every prompt, so a cancel-set-before-prompt is clobbered.
+			//      We re-fire cancel synchronously after agent.prompt() yields so the
+			//      flag is set AFTER the reset and before any cancellation checkpoint.
+			let cancelledEarly = ctrl.signal.aborted;
+			const onAbort = () => {
+				cancelledEarly = true;
+				void agent.cancel({ sessionId } as never).catch(() => {});
+			};
+			ctrl.signal.addEventListener("abort", onAbort, { once: true });
 			if (agent.resumeSession) {
-				await agent.resumeSession({ sessionId, cwd: wired.cwd, mcpServers: [] } as never);
+				await agent.resumeSession({ sessionId, cwd: wired.cwd } as never);
 			}
-			// When the inflight controller aborts (cancel notification or client close),
-			// translate into the agent's own cancel call so it produces a final
-			// `stopReason: "cancelled"` response.
-			ctrl.signal.addEventListener(
-				"abort",
-				() => {
-					void agent.cancel({ sessionId } as never).catch(() => {});
-				},
-				{ once: true },
-			);
-			const result = await agent.prompt(params as never);
+			const promptPromise = agent.prompt(params as never);
+			if (cancelledEarly) {
+				void agent.cancel({ sessionId } as never).catch(() => {});
+			}
+			const result = await promptPromise;
 			writeSseEvent(res, { jsonrpc: "2.0", id, result });
 		} else if (method === "session/load") {
 			if (!agent.loadSession) {
@@ -294,6 +309,13 @@ async function dispatchJsonMethod(
 		case "session/close": {
 			if (!agent.closeSession) throw new MethodNotFoundError("session/close not supported");
 			return (await agent.closeSession(params as never)) ?? {};
+		}
+		case "session/resume": {
+			if (!agent.resumeSession) throw new MethodNotFoundError("session/resume not supported");
+			// The handler already called resumeSession transparently above with
+			// `mcpServers` omitted; this explicit invocation lets clients override
+			// inclusion via `params.mcpServers` (e.g. session-resume contract test).
+			return (await agent.resumeSession(params as never)) ?? {};
 		}
 		case "session/setSessionConfigOption": {
 			if (!agent.setSessionConfigOption)

@@ -6,7 +6,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { EXT_MCP_ADD, EXT_MCP_CONNECT, EXT_MCP_TOOLS } from "@/wire/constants.js";
+import { EXT_MCP_ADD, EXT_MCP_CONNECT, EXT_MCP_INCLUDE, EXT_MCP_TOOLS } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
 
@@ -43,13 +43,11 @@ test("MCP stdio: add → connect spawns the server, lists tools namespaced as <s
 	})) as { slug: string };
 	expect(slug).toBe("server-everything");
 
-	const { tools } = (await harness.clientConn.extMethod(EXT_MCP_CONNECT, {
-		sessionId,
-		slug,
-	})) as { tools: string[] };
+	const { tools } = (await harness.clientConn.extMethod(EXT_MCP_CONNECT, { slug })) as { tools: string[] };
 	expect(tools.length).toBeGreaterThan(0);
 	expect(tools).toContain(`${slug}__echo`);
 
+	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug });
 	const listed = (await harness.clientConn.extMethod(EXT_MCP_TOOLS, { sessionId, slug })) as {
 		tools: string[];
 	};

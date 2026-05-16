@@ -23,6 +23,8 @@ const EXT_MCP_DISCONNECT = "_bodhi-pi/mcp/disconnect";
 const EXT_MCP_RECONNECT = "_bodhi-pi/mcp/reconnect";
 const EXT_MCP_LIST = "_bodhi-pi/mcp/list";
 const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
+const EXT_MCP_INCLUDE = "_bodhi-pi/mcp/include";
+const EXT_MCP_EXCLUDE = "_bodhi-pi/mcp/exclude";
 
 export interface SlashState {
 	sessionId: string;
@@ -262,38 +264,48 @@ async function handleMcpSubcommand(
 		}
 		const slug = rest[0];
 		if (!sub || !slug) {
-			ctx.pushSystemMessage("usage: /mcp <add|connect|disconnect|reconnect|remove|tools> [args…]");
+			ctx.pushSystemMessage("usage: /mcp <add|connect|disconnect|reconnect|remove|include|exclude|tools> [args…]");
 			return { handled: true };
 		}
 		if (sub === "connect") {
-			const result = (await ctx.conn.extMethod(EXT_MCP_CONNECT, {
-				sessionId: ctx.state.sessionId,
-				slug,
-			})) as { tools: string[] };
+			const result = (await ctx.conn.extMethod(EXT_MCP_CONNECT, { slug })) as { tools: string[] };
 			ctx.pushSystemMessage(`connected ${slug}: ${result.tools.join(", ") || "(no tools)"}`, {
 				"data-mcp-event": "connected",
 				"data-mcp-slug": slug,
 				"data-mcp-tool-count": String(result.tools.length),
 			});
 		} else if (sub === "disconnect") {
-			await ctx.conn.extMethod(EXT_MCP_DISCONNECT, { sessionId: ctx.state.sessionId, slug });
+			await ctx.conn.extMethod(EXT_MCP_DISCONNECT, { slug });
 			ctx.pushSystemMessage(`disconnected ${slug}`, {
 				"data-mcp-event": "disconnected",
 				"data-mcp-slug": slug,
 			});
 		} else if (sub === "reconnect") {
-			const result = (await ctx.conn.extMethod(EXT_MCP_RECONNECT, {
-				sessionId: ctx.state.sessionId,
-				slug,
-			})) as { tools: string[] };
+			const result = (await ctx.conn.extMethod(EXT_MCP_RECONNECT, { slug })) as { tools: string[] };
 			ctx.pushSystemMessage(`reconnected ${slug}: ${result.tools.join(", ") || "(no tools)"}`, {
 				"data-mcp-event": "reconnected",
 				"data-mcp-slug": slug,
 			});
 		} else if (sub === "remove") {
-			await ctx.conn.extMethod(EXT_MCP_REMOVE, { sessionId: ctx.state.sessionId, slug });
+			await ctx.conn.extMethod(EXT_MCP_REMOVE, { slug });
 			ctx.pushSystemMessage(`removed ${slug}`, {
 				"data-mcp-event": "removed",
+				"data-mcp-slug": slug,
+			});
+		} else if (sub === "include") {
+			const result = (await ctx.conn.extMethod(EXT_MCP_INCLUDE, {
+				sessionId: ctx.state.sessionId,
+				slug,
+			})) as { tools: string[] };
+			ctx.pushSystemMessage(`included ${slug}: ${result.tools.join(", ") || "(no tools visible)"}`, {
+				"data-mcp-event": "included",
+				"data-mcp-slug": slug,
+				"data-mcp-tool-count": String(result.tools.length),
+			});
+		} else if (sub === "exclude") {
+			await ctx.conn.extMethod(EXT_MCP_EXCLUDE, { sessionId: ctx.state.sessionId, slug });
+			ctx.pushSystemMessage(`excluded ${slug}`, {
+				"data-mcp-event": "excluded",
 				"data-mcp-slug": slug,
 			});
 		} else if (sub === "tools") {
@@ -302,7 +314,7 @@ async function handleMcpSubcommand(
 				slug,
 			})) as { tools: string[] };
 			if (result.tools.length === 0) {
-				ctx.pushSystemMessage(`(no tools — is ${slug} connected?)`, {
+				ctx.pushSystemMessage(`(no tools — is ${slug} connected and included?)`, {
 					"data-mcp-event": "tools-empty",
 					"data-mcp-slug": slug,
 				});

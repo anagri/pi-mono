@@ -131,7 +131,7 @@ export interface McpAddResult {
 	slug: string;
 }
 
-export interface McpConnectParams extends SessionRef {
+export interface McpConnectParams {
 	slug: string;
 }
 
@@ -144,6 +144,23 @@ export interface McpDisconnectResult {
 }
 
 export interface McpRemoveResult {
+	slug: string;
+}
+
+export interface McpIncludeParams extends SessionRef {
+	slug: string;
+}
+
+export interface McpIncludeResult {
+	slug: string;
+	tools: string[];
+}
+
+export interface McpExcludeParams extends SessionRef {
+	slug: string;
+}
+
+export interface McpExcludeResult {
 	slug: string;
 }
 

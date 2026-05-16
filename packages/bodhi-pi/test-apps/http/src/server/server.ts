@@ -9,6 +9,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { createAcpHandler } from "./acp/handler.js";
 import { wireAgentForWsConnection } from "./agent/wire-agent-ws.js";
 import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
+import { ServerMcpStore } from "./mcp/server-mcp-store.js";
 import { handleProvision } from "./provision.js";
 import { createStaticHandler, type StaticHandler } from "./static.js";
 import { wsToStream } from "./transport/ws-stream.js";
@@ -59,9 +60,15 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 	const dbPath = path.resolve(opts.dataDir, "sessions.db");
 	const { db, sqlite } = openDb({ dbPath });
 
+	// Single server-process-scoped MCP store: per-user connections survive
+	// per-request agent rebuild for /acp (and the same store is reused for
+	// /acp-ws in slice 4 so page-refresh-via-ws also keeps connections).
+	const mcpStore = new ServerMcpStore();
+
 	const handleAcp = createAcpHandler({
 		dataDir: opts.dataDir,
 		db,
+		mcpStore,
 		...(opts.models !== undefined ? { models: opts.models } : {}),
 		...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
 		...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
@@ -71,9 +78,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 	});
 
 	const here = path.dirname(fileURLToPath(import.meta.url));
-	// `here` (built): <test-app-http>/dist/test-app-http/src/server/
+	// `here` (built): <test-app-http>/dist/
 	// dist/public lives at: <test-app-http>/dist/public/
-	const defaultStaticDir = path.resolve(here, "..", "..", "..", "public");
+	const defaultStaticDir = path.resolve(here, "public");
 	const staticDir = opts.staticDir === null ? null : (opts.staticDir ?? defaultStaticDir);
 	const serveStatic: StaticHandler | undefined = staticDir ? createStaticHandler(staticDir) : undefined;
 
@@ -106,6 +113,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 			user: ctx.user,
 			dataDir: opts.dataDir,
 			db,
+			mcpStore,
 			...(opts.models !== undefined ? { models: opts.models } : {}),
 			...(opts.defaultModelId !== undefined ? { defaultModelId: opts.defaultModelId } : {}),
 			...(opts.getApiKey !== undefined ? { getApiKey: opts.getApiKey } : {}),
