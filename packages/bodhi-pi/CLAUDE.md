@@ -14,50 +14,52 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 
 **Stable ACP over `unstable_*`.** Non-spec features use `_bodhi-pi/<area>/<verb>` extensions, advertised via `agentCapabilities._meta["bodhi-pi"]`.
 
-**Mirror coding-agent.** Read `packages/coding-agent/` first, strip TUI/Node parts, replicate field/method shape.
+**Mirror coding-agent (headless-only).** Read `packages/coding-agent/` first, strip TUI/Node parts, replicate field/method shape. bodhi-pi has no TUI surface — `registerShortcut`/`registerMessageRenderer`/`registerFlag` and `ctx.ui.*` are intentionally absent from `ExtensionAPI` (`src/extensions/types.ts:75-80`). Naming divergences are formalised in `CONTEXT.md` flagged-ambiguities (e.g. `extension` vs `custom` SessionEntry type).
 
 **Reuse dependency types.** Use `pi-agent-core`'s `AgentOptions`, `pi-ai`'s `Model<Api>`, ACP SDK's types directly — no wrapper types until a real semantic mismatch.
 
-## Reference clients & publishable adapters
+## Reference Hosts
 
-`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, ScriptExecutor are host-injected. Four reference hosts and two adapter packages prove every feature works across Node, browser-only, and split (server + browser, two transports) deployments:
+`bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, KvStore, ScriptExecutor, Terminal, McpConnectionProvider are all Host-injected. Four reference Hosts under `test-apps/` prove every feature works across the runtime matrix; shared adapter sets live as sibling infrastructure packages.
 
-| Package | Role | Status |
-|---|---|---|
-| `packages/bodhi-pi-cli` | Reference Node host (REPL CLI) | private workspace package |
-| `packages/bodhi-pi-web` | Reference browser host (Vite/React + Web Worker, single-tenant) | private workspace package |
-| `packages/bodhi-pi-ws-server` + `packages/bodhi-pi-ws-frontend` | Reference split host — Node WS server (multi-tenant SQLite, ACP over WebSocket) + thin React frontend | private workspace package pair |
-| `packages/bodhi-pi-http` | Reference HTTP+SSE split host — single Node project (server+frontend in one package), ACP over MCP-Streamable-HTTP, **per-turn agent rebuild** (proves serialize/deserialize deployment) | private workspace package |
-| `packages/bodhi-pi-node` | Publishable Node adapters (`@bodhiapp/bodhi-pi-node`) — `createNodeFilesystem`, `createSqliteSessionStore`, `createNodeScriptExecutor` | publishable npm package |
-| `packages/bodhi-pi-browser` | Publishable browser adapters (`@bodhiapp/bodhi-pi-browser`) — `createZenfsFilesystem`, `createDexieSessionStore`, `createBrowserScriptExecutor`, `createMessagePortStream` | publishable npm package |
+| Package | Role |
+|---|---|
+| `packages/bodhi-pi/test-apps/cli` | Node REPL/headless/RPC Host — stdio Transport, single-tenant SQLite |
+| `packages/bodhi-pi/test-apps/http` | HTTP+SSE Host (with WebSocket sibling) — multi-tenant SQLite, **per-turn agent rebuild** (proves serialize/deserialize deployment) |
+| `packages/bodhi-pi/test-apps/browser` | Browser Host (Vite/React + Web Worker, ZenFS + Dexie, `MessagePort` Transport) |
+| `packages/bodhi-pi/test-apps/chrome-ext` | Chrome MV3 extension Host — same browser adapters + sandbox iframe for unsafe-eval |
+| `packages/bodhi-pi/test-apps/in-memory` | **Shared infrastructure** — Node-side adapters (`createNodeFilesystem`, `createNodeKvStore`, SQLite session stores, `createNodePackageExtensionLoader`, `createBashTerminal`) consumed by cli + http |
+| `packages/bodhi-pi/test-apps/app-utils` | **Shared infrastructure** — cross-runtime utilities (`pickDefined`, just-bash adapters) consumed by all four Hosts |
 
-The adapter packages exist so any third-party host (a different CLI, a desktop wrapper, an extension) can `npm i @bodhiapp/bodhi-pi @bodhiapp/bodhi-pi-{node,browser}` and skip the reference-client code entirely.
+See `ai-docs/specs/bodhi-pi/hosts.md` for full per-Host wiring + Host/UI role split per file.
 
-## Runtime-host parity rule
+> **Deprecated reference**: `packages/bodhi-pi-{cli,web,http,ws-server,ws-frontend,chrome-ext,node,browser}` are the previous generation of test apps. They are **not maintained** — historical reference only. All new work lands under `test-apps/`.
 
-Every user-visible feature MUST land in **all four reference hosts**: `bodhi-pi-cli`, `bodhi-pi-web`, the `bodhi-pi-ws-server` + `bodhi-pi-ws-frontend` pair, and `bodhi-pi-http`. Functional parity is required, technical parity is not — different runtimes (Node CLI vs. browser worker vs. WebSocket split vs. HTTP+SSE split) get to use whichever transport / storage / extension-loader fits, but the user-observable behavior and the e2e assertions MUST line up.
+## Runtime-Host parity rule
 
-A PR that adds a feature to one host without the others is a regression by default. Either:
+Every user-visible feature MUST land in **all four reference Hosts**: `test-apps/cli`, `test-apps/http`, `test-apps/browser`, `test-apps/chrome-ext`. Functional parity is required, technical parity is not — different runtimes (Node CLI vs. browser Worker vs. HTTP+SSE split vs. chrome-ext sandbox) get to use whichever Transport / storage / extension-loader fits, but the user-observable behavior and the e2e assertions MUST line up.
+
+A PR that adds a feature to one Host without the others is a regression by default. Either:
 - include parity changes in the same PR (preferred), or
-- explicitly justify and file follow-up work for the missing hosts in the PR description.
+- explicitly justify and file follow-up work for the missing Hosts in the PR description.
 
-Each host's CLAUDE.md carries its own per-runtime feature inventory; treat those inventories as one set of four lenses on the same surface. `bodhi-pi-http` is the **deployment-portability lens**: same agent, same features, but state lives in storage between every turn (per-turn agent rebuild from SQLite).
+`test-apps/http` is the **deployment-portability lens**: same agent, same features, but state lives in storage between every turn (per-turn agent rebuild from SQLite).
 
 ## Feature workflow (TDD across the matrix)
 
 Every new agent feature lands in this order. **Skipping any step is a regression risk** because Node-only or browser-only assumptions creep in fast:
 
-1. **`bodhi-pi/test/*.test.ts`** — failing integration test against an in-process ACP pair using faux providers / aimock + the in-memory adapter helpers. Make it pass in `src/`.
-2. **`bodhi-pi/e2e/*.e2e.ts`** — gpt-4o-mini round-trip proving the feature reaches a real LLM. Use real adapter helpers (not mocks).
-3. **`bodhi-pi-node/`** — if the feature requires a host-side adapter (FS, sessions, scripts), implement it here. Add unit tests in `bodhi-pi-node/test/`.
-4. **`bodhi-pi-browser/`** — same surface, browser-shaped (ZenFS, Dexie, AsyncFunction). Add unit tests in `bodhi-pi-browser/src/**/*.test.ts` (vitest + fake-indexeddb).
-5. **`bodhi-pi-cli/e2e/*.e2e.ts`** — Node host wires through the new feature. Real LLM, real adapters, asserts the feature reaches the user.
-6. **`bodhi-pi-web/e2e/*.spec.ts`** — Playwright spec, same shape as the CLI e2e but driven through Chrome + the worker. Real LLM, seeded `window.__bodhiPiWebSeed` workspace.
-7. **`bodhi-pi-http/test/integration/*.test.ts`** — server-side integration test (faux provider) proving the feature works under per-turn agent rebuild (each prompt = fresh agent re-hydrated from SQLite). Add `bodhi-pi-http/e2e/*.e2e.ts` for cross-turn behaviors that need a real LLM (e.g., history continuity).
+1. **`packages/bodhi-pi/test/*.test.ts`** — failing integration test against an in-process ACP pair using faux providers / aimock + in-memory adapters from `src/`. Make it pass in `src/`.
+2. **`packages/bodhi-pi/e2e/*.e2e.ts`** — gpt-4o-mini round-trip proving the feature reaches a real LLM. Use real adapter helpers (not mocks).
+3. **`packages/bodhi-pi/test-apps/in-memory/`** — if the feature requires a Node-side adapter (FS, sessions, scripts, terminal, KV), implement it here. Add unit tests under the same package.
+4. **`packages/bodhi-pi/test-apps/browser/src/ui-lib/`** — same surface, browser-shaped (ZenFS, Dexie, AsyncFunction). Add unit tests (vitest + fake-indexeddb). chrome-ext consumes the same shared `ui-lib/` so changes flow there automatically.
+5. **`packages/bodhi-pi/test-apps/cli/e2e/*.e2e.ts`** — cli Host wires through the new feature. Real LLM, real adapters, asserts the feature reaches the user.
+6. **`packages/bodhi-pi/test-apps/browser/e2e/*.spec.ts`** + **`packages/bodhi-pi/test-apps/chrome-ext/e2e/*.spec.ts`** — Playwright specs, same shape as the cli e2e but driven through Chrome + the Worker. Real LLM, seeded workspace.
+7. **`packages/bodhi-pi/test-apps/http/test/integration/*.test.ts`** — server-side integration test (faux provider) proving the feature works under per-turn agent rebuild (each prompt = fresh agent re-hydrated from SQLite). Add `test-apps/http/e2e/*.e2e.ts` for cross-turn behaviors that need a real LLM (e.g., history continuity).
 
-**Why both reference clients?** Browser-only quirks (FSA permission re-grant after picker, ZenFS async-only, AsyncFunction CSP needs) and Node-only quirks (better-sqlite3 native bindings, child_process spawn ergonomics) only surface in the host. The agent's own e2e can't catch them. The two reference clients are our cross-runtime regression net.
+**Why all four reference Hosts?** Browser-only quirks (FSA permission re-grant after picker, ZenFS async-only, AsyncFunction CSP needs) and Node-only quirks (better-sqlite3 native bindings, child_process spawn ergonomics) only surface in the Host. The agent's own e2e can't catch them. The four reference Hosts are our cross-runtime regression net.
 
-**Examples folder for manual smoke.** `packages/bodhi-pi-web/e2e/examples/` is a real on-disk demo workspace with `.bodhi-pi/commands/`, `.bodhi-pi/skills/`, and seeded data files — mount via Chrome's FSA picker to exercise every feature without running the test suite.
+**Examples folder for manual smoke.** Each browser Host carries an on-disk demo workspace with `.bodhi-pi/commands/`, `.bodhi-pi/skills/`, and seeded data files — mount via Chrome's FSA picker to exercise every feature without running the test suite.
 
 ## Key files
 
@@ -67,8 +69,9 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 | `src/version.ts` | `BODHI_PI_VERSION` — bump alongside `package.json` |
 | `src/acp/agent.ts` | `createBodhiPiAgent` factory + `BodhiPiAcpAgent` class |
 | `src/acp/notifications.ts` | ACP-shape helpers + `isAssistantMessage`/`isToolResultMessage` guards |
-| `src/wire/constants.ts` | `MODEL_CONFIG_ID`, `EXT_DELETE_SESSION`, `LIFECYCLE_EVENT_METHOD` |
-| `src/sessions/session-store.ts` | `SessionStore` interface + `SessionEntry` union |
+| `src/wire/constants.ts` | All `_bodhi-pi/<area>/<verb>` method names + `MODEL_CONFIG_ID`, `THINKING_CONFIG_ID`, `EXT_DELETE_SESSION`, `LIFECYCLE_EVENT_METHOD` |
+| `src/sessions/session-store.ts` | `SessionStore` interface + `SessionRecord` / `SessionInfo` |
+| `src/sessions/entries.ts` | `SessionEntry` discriminated union (`message`, `mcp_inclusion_set`, `branch_summary`, …) |
 | `src/sessions/in-memory-session-store.ts` | `createInMemorySessionStore()` helper |
 | `src/filesystem/filesystem.ts` | `Filesystem` interface |
 | `src/filesystem/in-memory-filesystem.ts` | `createInMemoryFilesystem()` helper |
@@ -82,31 +85,33 @@ Every new agent feature lands in this order. **Skipping any step is a regression
 ## Source code rules
 
 - **No fallbacks.** Throw at factory time if required field missing. `systemPrompt` is the sole exception.
-- **No `node:fs` in core, but `Filesystem`-based walks are allowed.** Core never imports `node:fs`/`node:os`. Walks over project-rooted files (AGENTS.md / CLAUDE.md, `.bodhi-pi/settings.json`, `.bodhi-pi/commands/`, `.bodhi-pi/skills/`) go through the injected `Filesystem`. The walk starts at the session `cwd` and ascends ancestors using `path.posix.dirname` — terminates naturally when the host's mount root is reached (FSA-rooted browser hosts) or at `/` for Node.
-- **ACP `fs/*` methods are deliberately absent** — orthogonal to our host-injected `Filesystem`.
+- **No `node:fs` in core, but `Filesystem`-based walks are allowed.** Core never imports `node:fs`/`node:os`. Walks over project-rooted files (AGENTS.md / CLAUDE.md, `.bodhi-pi/settings.json`, `.bodhi-pi/commands/`, `.bodhi-pi/skills/`) go through the injected `Filesystem`. The walk starts at the session `cwd` and ascends ancestors using `path.posix.dirname` — terminates naturally when the Host's mount root is reached (FSA-rooted browser Hosts) or at `/` for Node.
+- **ACP `fs/*` methods are deliberately absent** — orthogonal to our Host-injected `Filesystem`.
 
 ## MCP (Model Context Protocol)
 
-First-party in `src/mcp/`. The agent owns the MCP client; UI hosts never hold a transport.
+First-party in `src/mcp/`. Decomposed into `McpService` (ACP methods) + `McpStore` (KV + inclusion-entry persistence) + `McpConnectionLifecycle` (connect/disconnect/hydrate + status broadcasts) + `McpRegistry` (per-session inclusion sets + tool fanout) + host-injected `McpConnectionProvider` (transports). Full architecture: `ai-docs/specs/bodhi-pi/mcp.md`.
 
 | Surface | Where |
 |---|---|
 | Persisted config | KV under `mcp/<slug>` — secrets tagged `{value, secret: true}` and masked on ACP reads |
-| Hydration | `agent.ts` calls `mcpService.hydrate(sessionId, params.mcpServers)` after `buildSessionStateFn` returns. Entries with `lastKnownStatus === "connected"` auto-connect; ACP-native `mcpServers` from `NewSessionRequest` connect ephemerally |
-| Tool surface | `McpRegistry` is per-session; on connect/disconnect it rebuilds `piAgent.state.tools` as `mergeTools(session.tools, registry.getTools(sessionId))`. Tool names are namespaced `<slug>__<tool>` |
-| Slash commands | `/mcps`, `/mcp add|connect|disconnect|reconnect|remove|tools|logout` (canonical impl in `bodhi-pi-cli`) |
-| Extension methods | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,oauth/start,oauth/finish}` |
+| Hydration | `agent.ts` calls `mcpService.hydrate(sessionId, params.mcpServers, restoredSlugs)` after `buildSessionStateFn` returns. The last `mcp_inclusion_set` entry on the active branch supplies `restoredSlugs`; ACP-native `mcpServers` from `NewSessionRequest` connect ephemerally and promote referenced slugs into the inclusion set |
+| Tool surface | `McpRegistry` is per-session; on connect/disconnect/include/exclude it rebuilds `piAgent.state.tools` as `mergeTools(session.tools, registry.getVisibleTools(sessionId))`. Tool names are namespaced `<slug>__<tool>` |
+| Slash commands | `/mcps`, `/mcp add|connect|disconnect|reconnect|remove|tools|include|exclude` |
+| Extension methods | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,include,exclude}` |
 
-**Transports.** http-streamable everywhere; stdio in node-host runtimes only. Hosts that cannot spawn (`bodhi-pi-browser`, `bodhi-pi-chrome-ext`) and stateless rebuild hosts (`bodhi-pi-http`, per-connection ws) MUST pass `supportsMcpStdio: false` when constructing the agent. `_bodhi-pi/mcp/add` with `command=` then rejects with `-32601` rather than silently saving an unusable entry.
+**Connections are global per `<Host, slug>`; visibility is per-session.** Multi-tenant Hosts (`test-apps/http`) inject a per-user `McpConnectionProvider` so connections survive per-turn agent rebuild.
 
-**OAuth-DCR.** `KvOAuthProvider` implements the SDK's `OAuthClientProvider` against kvStore; the host returns the authorize URL via `EXT_MCP_OAUTH_START` and exchanges the code via `EXT_MCP_OAUTH_FINISH`. The actual user redirect is host-specific (cli: loopback HTTP, web: same-origin callback + BroadcastChannel, chrome-ext: `chrome.identity.launchWebAuthFlow`) — host packages own the UX, the agent owns the state machine.
+**Transports.** http-streamable everywhere; stdio in Node-spawnable Hosts only. Hosts that cannot spawn (`test-apps/browser`, `test-apps/chrome-ext`) and stateless rebuild Hosts (`test-apps/http`) MUST pass `supportsMcpStdio: false` when constructing the agent. `_bodhi-pi/mcp/add` with `command=` then rejects with `-32601` rather than silently saving an unusable entry.
+
+**Auth.** Only `auth.mode = "public"` is supported today. OAuth re-introduction is tracked in `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-{dcr,preregistered,header-query}.md`.
 
 ## pi-agent-core import policy
 
 `src/acp/agent.ts` imports `Agent` directly from `@earendil-works/pi-agent-core/dist/agent.js`, NOT from the package barrel. This is **intentional and must not be "fixed"** by future agents.
 
 - Upstream `@earendil-works/pi-agent-core` (= `packages/agent`) is no longer runtime-neutral. Its barrel re-exports `harness/session/repo/jsonl.ts`, `harness/session/storage/jsonl.ts`, `harness/session/storage/memory.ts`, `harness/utils/shell-output.ts`, and `harness/env/nodejs.ts` — all of which directly import `node:child_process`, `node:crypto`, `node:fs`, `node:fs/promises`, `node:os`, `node:path`.
-- bodhi-pi must run in browser-shipped runtimes (`bodhi-pi-browser`, `bodhi-pi-web`, `bodhi-pi-chrome-ext`). Importing the barrel pulls in those Node-only modules transitively; bundlers' tree-shaking does not reliably strip them because the harness modules have side-effecting top-level `import` statements.
+- bodhi-pi must run in browser-shipped runtimes (`test-apps/browser`, `test-apps/chrome-ext`). Importing the barrel pulls in those Node-only modules transitively; bundlers' tree-shaking does not reliably strip them because the harness modules have side-effecting top-level `import` statements.
 - The `dist/agent.js` deep import gives us only the `Agent` class plus its `pi-ai` dependencies — no Node-specific transitive baggage. Tree-shaking is a non-concern because the import graph is already minimal.
 - Type-only imports from `@earendil-works/pi-agent-core` (e.g., `AgentMessage`, `AgentTool`, `AgentToolResult`) are fine — they erase at compile time and don't pull runtime modules.
 - Review finding A.3 in `ai-docs/reviews/2026-05-11-bodhi-pi-tech-debt.md` proposed swapping the `dist/` import for the barrel. That finding is obsolete; the analysis above supersedes it (see Decision log entry dated 2026-05-12).

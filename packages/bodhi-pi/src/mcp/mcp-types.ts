@@ -1,5 +1,6 @@
 import type { JsonValue } from "../kv/kv-store.js";
 
+/** KV-key namespace prefix for persisted MCP server entries: `mcp/<slug>`. */
 export const MCP_PREFIX = "mcp/";
 
 export type McpTransport = "http" | "stdio";

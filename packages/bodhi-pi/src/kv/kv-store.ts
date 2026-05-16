@@ -13,6 +13,7 @@ export interface KvStore {
 	remove(key: string): Promise<void>;
 }
 
+/** KV-key namespace prefix for auth credentials: `auth/<provider>` (secret values masked on ACP reads). */
 export const AUTH_PREFIX = "auth/";
 
 /** Deep-copies `value`, replacing `value` strings on `{ secret: true }` nodes with `"***"`. */

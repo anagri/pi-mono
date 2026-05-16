@@ -70,9 +70,9 @@ export interface SessionInfoEntry extends BaseEntry {
 }
 
 /**
- * Naming note: coding-agent calls this `custom`. bodhi-pi keeps the name
- * `extension` because the runtime discriminator is exposed across five store
- * impls + the ExtensionRunner contract. Rename is a separate change.
+ * Naming note: coding-agent calls this `custom`. bodhi-pi keeps `extension` —
+ * see `packages/bodhi-pi/CONTEXT.md` flagged-ambiguities for the formalised
+ * divergence.
  */
 export interface ExtensionEntry extends BaseEntry {
 	type: "extension";
