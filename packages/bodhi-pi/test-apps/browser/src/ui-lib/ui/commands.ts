@@ -253,7 +253,6 @@ async function handleMcpSubcommand(
 			if (args.url) params.url = args.url;
 			if (args.command) params.command = args.command;
 			if (args.cmdArgs) params.args = args.cmdArgs;
-			if (args.auth) params.auth = args.auth;
 			if (args.label) params.label = args.label;
 			const result = (await ctx.conn.extMethod(EXT_MCP_ADD, params)) as { slug: string };
 			ctx.pushSystemMessage(`added: ${result.slug}`, {
@@ -338,14 +337,12 @@ interface ParsedMcpAdd {
 	url?: string;
 	command?: string;
 	cmdArgs?: string[];
-	auth?: { mode: string; headers?: Array<{ name: string; value: string; secret: true }> };
 	label?: string;
 	error?: string;
 }
 
 function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
 	const out: ParsedMcpAdd = {};
-	const headers: Array<{ name: string; value: string; secret: true }> = [];
 	for (const tok of rest) {
 		const m = /^([a-zA-Z_][\w-]*)=(.*)$/.exec(tok);
 		if (!m) continue;
@@ -355,17 +352,6 @@ function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
 		if (key === "url") out.url = value;
 		else if (key === "command") out.command = value;
 		else if (key === "label") out.label = value;
-		else if (key === "auth") {
-			out.auth = { mode: value };
-		} else if (key.startsWith("header_")) {
-			headers.push({ name: key.slice("header_".length), value, secret: true });
-		} else if (key === "api_key") {
-			headers.push({ name: "Authorization", value: `Bearer ${value}`, secret: true });
-		}
-	}
-	if (headers.length > 0) {
-		out.auth = out.auth ?? { mode: "header" };
-		out.auth.headers = headers;
 	}
 	if (!out.url && !out.command) out.error = "expected url=<url> or command=<cmd>";
 	return out;

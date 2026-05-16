@@ -98,7 +98,7 @@ export type RemoveProviderOptions = SessionRef;
 // --- MCP --------------------------------------------------------------
 
 export type McpTransport = "http" | "stdio";
-export type McpAuthMode = "public" | "header" | "query" | "oauth-dcr" | "oauth-preregistered";
+export type McpAuthMode = "public";
 export type McpStatus = "connected" | "disconnected" | "error";
 
 export interface McpNamedValueInput {
@@ -108,8 +108,6 @@ export interface McpNamedValueInput {
 
 export interface McpAuthInput {
 	mode: McpAuthMode;
-	headers?: McpNamedValueInput[];
-	queryParams?: McpNamedValueInput[];
 }
 
 export interface McpAddHttpParams {

@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker-provider.js";
 import { BODHI_PI_VERSION } from "../version.js";
-import { applyQueryParams, resolveHttpAuth, resolveStdioEnv } from "./mcp-auth.js";
+import { resolveStdioEnv } from "./mcp-auth.js";
 import type { McpServerEntry, McpToolInfo } from "./mcp-types.js";
 
 const CLIENT_INFO = { name: "bodhi-pi", version: BODHI_PI_VERSION };
@@ -24,11 +24,7 @@ export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {
 	const client = new Client(CLIENT_INFO, { jsonSchemaValidator: SCHEMA_VALIDATOR });
 	if (entry.transport === "http") {
 		if (!entry.url) throw new Error("http MCP entry missing url");
-		const { headers, queryParams } = resolveHttpAuth(entry.auth);
-		const url = new URL(applyQueryParams(entry.url, queryParams));
-		const transport = new StreamableHTTPClientTransport(url, {
-			requestInit: { headers },
-		});
+		const transport = new StreamableHTTPClientTransport(new URL(entry.url));
 		await client.connect(transport);
 	} else {
 		if (!entry.command) throw new Error("stdio MCP entry missing command");

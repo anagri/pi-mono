@@ -24,8 +24,6 @@ import {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
-	EXT_MCP_OAUTH_FINISH,
-	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
@@ -305,14 +303,6 @@ export class BodhiPiClient {
 			if (params.env !== undefined)
 				body.env = params.env.map((e) => ({ name: e.name, value: e.value, secret: true }));
 		}
-		if ("auth" in params && params.auth !== undefined) {
-			const auth: Record<string, unknown> = { mode: params.auth.mode };
-			if (params.auth.headers !== undefined)
-				auth.headers = params.auth.headers.map((h) => ({ name: h.name, value: h.value, secret: true }));
-			if (params.auth.queryParams !== undefined)
-				auth.queryParams = params.auth.queryParams.map((q) => ({ name: q.name, value: q.value, secret: true }));
-			body.auth = auth;
-		}
 		if (params.label !== undefined) body.label = params.label;
 		return this.ext<McpAddResult>(EXT_MCP_ADD, body);
 	}
@@ -358,21 +348,6 @@ export class BodhiPiClient {
 			slug: params.slug,
 		});
 		return res.tools ?? [];
-	}
-
-	mcpOAuthStart(params: { slug: string; redirectUri: string }): Promise<{
-		authorized: boolean;
-		authorizeUrl?: string;
-	}> {
-		return this.ext(EXT_MCP_OAUTH_START, { slug: params.slug, redirectUri: params.redirectUri });
-	}
-
-	mcpOAuthFinish(params: { slug: string; code: string; redirectUri: string }): Promise<McpConnectResult> {
-		return this.ext<McpConnectResult>(EXT_MCP_OAUTH_FINISH, {
-			slug: params.slug,
-			code: params.code,
-			redirectUri: params.redirectUri,
-		});
 	}
 
 	async listProviders(): Promise<ProviderAuthEntry[]> {

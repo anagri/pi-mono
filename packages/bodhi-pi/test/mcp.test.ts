@@ -7,7 +7,6 @@ import {
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
-	EXT_KV_GET,
 	EXT_KV_LIST,
 	EXT_MCP_ADD,
 	EXT_MCP_EXCLUDE,
@@ -72,7 +71,7 @@ test("_bodhi-pi/mcp/add collides cleanly with a random suffix on second add of t
 	expect(second.slug).toMatch(/^github-[0-9a-f]{5}$/);
 });
 
-test("_bodhi-pi/mcp/list masks secret header values and exposes (slug, label, status, transport)", async () => {
+test("_bodhi-pi/mcp/list exposes (slug, label, status, transport, url) for added entries", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	await harness.clientConn.initialize(stdInitParams);
@@ -80,7 +79,6 @@ test("_bodhi-pi/mcp/list masks secret header values and exposes (slug, label, st
 
 	await harness.clientConn.extMethod(EXT_MCP_ADD, {
 		url: "https://mcp.example.com/mcp",
-		auth: { mode: "header", headers: [{ name: "Authorization", value: "Bearer abc", secret: true }] },
 		label: "Example",
 	});
 
@@ -96,12 +94,6 @@ test("_bodhi-pi/mcp/list masks secret header values and exposes (slug, label, st
 			url: "https://mcp.example.com/mcp",
 		},
 	]);
-
-	// kv/get on the same key should mask the secret header value.
-	const got = (await harness.clientConn.extMethod(EXT_KV_GET, { key: "mcp/example" })) as {
-		value: { auth: { headers: Array<{ name: string; value: string }> } };
-	};
-	expect(got.value.auth.headers[0]).toEqual({ name: "Authorization", value: "***", secret: true });
 });
 
 test("_bodhi-pi/mcp/remove drops the kv entry", async () => {

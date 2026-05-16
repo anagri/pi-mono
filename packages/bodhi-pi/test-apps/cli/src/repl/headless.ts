@@ -7,12 +7,7 @@ import {
 	ClientSideConnection,
 	type Stream,
 } from "@agentclientprotocol/sdk";
-import {
-	type createBodhiPiAgent,
-	createBodhiPiClient,
-	type McpAuthMode,
-	type SessionStore,
-} from "@bodhiapp/bodhi-pi";
+import { type createBodhiPiAgent, createBodhiPiClient, type SessionStore } from "@bodhiapp/bodhi-pi";
 
 const INIT_PARAMS = {
 	protocolVersion: 1,
@@ -26,14 +21,12 @@ interface ParsedMcpAdd {
 	url?: string;
 	command?: string;
 	cmdArgs?: string[];
-	auth?: { mode: McpAuthMode; headers?: Array<{ name: string; value: string }> };
 	label?: string;
 	error?: string;
 }
 
 function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
 	const out: ParsedMcpAdd = {};
-	const headers: Array<{ name: string; value: string }> = [];
 	for (const tok of rest) {
 		const m = /^([a-zA-Z_][\w-]*)=(.*)$/.exec(tok);
 		if (!m) continue;
@@ -51,21 +44,7 @@ function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
 			} catch {
 				out.cmdArgs = value.split(/\s+/).filter((s) => s.length > 0);
 			}
-		} else if (key === "auth") {
-			if (value === "public" || value === "header" || value === "query" || value === "oauth-dcr" || value === "oauth-preregistered") {
-				out.auth = { mode: value };
-			} else {
-				out.error = `unknown auth mode: ${value}`;
-			}
-		} else if (key.startsWith("header_")) {
-			headers.push({ name: key.slice("header_".length), value });
-		} else if (key === "api_key") {
-			headers.push({ name: "Authorization", value: `Bearer ${value}` });
 		}
-	}
-	if (headers.length > 0) {
-		out.auth = out.auth ?? { mode: "header" };
-		out.auth.headers = headers;
 	}
 	if (!out.url && !out.command) out.error = "expected url=<url> or command=<cmd>";
 	return out;
@@ -125,7 +104,6 @@ async function tryHandleSlash(
 			const result = args.url
 				? await client.mcpAdd({
 						url: args.url,
-						...(args.auth ? { auth: args.auth } : {}),
 						...(args.label ? { label: args.label } : {}),
 					})
 				: await client.mcpAdd({

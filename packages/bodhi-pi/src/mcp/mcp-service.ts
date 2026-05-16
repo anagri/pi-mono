@@ -14,8 +14,6 @@ import {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
-	EXT_MCP_OAUTH_FINISH,
-	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
@@ -23,13 +21,10 @@ import {
 } from "../wire/constants.js";
 import { requireStringParam, validateSessionId } from "../wire/validators.js";
 import type { McpConnectionProvider } from "./mcp-connection-provider.js";
-import { KvOAuthProvider, runAuthFlow } from "./mcp-oauth-host-api.js";
 import { McpRegistry } from "./mcp-registry.js";
 import { resolveUniqueSlug, slugifyCommand, slugifyUrl } from "./mcp-slug.js";
 import {
 	MCP_PREFIX,
-	type McpAuthConfig,
-	type McpAuthMode,
 	type McpListEntry,
 	type McpNamedSecret,
 	type McpServerEntry,
@@ -88,8 +83,6 @@ export class McpService {
 			[EXT_MCP_TOOLS, this.handleTools.bind(this)],
 			[EXT_MCP_INCLUDE, this.handleInclude.bind(this)],
 			[EXT_MCP_EXCLUDE, this.handleExclude.bind(this)],
-			[EXT_MCP_OAUTH_START, this.handleOAuthStart.bind(this)],
-			[EXT_MCP_OAUTH_FINISH, this.handleOAuthFinish.bind(this)],
 		];
 	}
 
@@ -157,13 +150,12 @@ export class McpService {
 		const transport: "http" | "stdio" = url ? "http" : "stdio";
 		const args = parseStringArray(params.args, `${EXT_MCP_ADD}: args`);
 		const env = parseNamedSecretListParam(params.env);
-		const auth = parseAuthParam(params.auth);
 		const label = typeof params.label === "string" && params.label.length > 0 ? params.label : undefined;
 		const candidate = transport === "http" ? slugifyUrl(url ?? "") : slugifyCommand(command ?? "", args);
 		const slug = await resolveUniqueSlug(candidate, kv);
 		const entry: McpServerEntry = {
 			transport,
-			auth,
+			auth: { mode: "public" },
 			label: label ?? slug,
 			addedAt: new Date().toISOString(),
 			lastKnownStatus: "disconnected",
@@ -271,50 +263,6 @@ export class McpService {
 		this.registry.removeInclusion(sessionId, slug);
 		await this.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
 		return { slug };
-	}
-
-	private async handleOAuthStart(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_OAUTH_START);
-		const slug = requireStringParam(EXT_MCP_OAUTH_START, params, "slug");
-		const redirectUri = requireStringParam(EXT_MCP_OAUTH_START, params, "redirectUri");
-		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
-		const entry = parseMcpServerEntry(raw ?? null);
-		if (!entry) throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: unknown mcp ${slug}`);
-		if (entry.transport !== "http" || !entry.url) {
-			throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: oauth requires http transport with a url`);
-		}
-		const provider = new KvOAuthProvider({ kvStore: kv, slug, redirectUrl: redirectUri });
-		const { authorizeUrl, authorized } = await runAuthFlow(provider, entry.url);
-		if (authorized) return { authorized: true };
-		if (!authorizeUrl) {
-			throw new RequestError(-32603, `${EXT_MCP_OAUTH_START}: provider did not produce an authorize URL`);
-		}
-		return { authorized: false, authorizeUrl };
-	}
-
-	private async handleOAuthFinish(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_OAUTH_FINISH);
-		const slug = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "slug");
-		const code = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "code");
-		const redirectUri = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "redirectUri");
-		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
-		const entry = parseMcpServerEntry(raw ?? null);
-		if (!entry) throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: unknown mcp ${slug}`);
-		if (entry.transport !== "http" || !entry.url) {
-			throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: oauth requires http transport with a url`);
-		}
-		const provider = new KvOAuthProvider({ kvStore: kv, slug, redirectUrl: redirectUri });
-		const { authorized } = await runAuthFlow(provider, entry.url, code);
-		if (!authorized) {
-			throw new RequestError(-32603, `${EXT_MCP_OAUTH_FINISH}: token exchange did not authorize`);
-		}
-		const refreshed = parseMcpServerEntry((await kv.get(`${MCP_PREFIX}${slug}`)) ?? null);
-		if (!refreshed) throw new RequestError(-32603, `${EXT_MCP_OAUTH_FINISH}: entry vanished after token save`);
-		const result = await this.tryProviderConnect(slug, refreshed);
-		await this.persistStatus(slug, refreshed, "connected");
-		await this.emitStatusBroadcast(slug, "connected");
-		await this.emitToolsBroadcast(slug, result.toolNames);
-		return { tools: result.toolNames };
 	}
 
 	private async tryProviderConnect(slug: string, entry: McpServerEntry): Promise<{ toolNames: string[] }> {
@@ -444,21 +392,6 @@ function parseNamedSecretListParam(value: unknown): McpNamedSecret[] {
 			}
 		}
 	}
-	return out;
-}
-
-function parseAuthParam(value: unknown): McpAuthConfig {
-	if (value === undefined || value === null) return { mode: "public" };
-	if (typeof value !== "object" || Array.isArray(value)) return { mode: "public" };
-	const obj = value as { [k: string]: unknown };
-	const mode = obj.mode;
-	const validMode: McpAuthMode =
-		mode === "header" || mode === "query" || mode === "oauth-dcr" || mode === "oauth-preregistered" ? mode : "public";
-	const out: McpAuthConfig = { mode: validMode };
-	const headers = parseNamedSecretListParam(obj.headers);
-	if (headers.length > 0) out.headers = headers;
-	const queryParams = parseNamedSecretListParam(obj.queryParams);
-	if (queryParams.length > 0) out.queryParams = queryParams;
 	return out;
 }
 

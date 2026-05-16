@@ -5,10 +5,7 @@ import { type McpServerEntry, parseMcpServerEntry, serializeMcpServerEntry } fro
 const httpEntry: McpServerEntry = {
 	transport: "http",
 	url: "https://mcp.github.com/mcp",
-	auth: {
-		mode: "header",
-		headers: [{ name: "Authorization", value: "Bearer abc", secret: true }],
-	},
+	auth: { mode: "public" },
 	label: "GitHub",
 	addedAt: "2026-05-15T00:00:00.000Z",
 	lastKnownStatus: "connected",
@@ -36,24 +33,6 @@ describe("serialize + parse round-trip", () => {
 		const wire = serializeMcpServerEntry(stdioEntry);
 		const back = parseMcpServerEntry(wire);
 		expect(back).toEqual(stdioEntry);
-	});
-
-	it("preserves oauth tokens", () => {
-		const entry: McpServerEntry = {
-			...httpEntry,
-			auth: {
-				mode: "oauth-dcr",
-				clientId: "cid",
-				clientSecret: { value: "csec", secret: true },
-				tokens: {
-					access: { value: "at", secret: true },
-					refresh: { value: "rt", secret: true },
-					expiresAt: 1_700_000_000_000,
-				},
-			},
-		};
-		const back = parseMcpServerEntry(serializeMcpServerEntry(entry));
-		expect(back).toEqual(entry);
 	});
 });
 
@@ -92,34 +71,20 @@ describe("parseMcpServerEntry rejects malformed shapes", () => {
 		expect(parseMcpServerEntry(bad)).toBeNull();
 	});
 
-	it("rejects unknown auth mode", () => {
+	it("rejects non-public auth mode", () => {
 		const bad = serializeMcpServerEntry(httpEntry) as { [k: string]: unknown };
-		(bad.auth as { [k: string]: unknown }).mode = "bogus";
+		(bad.auth as { [k: string]: unknown }).mode = "header";
 		expect(parseMcpServerEntry(bad as never)).toBeNull();
 	});
 });
 
 describe("kvStore masking compatibility", () => {
-	it("masks secret-tagged values on read", () => {
-		const wire = serializeMcpServerEntry(httpEntry);
+	it("masks stdio env secrets", () => {
+		const wire = serializeMcpServerEntry(stdioEntry);
 		const masked = maskSecrets(wire) as {
-			auth: { headers: Array<{ name: string; value: string }> };
+			env: Array<{ name: string; value: string }>;
 		};
-		expect(masked.auth.headers[0].name).toBe("Authorization");
-		expect(masked.auth.headers[0].value).toBe("***");
-	});
-
-	it("masks oauth tokens", () => {
-		const entry: McpServerEntry = {
-			...httpEntry,
-			auth: {
-				mode: "oauth-dcr",
-				tokens: { access: { value: "secret-token", secret: true } },
-			},
-		};
-		const masked = maskSecrets(serializeMcpServerEntry(entry)) as {
-			auth: { tokens: { access: { value: string } } };
-		};
-		expect(masked.auth.tokens.access.value).toBe("***");
+		expect(masked.env[0].name).toBe("FOO");
+		expect(masked.env[0].value).toBe("***");
 	});
 });

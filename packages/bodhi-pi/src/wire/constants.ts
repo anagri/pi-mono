@@ -98,7 +98,3 @@ export const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
 export const EXT_MCP_INCLUDE = "_bodhi-pi/mcp/include";
 /** Remove `slug` from a session's inclusion set. No-op if absent. Does NOT close the global connection. */
 export const EXT_MCP_EXCLUDE = "_bodhi-pi/mcp/exclude";
-/** Start OAuth flow for `slug`. Returns `{ authorizeUrl, state }`. Phase 3. */
-export const EXT_MCP_OAUTH_START = "_bodhi-pi/mcp/oauth/start";
-/** Finish OAuth flow with `{ code, state }`. Connects globally on success. Returns `{ tools }`. Phase 3. */
-export const EXT_MCP_OAUTH_FINISH = "_bodhi-pi/mcp/oauth/finish";
