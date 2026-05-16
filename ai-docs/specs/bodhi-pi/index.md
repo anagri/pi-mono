@@ -13,6 +13,7 @@ Living architecture map for `packages/bodhi-pi/`. Optimised for **AI coding assi
 | What's the difference between an Extension, a Skill, a Command, and an MCP server? | [extensions-skills-commands.md](./extensions-skills-commands.md) |
 | How are the four reference Hosts (`test-apps/{cli,http,browser,chrome-ext}/`) wired? | [hosts.md](./hosts.md) |
 | What are the three config surfaces (app-start, disk hierarchy, session-mutable) and how do they compose? | [configuration.md](./configuration.md) |
+| What's already in `src/client/` and how will it become `@bodhiapps/bodhi-pi-client-*`? | [client-sdk-seed.md](./client-sdk-seed.md) |
 | What does `test/` vs `e2e/` vs `e2e-ui/` cover and which stubs to use where? | [testing.md](./testing.md) |
 
 ## Source-of-truth pointers
