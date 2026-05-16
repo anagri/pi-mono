@@ -6,16 +6,10 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import {
-	EXT_KV_LIST,
-	EXT_MCP_ADD,
-	EXT_MCP_EXCLUDE,
-	EXT_MCP_INCLUDE,
-	EXT_MCP_LIST,
-	EXT_MCP_REMOVE,
-} from "@/wire/constants.js";
+import { createBodhiPiClient } from "@/client/client.js";
+import type { BodhiPiAcpConnection } from "@/client/types.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
-import { createTestHarness } from "./helpers/harness.js";
+import { createTestHarness, type TestHarness } from "./helpers/harness.js";
 
 let providers: FauxProviderRegistration[] = [];
 
@@ -34,15 +28,18 @@ function newFaux(): Model<Api> {
 	return faux.getModel() as Model<Api>;
 }
 
-test("_bodhi-pi/mcp/add with a url stores an entry under mcp/<slug> and returns the slug", async () => {
+function bindClient(harness: TestHarness) {
+	return createBodhiPiClient(harness.clientConn as unknown as BodhiPiAcpConnection);
+}
+
+test("/mcp add with a url stores an entry under mcp/<slug> and returns the slug", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	await client.newSession({ cwd: "/proj" });
 
-	const result = await harness.clientConn.extMethod(EXT_MCP_ADD, {
-		url: "https://mcp.github.com/mcp",
-	});
+	const result = await client.mcpAdd({ url: "https://mcp.github.com/mcp" });
 	expect(result).toEqual({ slug: "github" });
 
 	const stored = await harness.kvStore.get("mcp/github");
@@ -55,37 +52,30 @@ test("_bodhi-pi/mcp/add with a url stores an entry under mcp/<slug> and returns 
 	});
 });
 
-test("_bodhi-pi/mcp/add collides cleanly with a random suffix on second add of the same url", async () => {
+test("/mcp add collides cleanly with a random suffix on second add of the same url", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	await client.newSession({ cwd: "/proj" });
 
-	const first = (await harness.clientConn.extMethod(EXT_MCP_ADD, {
-		url: "https://mcp.github.com/mcp",
-	})) as { slug: string };
-	const second = (await harness.clientConn.extMethod(EXT_MCP_ADD, {
-		url: "https://mcp.github.com/mcp",
-	})) as { slug: string };
+	const first = await client.mcpAdd({ url: "https://mcp.github.com/mcp" });
+	const second = await client.mcpAdd({ url: "https://mcp.github.com/mcp" });
 	expect(first.slug).toBe("github");
 	expect(second.slug).toMatch(/^github-[0-9a-f]{5}$/);
 });
 
-test("_bodhi-pi/mcp/list exposes (slug, label, status, transport, url) for added entries", async () => {
+test("/mcp list exposes (slug, label, status, transport, url) for added entries", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	await client.newSession({ cwd: "/proj" });
 
-	await harness.clientConn.extMethod(EXT_MCP_ADD, {
-		url: "https://mcp.example.com/mcp",
-		label: "Example",
-	});
+	await client.mcpAdd({ url: "https://mcp.example.com/mcp", label: "Example" });
 
-	const listed = (await harness.clientConn.extMethod(EXT_MCP_LIST, {})) as {
-		entries: Array<{ slug: string; label: string; status: string; transport: string }>;
-	};
-	expect(listed.entries).toEqual([
+	const entries = await client.mcpList();
+	expect(entries).toEqual([
 		{
 			slug: "example",
 			label: "Example",
@@ -96,70 +86,72 @@ test("_bodhi-pi/mcp/list exposes (slug, label, status, transport, url) for added
 	]);
 });
 
-test("_bodhi-pi/mcp/remove drops the kv entry", async () => {
+test("/mcp remove drops the kv entry", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	await client.newSession({ cwd: "/proj" });
 
-	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.foo.com/mcp" });
-	await harness.clientConn.extMethod(EXT_MCP_REMOVE, { slug: "foo" });
+	await client.mcpAdd({ url: "https://mcp.foo.com/mcp" });
+	await client.mcpRemove({ slug: "foo" });
 
-	const remaining = (await harness.clientConn.extMethod(EXT_KV_LIST, { prefix: "mcp/" })) as {
-		entries: Array<{ key: string }>;
-	};
+	const remaining = await client.kv.list({ prefix: "mcp/" });
 	expect(remaining.entries).toEqual([]);
 });
 
-test("_bodhi-pi/mcp/add persists stdio entries when the host supports them", async () => {
+test("/mcp add persists stdio entries when the host supports them", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	await client.newSession({ cwd: "/proj" });
 
-	const result = (await harness.clientConn.extMethod(EXT_MCP_ADD, {
+	const result = await client.mcpAdd({
 		command: "npx",
 		args: ["-y", "@modelcontextprotocol/server-everything", "stdio"],
-	})) as { slug: string };
+	});
 	expect(result.slug).toBe("server-everything");
 	const stored = await harness.kvStore.get(`mcp/${result.slug}`);
 	expect(stored).toMatchObject({ transport: "stdio", command: "npx" });
 });
 
-test("_bodhi-pi/mcp/add rejects stdio commands when supportsMcpStdio=false", async () => {
+test("/mcp add rejects stdio commands when supportsMcpStdio=false", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id, supportsMcpStdio: false });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	await client.newSession({ cwd: "/proj" });
 
-	await expect(
-		harness.clientConn.extMethod(EXT_MCP_ADD, { command: "npx", args: ["@modelcontextprotocol/server-everything"] }),
-	).rejects.toThrow(/stdio MCPs are not supported/);
+	await expect(client.mcpAdd({ command: "npx", args: ["@modelcontextprotocol/server-everything"] })).rejects.toThrow(
+		/stdio MCPs are not supported/,
+	);
 });
 
 test("/mcp include writes an mcp_inclusion_set session entry; /mcp exclude writes a new snapshot", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	const { sessionId } = await client.newSession({ cwd: "/proj" });
 
 	// Add two MCP entries (don't need to connect; include() doesn't auto-connect).
-	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.a.com/mcp" });
-	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.b.com/mcp" });
+	await client.mcpAdd({ url: "https://mcp.a.com/mcp" });
+	await client.mcpAdd({ url: "https://mcp.b.com/mcp" });
 
-	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "a" });
+	await client.mcpInclude({ sessionId, slug: "a" });
 	let record = await harness.sessionStore.load(sessionId);
 	const inclusionEntriesAfterA = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
 	expect(inclusionEntriesAfterA).toHaveLength(1);
 	expect((inclusionEntriesAfterA[0] as { slugs: string[] }).slugs).toEqual(["a"]);
 
-	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "b" });
+	await client.mcpInclude({ sessionId, slug: "b" });
 	record = await harness.sessionStore.load(sessionId);
 	const inclusionEntriesAfterB = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
 	expect(inclusionEntriesAfterB).toHaveLength(2);
 	expect((inclusionEntriesAfterB[1] as { slugs: string[] }).slugs).toEqual(["a", "b"]);
 
-	await harness.clientConn.extMethod(EXT_MCP_EXCLUDE, { sessionId, slug: "a" });
+	await client.mcpExclude({ sessionId, slug: "a" });
 	record = await harness.sessionStore.load(sessionId);
 	const inclusionEntriesAfterExclude = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
 	expect(inclusionEntriesAfterExclude).toHaveLength(3);
@@ -169,11 +161,12 @@ test("/mcp include writes an mcp_inclusion_set session entry; /mcp exclude write
 test("session/resume restores inclusion from the last mcp_inclusion_set entry when mcpServers is omitted", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	const { sessionId } = await client.newSession({ cwd: "/proj" });
 
-	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.x.com/mcp" });
-	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "x" });
+	await client.mcpAdd({ url: "https://mcp.x.com/mcp" });
+	await client.mcpInclude({ sessionId, slug: "x" });
 
 	// resume with mcpServers omitted should fall back to the session-stored inclusion.
 	await harness.clientConn.resumeSession({ sessionId, cwd: "/proj" } as never);
@@ -187,13 +180,14 @@ test("session/resume restores inclusion from the last mcp_inclusion_set entry wh
 test("session/resume with mcpServers: [] overrides session-stored inclusion and writes a new snapshot", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
-	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+	const { sessionId } = await client.newSession({ cwd: "/proj" });
 
-	await harness.clientConn.extMethod(EXT_MCP_ADD, { url: "https://mcp.y.com/mcp" });
-	await harness.clientConn.extMethod(EXT_MCP_INCLUDE, { sessionId, slug: "y" });
+	await client.mcpAdd({ url: "https://mcp.y.com/mcp" });
+	await client.mcpInclude({ sessionId, slug: "y" });
 
-	await harness.clientConn.resumeSession({ sessionId, cwd: "/proj", mcpServers: [] } as never);
+	await client.resumeSession({ sessionId, cwd: "/proj", mcpServers: [] });
 
 	const record = await harness.sessionStore.load(sessionId);
 	const inclusionEntries = record?.entries.filter((e) => e.type === "mcp_inclusion_set") ?? [];
@@ -205,7 +199,8 @@ test("session/resume with mcpServers: [] overrides session-stored inclusion and 
 test("session hydration calls McpService.hydrate; no auto-connect for disconnected entries", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
-	await harness.clientConn.initialize(stdInitParams);
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
 
 	// Seed kv with an entry whose lastKnownStatus is `disconnected`.
 	// The hydration path should ignore it.
@@ -219,6 +214,6 @@ test("session hydration calls McpService.hydrate; no auto-connect for disconnect
 	});
 
 	// newSession should not block on attempting to connect.
-	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	const { sessionId } = await client.newSession({ cwd: "/proj" });
 	expect(typeof sessionId).toBe("string");
 });

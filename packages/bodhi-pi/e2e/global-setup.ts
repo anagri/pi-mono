@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnMcpEverythingHttp } from "../test/helpers/spawn-mcp-everything.js";
 import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser/launch.js";
 import { waitForViteReady } from "./helpers/browser/wait-for-vite.js";
 import {
@@ -52,34 +53,6 @@ async function spawnVitePreview(): Promise<ChildProcess> {
 		env: { ...process.env, FORCE_COLOR: "0" },
 	});
 	await waitForViteReady(child, 30_000);
-	return child;
-}
-
-async function spawnMcpEverythingHttp(port: number): Promise<ChildProcess> {
-	const child = spawn("npx", ["--yes", "@modelcontextprotocol/server-everything", "streamableHttp"], {
-		env: { ...process.env, PORT: String(port), FORCE_COLOR: "0" },
-		stdio: ["ignore", "pipe", "pipe"],
-	});
-	await new Promise<void>((resolve, reject) => {
-		let buf = "";
-		const timer = setTimeout(() => reject(new Error(`mcp-everything did not bind within 30000ms`)), 30_000);
-		const onData = (chunk: Buffer | string) => {
-			buf += chunk.toString();
-			if (/listening on port/i.test(buf)) {
-				clearTimeout(timer);
-				resolve();
-			}
-		};
-		child.stdout?.on("data", onData);
-		child.stderr?.on("data", onData);
-		child.once("exit", (code) => {
-			clearTimeout(timer);
-			reject(new Error(`mcp-everything exited before binding (code=${code}); buf=${buf.slice(0, 200)}`));
-		});
-	});
-	// drain stdio so the child doesn't block on backpressure for the rest of the run
-	child.stdout?.on("data", () => {});
-	child.stderr?.on("data", () => {});
 	return child;
 }
 

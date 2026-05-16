@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import {
 	type Api,
 	type FauxProviderRegistration,
@@ -10,10 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "vitest
 import { EXT_MCP_ADD, EXT_MCP_CONNECT, EXT_MCP_INCLUDE, EXT_MCP_TOOLS } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
-
-// Spawns mcp-everything in streamableHttp mode for the duration of the file.
-// Verifies that bodhi-pi can: add an MCP entry, connect, discover tools, and
-// expose them on `piAgent.state.tools` via the namespaced `<slug>__<tool>` format.
+import { spawnMcpEverythingHttp } from "./helpers/spawn-mcp-everything.js";
 
 let server: ChildProcess | undefined;
 let baseUrl: string;
@@ -22,11 +19,7 @@ let providers: FauxProviderRegistration[] = [];
 const PORT = 33334;
 
 beforeAll(async () => {
-	server = spawn("npx", ["--yes", "@modelcontextprotocol/server-everything", "streamableHttp"], {
-		env: { ...process.env, PORT: String(PORT) },
-		stdio: ["ignore", "pipe", "pipe"],
-	});
-	await waitForListening(server, /listening on port/, 30_000);
+	server = await spawnMcpEverythingHttp(PORT);
 	baseUrl = `http://localhost:${PORT}/mcp`;
 }, 60_000);
 
@@ -73,25 +66,3 @@ test("MCP http-streamable: add → connect surfaces server tools on piAgent.stat
 	};
 	expect(listed.tools).toEqual(tools);
 }, 30_000);
-
-async function waitForListening(child: ChildProcess, pattern: RegExp, timeoutMs: number): Promise<void> {
-	return new Promise((resolve, reject) => {
-		let buf = "";
-		const timer = setTimeout(() => reject(new Error(`mcp-everything did not bind within ${timeoutMs}ms`)), timeoutMs);
-		const onData = (chunk: Buffer | string) => {
-			buf += chunk.toString();
-			if (pattern.test(buf)) {
-				clearTimeout(timer);
-				child.stdout?.off("data", onData);
-				child.stderr?.off("data", onData);
-				resolve();
-			}
-		};
-		child.stdout?.on("data", onData);
-		child.stderr?.on("data", onData);
-		child.once("exit", (code) => {
-			clearTimeout(timer);
-			reject(new Error(`mcp-everything exited before binding (code=${code})`));
-		});
-	});
-}
