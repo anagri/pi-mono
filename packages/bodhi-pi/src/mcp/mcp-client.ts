@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker-provider.js";
 import { BODHI_PI_VERSION } from "../version.js";
-import { resolveStdioEnv } from "./mcp-auth.js";
+import { resolveStdioEnv } from "./mcp-stdio-env.js";
 import type { McpServerEntry, McpToolInfo } from "./mcp-types.js";
 
 const CLIENT_INFO = { name: "bodhi-pi", version: BODHI_PI_VERSION };
