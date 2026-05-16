@@ -167,7 +167,17 @@ $ cd packages/bodhi-pi && npm run test:e2e          (real LLM via gpt-4o-mini)
 
 **Decision** per fix-forward policy: **document and proceed**. Do not skip / suppress / revert. The test is a backlog item independent of this PR.
 
-**Skipped**: Playwright UI e2e (`e2e-ui/`). Justification: Phase 4 + 5 source changes are comment / jsdoc only with zero rendered-UI impact. Pre-commit `npm run check` typechecked all 17 projects after every commit. The signal-to-cost ratio of a 10-minute Playwright + real-LLM run is unfavourable for this PR's change set.
+**Playwright e2e-ui** (`e2e-ui/`) — run after user prompted for it:
+
+```
+$ cd packages/bodhi-pi/e2e-ui && npm test    (Playwright, 4 projects: http/ws/browser/chrome-ext)
+  46 passed | 2 skipped (48)
+   Duration  3.3min
+```
+
+All green. `[WebServer] lifecycle forward failed: ACP connection closed` warnings in server logs are normal teardown noise after WebSocket sessions end — not test failures.
+
+**E2E re-run** confirms vitest flake: re-running the failing test (`-t "switching model mid-session"`) post-Phase-7 passed cleanly in all 4 runtimes (in-memory, cli, http, ws) — the test is genuinely flaky on first run due to the LLM-self-identification anti-pattern; not a regression introduced by this PR.
 
 ### Pre-existing-flake backlog
 
