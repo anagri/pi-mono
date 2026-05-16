@@ -40,10 +40,16 @@ export async function resolveUniqueSlug(candidate: string, kvStore: KvStore): Pr
 }
 
 function sanitize(s: string): string {
-	return s
+	return sanitizeSlug(s, "");
+}
+
+/** Lowercase, replace non-`[a-z0-9-]` runs with `-`, trim leading/trailing `-`. Returns `fallback` if the result is empty. */
+export function sanitizeSlug(name: string, fallback = "mcp"): string {
+	const out = name
 		.toLowerCase()
 		.replace(/[^a-z0-9-]+/g, "-")
 		.replace(/^-+|-+$/g, "");
+	return out || fallback;
 }
 
 function randomHex(len: number): string {

@@ -18,6 +18,8 @@ export interface ConnectedClient {
 export interface ConnectOptions {
 	/** Invoked once when the underlying transport closes unexpectedly (network drop, server crash). Not fired on explicit close(). */
 	onTransportClose?: () => void;
+	/** When false, throws at the stdio branch rather than spawning. Defence in depth beyond `handleAdd`'s chokepoint. Defaults to true. */
+	supportsStdio?: boolean;
 }
 
 export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {}): Promise<ConnectedClient> {
@@ -27,6 +29,7 @@ export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {
 		const transport = new StreamableHTTPClientTransport(new URL(entry.url));
 		await client.connect(transport);
 	} else {
+		if (opts.supportsStdio === false) throw new Error("stdio MCP not supported on this runtime");
 		if (!entry.command) throw new Error("stdio MCP entry missing command");
 		// dynamic import keeps node:child_process out of browser bundles.
 		const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");

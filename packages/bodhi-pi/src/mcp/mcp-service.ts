@@ -1,10 +1,8 @@
-import { randomUUID } from "node:crypto";
-import type { AgentSideConnection, McpServer } from "@agentclientprotocol/sdk";
+import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
-import type { JsonValue, KvStore } from "../kv/kv-store.js";
-import { maskSecrets } from "../kv/kv-store.js";
+import type { KvStore } from "../kv/kv-store.js";
 import type { AppendEntry } from "../models/registry.js";
 import type { SessionState } from "../sessions/session-state.js";
 import {
@@ -17,12 +15,13 @@ import {
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
-	LIFECYCLE_EVENT_METHOD,
 } from "../wire/constants.js";
 import { requireStringParam, validateSessionId } from "../wire/validators.js";
+import { McpConnectionLifecycle } from "./mcp-connection-lifecycle.js";
 import type { McpConnectionProvider } from "./mcp-connection-provider.js";
 import { McpRegistry } from "./mcp-registry.js";
 import { resolveUniqueSlug, slugifyCommand, slugifyUrl } from "./mcp-slug.js";
+import { McpStore } from "./mcp-store.js";
 import {
 	MCP_PREFIX,
 	type McpListEntry,
@@ -46,29 +45,31 @@ export interface McpServiceDeps {
 }
 
 export class McpService {
+	private readonly store: McpStore;
+	private readonly lifecycle: McpConnectionLifecycle;
 	private readonly registry: McpRegistry;
-	private readonly kvStore: KvStore | undefined;
-	private readonly events: EventDispatcher;
-	private readonly conn: AgentSideConnection;
-	private readonly logger: BodhiPiLogger;
-	private readonly supportsStdio: boolean;
-	private readonly sessions: Map<string, SessionState>;
 	private readonly provider: McpConnectionProvider;
-	private readonly appendEntry: AppendEntry;
+	private readonly supportsStdio: boolean;
 
 	constructor(deps: McpServiceDeps) {
-		this.kvStore = deps.kvStore;
-		this.events = deps.events;
-		this.conn = deps.conn;
-		this.logger = deps.logger;
-		this.sessions = deps.sessions;
 		this.supportsStdio = deps.supportsStdio ?? true;
 		this.provider = deps.provider;
-		this.appendEntry = deps.appendEntry;
+		this.store = new McpStore({
+			kvStore: deps.kvStore,
+			sessions: deps.sessions,
+			appendEntry: deps.appendEntry,
+		});
 		this.registry = new McpRegistry(deps.sessions, deps.provider);
-		// When the host's provider mutates its connection map, refresh
-		// piAgent.state.tools for every loaded session so newly-available /
-		// removed tools propagate.
+		this.lifecycle = new McpConnectionLifecycle({
+			events: deps.events,
+			conn: deps.conn,
+			sessions: deps.sessions,
+			provider: deps.provider,
+			logger: deps.logger,
+			store: this.store,
+			registry: this.registry,
+		});
+		// Host's provider mutates its connection map → refresh piAgent.state.tools for every loaded session.
 		this.provider.onChange(() => this.registry.applyToAllSessions());
 	}
 
@@ -86,59 +87,20 @@ export class McpService {
 		];
 	}
 
-	/**
-	 * Set the session's inclusion based on `ephemeral` and the session-stored
-	 * `restoredSlugs`. Precedence:
-	 *   `ephemeral === undefined` → restoredSlugs (session-stored wins; no new entry written)
-	 *   `ephemeral === []`        → empty (writes new snapshot entry)
-	 *   `ephemeral === [A, B...]` → connect+include named slugs that exist in kv (writes new snapshot entry).
-	 *                                Unknown slugs are silently skipped.
-	 */
-	async hydrate(sessionId: string, ephemeral: McpServer[] | undefined, restoredSlugs: string[] | null): Promise<void> {
-		if (ephemeral === undefined) {
-			const slugs = restoredSlugs ?? [];
-			this.registry.setInclusion(sessionId, slugs);
-			return;
-		}
-
-		if (ephemeral.length === 0) {
-			this.registry.setInclusion(sessionId, []);
-			// Only persist when there was a prior non-empty inclusion to override.
-			// session/new with `[]` is the natural default; writing it would
-			// pollute brand-new sessions with a noisy zero-state entry.
-			if (restoredSlugs && restoredSlugs.length > 0) {
-				await this.persistInclusion(sessionId, []);
-			}
-			return;
-		}
-
-		const persisted = await this.loadPersistedEntries();
-		const persistedBySlug = new Map(persisted.map((p) => [p.slug, p.entry] as const));
-		const referenced: string[] = [];
-		for (const s of ephemeral) {
-			const slug = sanitizeSlugForAcp(s.name);
-			const entry = persistedBySlug.get(slug);
-			if (!entry) continue;
-			referenced.push(slug);
-			if (!this.provider.isConnected(slug)) {
-				try {
-					await this.provider.connect(slug, entry);
-					await this.persistStatus(slug, entry, "connected");
-				} catch {
-					// best-effort; surface via mcp_status_change below
-				}
-			}
-		}
-		this.registry.setInclusion(sessionId, referenced);
-		await this.persistInclusion(sessionId, referenced);
+	hydrate(
+		sessionId: string,
+		ephemeral: Parameters<McpConnectionLifecycle["hydrate"]>[1],
+		restoredSlugs: string[] | null,
+	): Promise<void> {
+		return this.lifecycle.hydrate(sessionId, ephemeral, restoredSlugs);
 	}
 
 	closeSession(sessionId: string): void {
-		this.registry.clearInclusion(sessionId);
+		this.lifecycle.closeSession(sessionId);
 	}
 
 	private async handleAdd(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_ADD);
+		const kv = this.store.requireKv(EXT_MCP_ADD);
 		const url = typeof params.url === "string" ? params.url : undefined;
 		const command = typeof params.command === "string" ? params.command : undefined;
 		if (!url && !command) {
@@ -169,16 +131,16 @@ export class McpService {
 	}
 
 	private async handleRemove(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_REMOVE);
+		const kv = this.store.requireKv(EXT_MCP_REMOVE);
 		const slug = requireStringParam(EXT_MCP_REMOVE, params, "slug");
 		await this.provider.disconnect(slug);
 		await kv.remove(`${MCP_PREFIX}${slug}`);
-		await this.emitStatusBroadcast(slug, "disconnected");
+		await this.lifecycle.emitStatusBroadcast(slug, "disconnected");
 		return { slug };
 	}
 
 	private async handleConnect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_CONNECT);
+		const kv = this.store.requireKv(EXT_MCP_CONNECT);
 		const slug = requireStringParam(EXT_MCP_CONNECT, params, "slug");
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
@@ -186,39 +148,39 @@ export class McpService {
 		if (this.provider.isConnected(slug)) {
 			return { tools: this.provider.getToolNames(slug) ?? [] };
 		}
-		const result = await this.tryProviderConnect(slug, entry);
-		await this.persistStatus(slug, entry, "connected");
-		await this.emitStatusBroadcast(slug, "connected");
-		await this.emitToolsBroadcast(slug, result.toolNames);
+		const result = await this.lifecycle.tryProviderConnect(slug, entry);
+		await this.store.persistStatus(slug, entry, "connected");
+		await this.lifecycle.emitStatusBroadcast(slug, "connected");
+		await this.lifecycle.emitToolsBroadcast(slug, result.toolNames);
 		return { tools: result.toolNames };
 	}
 
 	private async handleDisconnect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_DISCONNECT);
+		const kv = this.store.requireKv(EXT_MCP_DISCONNECT);
 		const slug = requireStringParam(EXT_MCP_DISCONNECT, params, "slug");
 		await this.provider.disconnect(slug);
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
-		if (entry) await this.persistStatus(slug, entry, "disconnected");
-		await this.emitStatusBroadcast(slug, "disconnected");
+		if (entry) await this.store.persistStatus(slug, entry, "disconnected");
+		await this.lifecycle.emitStatusBroadcast(slug, "disconnected");
 		return { slug };
 	}
 
 	private async handleReconnect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_RECONNECT);
+		const kv = this.store.requireKv(EXT_MCP_RECONNECT);
 		const slug = requireStringParam(EXT_MCP_RECONNECT, params, "slug");
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
 		if (!entry) throw new RequestError(-32602, `${EXT_MCP_RECONNECT}: unknown mcp ${slug}`);
-		const result = await this.tryProviderReconnect(slug, entry);
-		await this.persistStatus(slug, entry, "connected");
-		await this.emitStatusBroadcast(slug, "connected");
-		await this.emitToolsBroadcast(slug, result.toolNames);
+		const result = await this.lifecycle.tryProviderReconnect(slug, entry);
+		await this.store.persistStatus(slug, entry, "connected");
+		await this.lifecycle.emitStatusBroadcast(slug, "connected");
+		await this.lifecycle.emitToolsBroadcast(slug, result.toolNames);
 		return { tools: result.toolNames };
 	}
 
 	private async handleList(_params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_LIST);
+		const kv = this.store.requireKv(EXT_MCP_LIST);
 		const entries = await kv.list(MCP_PREFIX);
 		const out: McpListEntry[] = [];
 		for (const e of entries) {
@@ -246,14 +208,14 @@ export class McpService {
 	}
 
 	private async handleInclude(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-		const kv = this.requireKv(EXT_MCP_INCLUDE);
+		const kv = this.store.requireKv(EXT_MCP_INCLUDE);
 		const slug = requireStringParam(EXT_MCP_INCLUDE, params, "slug");
 		const sessionId = validateSessionId(EXT_MCP_INCLUDE, params);
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
 		if (!entry) throw new RequestError(-32602, `${EXT_MCP_INCLUDE}: unknown mcp ${slug}`);
 		this.registry.addInclusion(sessionId, slug);
-		await this.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
+		await this.store.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
 		return { slug, tools: this.provider.isConnected(slug) ? (this.provider.getToolNames(slug) ?? []) : [] };
 	}
 
@@ -261,116 +223,8 @@ export class McpService {
 		const slug = requireStringParam(EXT_MCP_EXCLUDE, params, "slug");
 		const sessionId = validateSessionId(EXT_MCP_EXCLUDE, params);
 		this.registry.removeInclusion(sessionId, slug);
-		await this.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
+		await this.store.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
 		return { slug };
-	}
-
-	private async tryProviderConnect(slug: string, entry: McpServerEntry): Promise<{ toolNames: string[] }> {
-		try {
-			return await this.provider.connect(slug, entry);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			this.logger.error(`[bodhi-pi mcp] connect ${slug} failed:`, message);
-			await this.emitStatusBroadcast(slug, "error", message);
-			throw new RequestError(-32603, `mcp/${slug}: ${message}`);
-		}
-	}
-
-	private async tryProviderReconnect(slug: string, entry: McpServerEntry): Promise<{ toolNames: string[] }> {
-		try {
-			return await this.provider.reconnect(slug, entry);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			this.logger.error(`[bodhi-pi mcp] reconnect ${slug} failed:`, message);
-			await this.emitStatusBroadcast(slug, "error", message);
-			throw new RequestError(-32603, `mcp/${slug}: ${message}`);
-		}
-	}
-
-	private async persistStatus(
-		slug: string,
-		entry: McpServerEntry,
-		status: "connected" | "disconnected" | "error",
-	): Promise<void> {
-		const next = { ...entry, lastKnownStatus: status };
-		await this.kvStore?.set(`${MCP_PREFIX}${slug}`, serializeMcpServerEntry(next));
-	}
-
-	private async persistInclusion(sessionId: string, slugs: string[]): Promise<void> {
-		const session = this.sessions.get(sessionId);
-		if (!session) return;
-		const sorted = slugs.slice().sort();
-		await this.appendEntry(sessionId, session, {
-			type: "mcp_inclusion_set",
-			id: randomUUID(),
-			parentId: session.runtime.leafId,
-			timestamp: Date.now(),
-			slugs: sorted,
-		});
-	}
-
-	private async emitStatusBroadcast(
-		slug: string,
-		status: "connected" | "disconnected" | "error",
-		errorMessage?: string,
-	): Promise<void> {
-		const sids = this.sessions.size === 0 ? [""] : Array.from(this.sessions.keys());
-		for (const sessionId of sids) {
-			await this.events.emit({
-				type: "mcp_status_change",
-				sessionId,
-				slug,
-				status,
-				...(errorMessage !== undefined ? { errorMessage } : {}),
-			});
-			const params: Record<string, unknown> = {
-				type: "mcp_status_change",
-				sessionId,
-				slug,
-				status,
-			};
-			if (errorMessage !== undefined) params.errorMessage = errorMessage;
-			await this.notifyLifecycle(params);
-		}
-	}
-
-	private async emitToolsBroadcast(slug: string, toolNames: string[]): Promise<void> {
-		const sids = this.sessions.size === 0 ? [""] : Array.from(this.sessions.keys());
-		for (const sessionId of sids) {
-			await this.events.emit({ type: "mcp_tools_change", sessionId, slug, toolNames });
-			await this.notifyLifecycle({ type: "mcp_tools_change", sessionId, slug, toolNames });
-		}
-	}
-
-	private async notifyLifecycle(params: Record<string, unknown>): Promise<void> {
-		try {
-			await (
-				this.conn as unknown as {
-					notification(params: { method: string; params: Record<string, unknown> }): Promise<void>;
-				}
-			).notification?.({ method: LIFECYCLE_EVENT_METHOD, params });
-		} catch (err) {
-			this.logger.error("[bodhi-pi mcp] lifecycle notify failed:", err);
-		}
-	}
-
-	private requireKv(method: string): KvStore {
-		if (!this.kvStore) {
-			throw new RequestError(-32601, `${method}: kvStore not configured on this host`);
-		}
-		return this.kvStore;
-	}
-
-	private async loadPersistedEntries(): Promise<Array<{ slug: string; entry: McpServerEntry }>> {
-		if (!this.kvStore) return [];
-		const rows = await this.kvStore.list(MCP_PREFIX);
-		const out: Array<{ slug: string; entry: McpServerEntry }> = [];
-		for (const row of rows) {
-			const entry = parseMcpServerEntry(row.value);
-			if (!entry) continue;
-			out.push({ slug: row.key.slice(MCP_PREFIX.length), entry });
-		}
-		return out;
 	}
 }
 
@@ -393,17 +247,4 @@ function parseNamedSecretListParam(value: unknown): McpNamedSecret[] {
 		}
 	}
 	return out;
-}
-
-function sanitizeSlugForAcp(name: string): string {
-	return (
-		name
-			.toLowerCase()
-			.replace(/[^a-z0-9-]+/g, "-")
-			.replace(/^-+|-+$/g, "") || "mcp"
-	);
-}
-
-export function maskedEntry(value: JsonValue): JsonValue {
-	return maskSecrets(value);
 }
