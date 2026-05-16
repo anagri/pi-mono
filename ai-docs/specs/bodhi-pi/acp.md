@@ -1,0 +1,297 @@
+# ACP surface
+
+bodhi-pi speaks the **Agent Client Protocol (ACP)** verbatim for the methods the spec defines, and ships everything else as `_bodhi-pi/<area>/<verb>` extension methods. Capability is advertised in the `initialize` response under `agentCapabilities._meta["bodhi-pi"]` so Clients can negotiate.
+
+## Native ACP methods
+
+Implemented on `BodhiPiAcpAgent` (`src/acp/agent.ts`). The agent does NOT implement `fs/*` or `terminal/*` — those are orthogonal to the host-injected `Filesystem` / `Terminal`.
+
+| Method | File:line | Side effects | Notes |
+|---|---|---|---|
+| `initialize` | `:314-333` | none | Returns `protocolVersion:1`, advertises `loadSession:true`, session caps (`list`, `close`, `resume`), `mcpCapabilities:{http:true, sse:false}`, `_meta["bodhi-pi"]: {version}` |
+| `authenticate` | `:335-337` | none | Stub — returns `{}`. No auth methods advertised |
+| `newSession` | `:339-356` | creates SessionRecord, builds SessionState, hydrates MCP (no restored slugs), emits `session_start{reason:"new"}` | Returns `{sessionId, configOptions}` |
+| `loadSession` | `:358-437` | `rehydrateSession`, **replays history** as `sessionUpdate` notifications, hydrates MCP with restored slugs, emits `session_start{reason:"load"}` | Replays user chunks, tool_call (status:completed), tool_call_update with results/errors |
+| `resumeSession` | `:439-454` | `rehydrateSession`, hydrates MCP, emits `session_start{reason:"resume"}` | **Does not replay** to Client per ACP spec |
+| `listSessions` | `:456-469` | none | Backed by `sessionStore.list({cwd?, cursor?})`. Returns `{sessions:[…], nextCursor?}`. Stores encode `{updatedAt,id}` base64url cursors |
+| `closeSession` | `:471-479` | `piAgent.abort()`, `mcpService.closeSession`, drops in-memory state, emits `session_shutdown` | Persisted record remains |
+| `setSessionConfigOption` | `:497-499` | delegated to `ModelRegistry.setSessionConfigOption` | Returns FULL `configOptions[]` (not just changed entry — schema fix) |
+| `prompt` | `:501-507` | runs prompt loop, emits assistant + tool_call updates, may auto-compact + retry on overflow | Throws `-32602` when session not loaded |
+| `cancel` | `:519-524` | sets `runtime.cancelled=true`, `piAgent.abort()` | No response (ACP notification) |
+| `extMethod` | `:481-485` | dispatches to `extHandlers` map | Returns `-32601` for unknown method names |
+
+## Extension methods (`_bodhi-pi/*`)
+
+All registered in `extHandlers` at `src/acp/agent.ts:256-264`. Each subsection below maps to a `register()` call on a service.
+
+### Session graph methods (`src/sessions/session-graph-service.ts`)
+
+| Method | Params | Response | Side effects | Throws |
+|---|---|---|---|---|
+| `_bodhi-pi/session/tree` | `{sessionId}` | `{leafId, nodes:[{id,parentId,type,role?,preview?,isLeaf,childCount}]}` | none | `-32602` if unknown session |
+| `_bodhi-pi/session/navigate` | `{sessionId, targetEntryId}` | `{leafId}` | sets leafId; on cross-branch: appends `branch_summary` entry; rebuilds `piAgent.state.messages`; emits `session_navigate` (+ `branch_summary_created`) | `-32602` for bad target |
+| `_bodhi-pi/session/entries` | `{sessionId}` | `{entries:[{id,role,preview}]}` | none — active-branch messages only | — |
+| `_bodhi-pi/session/fork` | `{sessionId, entryId, position?:"before"\|"at"}` | `{newSessionId, selectedText?}` | calls `sessionStore.forkRecord`; emits `session_fork` | `-32603` if store doesn't support forking; `-32602` for bad entry |
+| `_bodhi-pi/session/clone` | `{sessionId}` | `{newSessionId}` | `forkRecord(sessionId, leafId, "at")`; emits `session_clone` | `-32603` if empty session or store doesn't support |
+| `_bodhi-pi/session/delete` | `{sessionId}` | `{}` | aborts agent, closes MCP, deletes from store, emits `session_shutdown` | — |
+
+### Session info methods (`src/sessions/session-info-service.ts`)
+
+| Method | Params | Response | Side effects |
+|---|---|---|---|
+| `_bodhi-pi/session/config` | `{sessionId}` | `{sessionId, cwd, defaultModelId, currentModelId, thinkingLevel, retryOptions, compaction, appendSystemPrompt, contextFilePaths, globalSettingsParseError?, projectSettingsParseError?}` | none |
+| `_bodhi-pi/session/setName` | `{sessionId, name}` | `{ok:true, name}` | appends `session_info` entry, emits `session_info_update` notification |
+| `_bodhi-pi/session/stats` | `{sessionId}` | `{messageCount, toolCallCount, leafId, name?}` | none — walks active path |
+| `_bodhi-pi/session/export` | `{sessionId}` | `{format:"jsonl", content}` | none — header line + active-path entries |
+
+### Compaction (`src/sessions/compaction-orchestrator.ts`)
+
+| Method | Params | Response | Side effects | Throws |
+|---|---|---|---|---|
+| `_bodhi-pi/session/compact` | `{sessionId, customInstructions?}` | `{summary, firstKeptEntryId, tokensBefore, details?}` | appends `CompactionEntry`; rebuilds `piAgent.state.messages`; emits `compaction_start`/`compaction_end` | `-32603` for nothing-to-compact or no API key |
+
+### KV (`src/kv/kv-service.ts`)
+
+| Method | Params | Response | Side effects |
+|---|---|---|---|
+| `_bodhi-pi/kv/set` | `{key, value, sessionId?}` | `{key}` | emits `auth_change{action:"login"}` if `key` starts with `auth/` |
+| `_bodhi-pi/kv/get` | `{key}` | `{key, value: maskedOrNull}` | **secret values masked to `***`** on read |
+| `_bodhi-pi/kv/list` | `{prefix?}` | `{entries:[{key, value: masked}]}` | secrets masked |
+| `_bodhi-pi/kv/remove` | `{key, sessionId?}` | `{key}` | emits `auth_change{action:"logout"}` if `auth/` key |
+
+Throws `-32601` when host omitted `kvStore`.
+
+### Settings (`src/settings/settings-service.ts`)
+
+`scope` parameter is one of `"global" | "project" | "session"`. `--global` requires Host to have provided `homeDir`; otherwise rejects `-32602`.
+
+| Method | Params | Response | Side effects |
+|---|---|---|---|
+| `_bodhi-pi/session/settings/get` | `{sessionId, key, scope?}` | `{key, scope, value, effective, source}` | none — `source` is `default`/`global`/`project`/`session` |
+| `_bodhi-pi/session/settings/set` | `{sessionId, key, value, scope?}` | `{key, scope, effective}` | writes file (global/project) or `sessionOverrides` (session); emits `settings_change{reason:"set"}` |
+| `_bodhi-pi/session/settings/unset` | `{sessionId, key, scope?}` | `{key, scope, effective}` | removes the path at chosen scope; emits `settings_change{reason:"unset"}` |
+| `_bodhi-pi/session/settings/list` | `{sessionId, scope?}` | `{scope, settings}` | `scope` defaults to `"effective"` (the merged view) |
+
+`key` is dotted path (e.g. `providerOptions.openai.maxRetries`). String `value`s are JSON-parsed via `parseSettingValue` (so `"123"` becomes `123`, `"true"` becomes `true`); object/array values are passed through.
+
+### MCP (`src/mcp/mcp-service.ts`)
+
+| Method | Params | Response | Side effects | Throws |
+|---|---|---|---|---|
+| `_bodhi-pi/mcp/add` | `{url?, command?, args?, env?, label?}` | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`) | `-32602` if neither `url` nor `command`; `-32601` if `command` and `!supportsStdio` |
+| `_bodhi-pi/mcp/remove` | `{slug}` | `{slug}` | `provider.disconnect(slug)`, KV remove, emits `mcp_status_change{status:"disconnected"}` | |
+| `_bodhi-pi/mcp/connect` | `{slug}` | `{tools:[…]}` | `provider.connect(...)`, status broadcasts, persists `lastKnownStatus:"connected"` | `-32602` unknown slug; `-32603` from provider error |
+| `_bodhi-pi/mcp/disconnect` | `{slug}` | `{slug}` | `provider.disconnect`, persists `disconnected`, broadcasts | — |
+| `_bodhi-pi/mcp/reconnect` | `{slug}` | `{tools:[…]}` | `provider.reconnect`, broadcasts | `-32602` unknown; `-32603` provider error |
+| `_bodhi-pi/mcp/list` | `{}` | `{entries:[{slug,label,transport,status,url?,command?}]}` | live status = `provider.isConnected(slug) ? "connected" : entry.lastKnownStatus` |
+| `_bodhi-pi/mcp/tools` | `{sessionId, slug}` | `{tools:[…]}` | per-session visibility (returns `[]` if not included or not connected) |
+| `_bodhi-pi/mcp/include` | `{sessionId, slug}` | `{slug, tools}` | adds to inclusion, applies to session, persists `mcp_inclusion_set` | `-32602` unknown slug |
+| `_bodhi-pi/mcp/exclude` | `{sessionId, slug}` | `{slug}` | removes from inclusion, applies, persists snapshot | — |
+
+See [mcp.md](./mcp.md) for the connection model and per-tenant ConnectionProvider story.
+
+## `session/update` notifications (Agent → Client)
+
+The wire-level streaming surface. Sent via `conn.sessionUpdate(...)`. Internal helpers in `src/acp/notifications.ts`.
+
+| `sessionUpdate` | Carries | When |
+|---|---|---|
+| `user_message_chunk` | text | history replay in `loadSession`; ephemeral user echo |
+| `agent_message_chunk` | text | streaming assistant text |
+| `tool_call` | `{toolCallId, title, kind, status, rawInput}` | tool invocation start |
+| `tool_call_update` | `{toolCallId, status, content?}` | mid-flight (`in_progress` + content snapshot) and terminal (`completed`/`failed`) |
+| `available_commands_update` | `{availableCommands:[…]}` | session boot, after extension `registerCommand`, after `requestSlashableRefresh` |
+| `session_info_update` | `{title, updatedAt}` | `_bodhi-pi/session/setName` |
+| `current_model_update` | `{modelId}` | `setSessionConfigOption("model", …)` |
+
+## `LIFECYCLE_EVENT_METHOD` notifications
+
+Non-`sessionUpdate` notifications under a single method name `LIFECYCLE_EVENT_METHOD` (`src/wire/constants.ts`). Used for MCP status fan-outs that aren't strictly session-update-shaped:
+
+- `{type:"mcp_status_change", sessionId, slug, status, errorMessage?}`
+- `{type:"mcp_tools_change", sessionId, slug, toolNames}`
+
+Sent in addition to `EventDispatcher` emission so Clients that aren't watching the event bus still see status changes.
+
+## Error code conventions
+
+| Code | Meaning | Example |
+|---|---|---|
+| `-32601` | method not found / capability missing | `extMethod` unknown method; `kvStore` not configured; stdio MCP on no-stdio Host |
+| `-32602` | invalid params | bad sessionId, unknown slug, bad scope value |
+| `-32603` | internal / refused operation | compaction had nothing to do, no API key, session store can't fork |
+
+## Sequence diagram 1 — `_bodhi-pi/session/fork`
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant SG as SessionGraphService
+  participant SS as SessionStore
+  participant ED as EventDispatcher
+
+  C->>SG: _bodhi-pi/session/fork {sessionId, entryId, position:"before"}
+  SG->>SS: load(sessionId) → record
+  SG->>SG: locate target entry (validate exists)
+  alt forkRecord not implemented
+    SG-->>C: -32603
+  end
+  SG->>SS: forkRecord(sessionId, entryId, "before") → {newSessionId}
+  SG->>ED: emit(session_fork)
+  alt target is user message AND position=="before"
+    SG-->>C: {newSessionId, selectedText: target.content}
+  else
+    SG-->>C: {newSessionId}
+  end
+```
+
+## Sequence diagram 2 — Cross-branch `_bodhi-pi/session/navigate`
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant SG as SessionGraphService
+  participant CO as CompactionOrchestrator
+  participant BS as branch-summary
+  participant SS as SessionStore
+  participant S as SessionState
+  participant ED as EventDispatcher
+
+  C->>SG: _bodhi-pi/session/navigate {sessionId, targetEntryId}
+  SG->>SS: load → record
+  SG->>SG: detectCrossBranch(entries, oldLeaf, target)
+  alt cross-branch
+    SG->>CO: runBranchSummaryForNavigate(...)
+    CO->>BS: runBranchSummary(abandonedTail, model, apiKey)
+    BS-->>CO: {summary, details?}
+    alt summary OK
+      CO->>S: runtime.leafId = target
+      CO->>SS: setLeafId(sessionId, target)
+      CO->>SS: append(branch_summary; parentId=target)
+      CO->>S: piAgent.state.messages = buildSessionContext(refreshed)
+      ED-->>C: branch_summary_created
+      ED-->>C: session_navigate{crossedBranches:true}
+      SG-->>C: {leafId: target}
+    else summary failed
+      Note over CO: log + return undefined<br/>(SG falls through to plain navigate)
+    end
+  else same-branch
+    SG->>SS: setLeafId(sessionId, target)
+    SG->>S: piAgent.state.messages = buildSessionContext(refreshed)
+    ED-->>C: session_navigate{crossedBranches:false}
+    SG-->>C: {leafId: target}
+  end
+```
+
+## Sequence diagram 3 — MCP connect (lazy + status broadcasts)
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant M as McpService
+  participant KV as KvStore
+  participant L as McpConnectionLifecycle
+  participant P as McpConnectionProvider
+  participant S as McpStore
+  participant R as McpRegistry
+  participant ED as EventDispatcher
+
+  C->>M: _bodhi-pi/mcp/connect {slug}
+  M->>KV: get(mcp/{slug}) → entry
+  alt unknown slug
+    M-->>C: -32602
+  end
+  alt already connected
+    M->>P: getToolNames(slug)
+    M-->>C: {tools}
+  else not connected
+    M->>L: tryProviderConnect(slug, entry)
+    L->>P: connect(slug, entry)
+    alt connect throws
+      L->>ED: emit + LIFECYCLE_EVENT_METHOD (mcp_status_change error)
+      L-->>M: throw -32603
+    else success
+      L-->>M: {toolNames}
+      M->>S: persistStatus(slug, entry, "connected")
+      M->>L: emitStatusBroadcast(slug, "connected")
+      L->>ED: emit + LIFECYCLE_EVENT_METHOD (mcp_status_change connected)
+      M->>L: emitToolsBroadcast(slug, toolNames)
+      L->>ED: emit + LIFECYCLE_EVENT_METHOD (mcp_tools_change)
+      Note over P,R: provider.onChange → registry.applyToAllSessions<br/>(rebuilds piAgent.state.tools for sessions that include slug)
+      M-->>C: {tools}
+    end
+  end
+```
+
+## Sequence diagram 4 — Prompt with overflow recovery
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant A as BodhiPiAcpAgent
+  participant PL as prompt-loop
+  participant PA as pi-agent-core Agent
+  participant CO as CompactionOrchestrator
+  participant ED as EventDispatcher
+
+  C->>A: session/prompt {sessionId, content}
+  A->>PL: runPromptLoop(...)
+  PL->>PA: prompt(text)
+  loop turn
+    PA->>PA: provider call
+    PA->>PA: prepareNextTurn → CO.maybeProactiveCompact
+    alt proactive compact triggered
+      CO->>ED: emit compaction_start
+      CO->>CO: runCompaction → CompactionEntry
+      CO->>PA: replace messages with rebuilt context
+      ED-->>C: compaction_end
+    end
+  end
+  PA-->>PL: stopReason
+  alt isContextOverflow(last assistant)
+    PL->>CO: tryOverflowRecovery(...)
+    CO->>CO: emergency runAndPersistCompaction(reason:"recovery")
+    CO->>PA: prompt(retryText)
+    alt retry succeeds
+      CO->>PL: finishTurn(success)
+    else retry overflows again
+      CO-->>PL: false (caller's error path)
+    end
+  end
+  PL-->>A: PromptResponse
+  A-->>C: PromptResponse
+```
+
+## Sequence diagram 5 — MCP hydrate-with-restored-inclusion (per-turn rebuild on http)
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant H as http Host
+  participant A as BodhiPiAcpAgent (fresh)
+  participant SS as SessionStore (SQLite)
+  participant SM as ServerMcpStore (per-user)
+  participant L as McpConnectionLifecycle
+  participant R as McpRegistry
+
+  C->>H: HTTP request (next turn) with sessionId
+  H->>H: resolve userId from auth
+  H->>A: createBodhiPiAgent({mcpConnectionProvider: SM.providerFor(userId), …})
+  H->>A: session/load OR session/resume {sessionId}
+  A->>SS: load(sessionId) → record (entries + leafId)
+  A->>A: rehydrateSession → ctx.mcpInclusion = last mcp_inclusion_set on path
+  A->>L: hydrate(sessionId, params.mcpServers, restoredSlugs)
+  Note over L,SM: SM connections were preserved across HTTP rebuilds
+  L->>R: setInclusion(restoredSlugs)
+  R->>R: applyToSession → mergeTools(session.tools, visibleTools)
+  Note over R: tools surface in piAgent.state.tools<br/>without provider reconnect (already connected)
+  A-->>C: NewSessionResponse / ResumeSessionResponse
+```
+
+## See also
+
+- [architecture.md](./architecture.md) — façade composition + service registration map.
+- [lifecycle.md](./lifecycle.md) — what `loadSession`/`rehydrateSession`/`prompt` actually do.
+- [mcp.md](./mcp.md) — MCP method details + Store/Lifecycle/Registry/Service decomposition.
+- `src/wire/constants.ts` — every `EXT_*` method name.
+- `src/wire/validators.ts` — shared parameter validators (`requireStringParam`, `validateSessionId`, `optionalSessionId`).

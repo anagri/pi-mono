@@ -1,0 +1,144 @@
+# bodhi-pi
+
+An embeddable, runtime-agnostic AI coding agent that speaks the **Agent Client Protocol (ACP)**. The agent owns the LLM prompt loop, tool registry, and session state; everything platform-specific (filesystem, persistence, script execution, terminal, key-value store, MCP transports) is injected by the **Host**. Reference Hosts live in `test-apps/{cli,http,browser,chrome-ext}/`.
+
+## Language
+
+### Roles & processes
+
+**Agent**:
+The in-process `BodhiPiAcpAgent` instance constructed by `createBodhiPiAgent(config)`. Owns the prompt loop, tool registry, session state, ACP method dispatch.
+_Avoid_: "core", "engine".
+
+**Host**:
+The process that **embeds** the Agent. Builds the dependency graph (Filesystem, SessionStore, KvStore, ScriptExecutor, Terminal, McpConnectionProvider, extension factories) and exposes the agent over a **Transport** as an ACP `AgentSideConnection`.
+_Avoid_: "server", "backend" (a Host may be a CLI process or a Web Worker — not a server).
+
+**Client**:
+The ACP peer on the other side of the Transport — an `ClientSideConnection`. Sends requests (`prompt`, `extMethod`, …) and consumes `sessionUpdate` notifications.
+_Avoid_: "frontend" (a Frontend is one kind of UI; Client is a protocol role).
+
+**UI**:
+The user-facing surface (REPL, React app, popup, chrome-ext page). In some runtimes UI ≡ Client (cli, browser-worker, chrome-ext); in split runtimes (http, ws) the UI process **contains** the Client and talks to a remote Host.
+_Avoid_: "client" when you mean rendering layer.
+
+**Reference Host**:
+One of the four canonical Hosts shipped under `test-apps/`: cli, http, browser, chrome-ext. Each proves end-to-end feature parity for a distinct runtime profile.
+
+**Transport**:
+The wire over which ACP messages travel. In bodhi-pi: stdio/in-process (cli + in-memory), HTTP+SSE or WebSocket (http), MessagePort (browser, chrome-ext).
+_Avoid_: "protocol" (that's ACP).
+
+### ACP surface
+
+**ACP method**:
+A first-class method named by the ACP spec — `initialize`, `session/new`, `session/load`, `session/resume`, `session/list`, `session/close`, `session/prompt`, `session/cancel`, `session/setSessionConfigOption`.
+
+**Extension method**:
+A non-spec method namespaced `_bodhi-pi/<area>/<verb>` (e.g. `_bodhi-pi/session/fork`, `_bodhi-pi/mcp/connect`). Dispatched through ACP's generic `extMethod` channel. Capability is advertised via `agentCapabilities._meta["bodhi-pi"]`.
+_Avoid_: "custom method", "private method", "unstable method".
+
+**Session update**:
+An ACP `session/update` notification streamed from Agent to Client. Carries assistant chunks, tool-call frames, tool-result frames, available-commands refreshes, MCP status broadcasts, etc.
+
+### Session model
+
+**Session**:
+A conversation context identified by `sessionId`, anchored to a `cwd`. Persisted as an append-only stream of **Session Entries**.
+
+**Session Entry**:
+One row in the session log. The discriminated union `SessionEntry` is the canonical persistence unit. Each entry has `id`, optional `parentId`, `timestamp`, and a `type` tag (`message`, `model_change`, `thinking_change`, `mcp_inclusion_set`, `compaction`, `branch_summary`, `session_info`, `extension`, `custom_message`).
+
+**Session DAG**:
+The directed acyclic graph formed by entries linked via `parentId`. A session has many leaves; the **Leaf** is the tip of the currently-active branch.
+_Avoid_: "history" (history is the linear projection from root to leaf).
+
+**Branch**:
+The path from root to a given leaf. **Fork** creates a new branch by rewinding to a chosen entry; **Clone** duplicates the active branch under a new `sessionId`; **Navigate** switches the active leaf.
+
+**Branch summary**:
+An auto-appended `branch_summary` entry written when a cross-branch `/goto` would otherwise lose conversational context. The abandoned tail is summarised into the new branch.
+
+### Configuration & state
+
+**BodhiPiConfig**:
+The host-supplied dependency bundle passed to `createBodhiPiAgent`. Required: `sessionStore`, `filesystem`. Optional but routinely supplied: `kvStore`, `scriptExecutor`, `terminal`, `models`, `defaultModelId`, `extensionFactories`, `mcpConnectionProvider`, `homeDir`, `supportsMcpStdio`.
+
+**Settings layer**:
+One of `defaults < global < project < host-explicit < session`. `global` = `<homeDir>/.bodhi-pi/settings.json` (Node Hosts only). `project` = `<cwd>/.bodhi-pi/settings.json` (walked from cwd upward). `host-explicit` = fields set on `BodhiPiConfig`. `session` = mutations via `setSessionConfigOption`.
+
+**Session state**:
+In-memory per-session record (`SessionState`) holding the pi-agent-core `Agent`, current model, thinking level, tool list, command/skill lists, runtime flags (`cancelled`, `leafId`). Reconstructed at `loadSession`/`resumeSession`.
+
+### Contribution sources
+
+**Extension**:
+A host-loaded JS factory (`RegisteredExtension`) that runs in-process inside the Agent. Via `ExtensionAPI` it may register Tools, slash Commands, Providers, and Event handlers, and may append custom Session Entries.
+_Avoid_: "plugin".
+
+**Skill**:
+A markdown document in `<cwd>/.bodhi-pi/skills/<name>/SKILL.md` with frontmatter (`name`, `description`, `disable-model-invocation`, `allowed-tools`). Available as a `skill:<name>` slash command and (when model-invocable) advertised to the LLM.
+
+**Command**:
+A markdown prompt template in `<cwd>/.bodhi-pi/commands/<name>.md` (optionally nested). Frontmatter declares `description` and `argument-hint`; the body is expanded on slash-command invocation with `$1`/`$@`/`$ARGUMENTS`.
+
+**MCP server**:
+An external tool provider speaking the **Model Context Protocol**. Persisted under KV key `mcp/<slug>`. Transports: `http` (Streamable HTTP, all runtimes) and `stdio` (Node-spawnable Hosts only).
+_Avoid_: "MCP" alone for the server (use "MCP server"); "MCP" alone for the connection (use "MCP connection").
+
+**Slug**:
+The stable per-host identifier for an MCP server, derived from URL host or command path; resolved to uniqueness on `_bodhi-pi/mcp/add`.
+
+**Inclusion set**:
+The per-session set of MCP slugs whose tools are exposed to the Agent. Connections are global (one per `<host, slug>`); visibility is per-session. Persisted as the latest `mcp_inclusion_set` entry on the active branch.
+
+### Built-ins & tools
+
+**Built-in tool**:
+A tool implemented inside `src/tools/` and registered unconditionally (e.g. `read`, `write`, `edit`, `ls`, `find`, `grep`) or conditionally on capability (`run_script` when `scriptExecutor` is set; `bash` when `terminal` is set).
+
+**MCP tool**:
+A tool surfaced by a connected MCP server, namespaced `<slug>__<original-name>` and merged into the per-session tool list via `McpRegistry.applyToSession`.
+
+**Extension tool**:
+A tool registered by an Extension via `registerTool`; adapted into the pi-agent-core tool list with the same merge step.
+
+### Persistence
+
+**SessionStore**:
+Host-injected interface for session CRUD + append + leaf tracking + list/pagination. Implementations: in-memory (`createInMemorySessionStore`), Node SQLite (`in-memory` test-app's wrappers), Dexie (browser).
+
+**KvStore**:
+Host-injected key-value primitive with a `secret` hint. Values tagged `secret: true` are **masked to `***` on ACP reads** but readable unmasked by internal callers (e.g. `getApiKey`). Stores: API keys (`auth/<provider>`), MCP entries (`mcp/<slug>`), MCP OAuth credentials if/when re-introduced.
+
+**ConnectionProvider** (MCP):
+Host-injected interface that owns MCP transport lifecycle and per-`<host, slug>` connection state. Default `createInProcessMcpConnectionProvider()` is fine for single-tenant embedded Hosts; multi-tenant Hosts (http) inject a provider bound to per-user storage.
+
+## Relationships
+
+- An **Agent** is constructed by exactly one **Host**.
+- A **Host** advertises the **Agent** to one or more **Clients** over a single **Transport**.
+- A **Session** belongs to exactly one **SessionStore**; it is loaded into at most one **Agent** instance at a time.
+- A **Session DAG** has one root, many **Branches**, one active **Leaf** at a time.
+- An **MCP server** is global per `<host, slug>`; its visibility in a **Session** is governed by that session's **Inclusion set**.
+- **Extensions**, **Skills**, **Commands**, and **MCP tools** all contribute into the same per-session tool/command registries but via independent mechanisms (in-process factory, markdown discovery, markdown discovery, wire-protocol respectively).
+- A **Session Entry** with type `branch_summary` is appended automatically when a Client navigates across **Branches** in a way that would otherwise lose context.
+
+## Example dialogue
+
+> **Dev:** "When the Browser Host disconnects and the user reopens the tab, does the agent re-spawn the MCP servers from before?"
+> **Architect:** "On `session/load` or `session/resume` the Agent reads the persisted `mcp_inclusion_set` entry and asks the **ConnectionProvider** to connect each included **slug** — but the provider may already hold those connections from a previous session in the same Host. The slug's `lastKnownStatus` decides whether we auto-connect."
+>
+> **Dev:** "And what about the http Host, which throws the agent away every turn?"
+> **Architect:** "Same flow, but the http Host injects a per-user `ServerMcpStore` as the **ConnectionProvider**, so the SQLite-backed connection survives the rebuild. The new Agent instance reads the same **Inclusion set** entry and re-binds to the existing connections — no reconnect."
+>
+> **Dev:** "What's the difference between an **Extension** and a **Skill** if both can register slash commands?"
+> **Architect:** "An Extension is *code* loaded by the Host's extension factory list — it can run, mutate session state, register tools. A Skill is a markdown document under `.bodhi-pi/skills/` — purely declarative, invoked as `skill:<name>`. They contribute into the same slash-command surface, but Extensions can do anything code can; Skills are bounded prompt-templates."
+
+## Flagged ambiguities
+
+- **"Client"**: was used to mean both "ACP peer that calls the Agent" and "the UI half of a test-app". Resolved: **Client** is the ACP role (`ClientSideConnection`); **UI** is the user-facing surface. In single-process Hosts (cli, browser, chrome-ext) Client ≡ UI; in split Hosts (http, ws) they live in different processes.
+- **"Host"**: was sometimes used to mean "server". Resolved: **Host** is the agent-embedding process regardless of network topology. A CLI binary and a Node HTTP server are both Hosts.
+- **"MCP"**: was overloaded for the protocol, the server, and the connection. Resolved: use **MCP server**, **MCP connection**, **MCP tool** — never bare "MCP".
+- **"Custom" vs "extension"**: the `extension` SessionEntry variant is the same concept coding-agent calls `custom`. Resolved: bodhi-pi keeps **extension** for the entry discriminator (`ExtensionEntry`) because the name is wired through five store impls plus the `ExtensionRunner` contract; rename is a separate change.
+- **"Reference Host" vs "test-app"**: previously `packages/bodhi-pi-cli` etc. were called reference hosts; they are now **deprecated**. The live reference Hosts are `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`.

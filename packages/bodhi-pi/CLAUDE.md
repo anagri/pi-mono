@@ -4,6 +4,8 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 
 **DEVELOPMENT.md** covers: Node/toolchain setup, verification commands, ENV files, comments policy, test architecture, test helper catalog, stub strategy (aimock vs faux provider), e2e model selection, and external reference paths (coding-agent, ACP spec, SDK types).
 
+**Specs are living docs.** `ai-docs/specs/bodhi-pi/` (index, architecture, acp, lifecycle, mcp, extensions-skills-commands, hosts, testing) + `CONTEXT.md` (glossary) are the source-of-truth architecture map. **Any change to the ACP surface (native or `_bodhi-pi/*`), session lifecycle, MCP wiring, the Host/Client/UI boundary, a new reference Host, or a major feature MUST land with a same-PR spec update.** Touched-method → update `acp.md`'s table + sequence diagrams if behaviour changed. Touched-entry-type → update `lifecycle.md` SessionEntry table. New term → update `CONTEXT.md`. New Host or adapter shape → update `hosts.md`. Stale specs are a regression by default. If unsure where it lands, update `index.md`'s "Read this if…" pointer.
+
 ## Architecture pillars
 
 **ACP is the public contract.** Drive via `AgentSideConnection` only. Internal `pi-agent-core` types and session-store impl types (`SessionEntry`, `SessionInfo`, `SessionRecord`) are not re-exported. Tests go through `ClientSideConnection` — never touch the inner `Agent` directly.
