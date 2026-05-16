@@ -7,7 +7,7 @@ import {
 	ClientSideConnection,
 	type Stream,
 } from "@agentclientprotocol/sdk";
-import { type createBodhiPiAgent, createBodhiPiClient, type SessionStore } from "@bodhiapp/bodhi-pi";
+import { type createBodhiPiAgent, createBodhiPiClient, parseMcpAddArgs, type SessionStore } from "@bodhiapp/bodhi-pi";
 
 const INIT_PARAMS = {
 	protocolVersion: 1,
@@ -16,39 +16,6 @@ const INIT_PARAMS = {
 		terminal: false,
 	},
 } as const;
-
-interface ParsedMcpAdd {
-	url?: string;
-	command?: string;
-	cmdArgs?: string[];
-	label?: string;
-	error?: string;
-}
-
-function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
-	const out: ParsedMcpAdd = {};
-	for (const tok of rest) {
-		const m = /^([a-zA-Z_][\w-]*)=(.*)$/.exec(tok);
-		if (!m) continue;
-		const key = m[1] as string;
-		const raw = m[2] as string;
-		const value = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
-		if (key === "url") out.url = value;
-		else if (key === "command") out.command = value;
-		else if (key === "label") out.label = value;
-		else if (key === "args") {
-			try {
-				const parsed = JSON.parse(value);
-				if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) out.cmdArgs = parsed as string[];
-				else out.error = "args must be a JSON string[]";
-			} catch {
-				out.cmdArgs = value.split(/\s+/).filter((s) => s.length > 0);
-			}
-		}
-	}
-	if (!out.url && !out.command) out.error = "expected url=<url> or command=<cmd>";
-	return out;
-}
 
 interface SessionRegistry {
 	active: string;
@@ -108,7 +75,7 @@ async function tryHandleSlash(
 					})
 				: await client.mcpAdd({
 						command: args.command as string,
-						...(args.cmdArgs ? { args: args.cmdArgs } : {}),
+						...(args.args ? { args: args.args } : {}),
 						...(args.label ? { label: args.label } : {}),
 					});
 			return `added: ${result.slug}`;

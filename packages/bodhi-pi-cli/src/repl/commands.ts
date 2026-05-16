@@ -2,73 +2,13 @@ import type { AvailableCommand, SessionConfigOption } from "@agentclientprotocol
 import {
 	type BodhiPiClient,
 	formatProviderAuth,
-	type McpAuthMode,
 	type ModelOption,
 	modelConfigFromOptions,
 	parseLoginArgs,
+	parseMcpAddArgs,
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import type { Renderer } from "./render.js";
-
-/** Parse `/mcp add` args: positional `url=…` or `command=…` plus optional `auth=`, `label=`, `header_*`, `env_*`. */
-function parseMcpAddArgs(rest: string[]): {
-	url?: string;
-	command?: string;
-	args?: string[];
-	env?: Array<{ name: string; value: string }>;
-	auth?: { mode: McpAuthMode; headers?: Array<{ name: string; value: string }> };
-	label?: string;
-	error?: string;
-} {
-	const out: ReturnType<typeof parseMcpAddArgs> = {};
-	const headers: Array<{ name: string; value: string }> = [];
-	for (const tok of rest) {
-		const m = /^([a-zA-Z_][\w-]*)=(.*)$/.exec(tok);
-		if (!m) continue;
-		const key = m[1]!;
-		const raw = m[2]!;
-		const value = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
-		if (key === "url") out.url = value;
-		else if (key === "command") out.command = value;
-		else if (key === "label") out.label = value;
-		else if (key === "args") {
-			try {
-				const parsed = JSON.parse(value);
-				if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) out.args = parsed as string[];
-				else out.error = `args must be a JSON string[]`;
-			} catch {
-				// Treat unquoted args as space-split fallback for ergonomics.
-				out.args = value.split(/\s+/).filter((s) => s.length > 0);
-			}
-		} else if (key === "auth") {
-			if (
-				value === "public" ||
-				value === "header" ||
-				value === "query" ||
-				value === "oauth-dcr" ||
-				value === "oauth-preregistered"
-			) {
-				out.auth = { mode: value };
-			} else {
-				out.error = `unknown auth mode: ${value}`;
-			}
-		} else if (key.startsWith("header_")) {
-			headers.push({ name: key.slice("header_".length), value });
-		} else if (key.startsWith("env_")) {
-			out.env = out.env ?? [];
-			out.env.push({ name: key.slice("env_".length), value });
-		} else if (key === "api_key") {
-			headers.push({ name: "Authorization", value: `Bearer ${value}` });
-			out.auth = out.auth ?? { mode: "header" };
-		}
-	}
-	if (headers.length > 0) {
-		out.auth = out.auth ?? { mode: "header" };
-		out.auth.headers = headers;
-	}
-	if (!out.url && !out.command) out.error = "expected url=<url> or command=<cmd>";
-	return out;
-}
 
 export interface ReplState {
 	sessionId: string;
@@ -154,14 +94,15 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /logout <provider>            remove stored auth",
 				"  /logins                       list providers with stored auth (masked)",
 				"  /mcps                         list configured MCPs (slug, status)",
-				"  /mcp add url=<url> [auth=public|header|...] [api_key=…] [label=…]",
+				"  /mcp add url=<url> [label=…]",
 				"  /mcp add command=<cmd> [args=<json>] [env_KEY=…] [label=…]",
 				"  /mcp connect <slug>           connect MCP for this session",
 				"  /mcp disconnect <slug>        disconnect MCP for this session",
 				"  /mcp reconnect <slug>         disconnect+connect",
 				"  /mcp remove <slug>            remove MCP entry from KV",
+				"  /mcp include <slug>           include MCP in this session",
+				"  /mcp exclude <slug>           exclude MCP from this session",
 				"  /mcp tools <slug>             list tools currently exposed by an MCP",
-				"  /mcp logout <slug>            clear stored OAuth tokens for an MCP",
 				"  /quit              exit",
 			];
 			if (ctx.state.availableCommands.length > 0) {
@@ -629,7 +570,6 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 					const result = parsed.url
 						? await ctx.client.mcpAdd({
 								url: parsed.url,
-								...(parsed.auth ? { auth: parsed.auth } : {}),
 								...(parsed.label ? { label: parsed.label } : {}),
 							})
 						: await ctx.client.mcpAdd({
@@ -676,22 +616,6 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 						process.stdout.write(`  (no tools — is ${slug} connected and included?)\n`);
 					} else {
 						for (const t of tools) process.stdout.write(`  ${t}\n`);
-					}
-				} else if (sub === "logout") {
-					const existing = await ctx.client.kv.get({ key: `mcp/${slug}` });
-					const v = existing.value;
-					if (v && typeof v === "object" && !Array.isArray(v)) {
-						const obj = { ...(v as Record<string, unknown>) };
-						const auth = obj.auth;
-						if (auth && typeof auth === "object" && !Array.isArray(auth)) {
-							const next = { ...(auth as Record<string, unknown>) };
-							delete next.tokens;
-							obj.auth = next;
-						}
-						await ctx.client.kv.set({ sessionId: ctx.state.sessionId, key: `mcp/${slug}`, value: obj as never });
-						process.stdout.write(`cleared OAuth tokens for ${slug}\n`);
-					} else {
-						process.stdout.write(`  (unknown mcp: ${slug})\n`);
 					}
 				} else {
 					process.stdout.write(`unknown /mcp sub-command: ${sub ?? "?"}\n`);

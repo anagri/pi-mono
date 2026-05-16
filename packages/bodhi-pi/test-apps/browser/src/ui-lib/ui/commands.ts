@@ -1,4 +1,16 @@
 import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
+import {
+	EXT_MCP_ADD,
+	EXT_MCP_CONNECT,
+	EXT_MCP_DISCONNECT,
+	EXT_MCP_EXCLUDE,
+	EXT_MCP_INCLUDE,
+	EXT_MCP_LIST,
+	EXT_MCP_RECONNECT,
+	EXT_MCP_REMOVE,
+	EXT_MCP_TOOLS,
+	parseMcpAddArgs,
+} from "@bodhiapp/bodhi-pi";
 
 /**
  * Local slash dispatcher for the shared test-app UI. Operates on the raw
@@ -6,7 +18,7 @@ import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from
  * importable from the `e2e/` tree without violating the no-sibling-package
  * rule documented in `packages/bodhi-pi/e2e/CLAUDE.md`.
  *
- * Precedence rule (see plan `ai-docs/plans/follow-up-to-commit-5cacab30-*.md`):
+ * Precedence rule:
  *   1. Non-slash → caller forwards to session/prompt.
  *   2. Slash whose name is in `availableCommands` → agent-side; caller forwards.
  *   3. Slash whose name is in this registry → handled locally here.
@@ -16,15 +28,6 @@ import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from
 const MODEL_CONFIG_ID = "model";
 const EXT_SESSION_FORK = "_bodhi-pi/session/fork";
 const EXT_SESSION_CLONE = "_bodhi-pi/session/clone";
-const EXT_MCP_ADD = "_bodhi-pi/mcp/add";
-const EXT_MCP_REMOVE = "_bodhi-pi/mcp/remove";
-const EXT_MCP_CONNECT = "_bodhi-pi/mcp/connect";
-const EXT_MCP_DISCONNECT = "_bodhi-pi/mcp/disconnect";
-const EXT_MCP_RECONNECT = "_bodhi-pi/mcp/reconnect";
-const EXT_MCP_LIST = "_bodhi-pi/mcp/list";
-const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
-const EXT_MCP_INCLUDE = "_bodhi-pi/mcp/include";
-const EXT_MCP_EXCLUDE = "_bodhi-pi/mcp/exclude";
 
 export interface SlashState {
 	sessionId: string;
@@ -252,7 +255,7 @@ async function handleMcpSubcommand(
 			const params: Record<string, unknown> = {};
 			if (args.url) params.url = args.url;
 			if (args.command) params.command = args.command;
-			if (args.cmdArgs) params.args = args.cmdArgs;
+			if (args.args) params.args = args.args;
 			if (args.label) params.label = args.label;
 			const result = (await ctx.conn.extMethod(EXT_MCP_ADD, params)) as { slug: string };
 			ctx.pushSystemMessage(`added: ${result.slug}`, {
@@ -333,26 +336,3 @@ async function handleMcpSubcommand(
 	return { handled: true };
 }
 
-interface ParsedMcpAdd {
-	url?: string;
-	command?: string;
-	cmdArgs?: string[];
-	label?: string;
-	error?: string;
-}
-
-function parseMcpAddArgs(rest: string[]): ParsedMcpAdd {
-	const out: ParsedMcpAdd = {};
-	for (const tok of rest) {
-		const m = /^([a-zA-Z_][\w-]*)=(.*)$/.exec(tok);
-		if (!m) continue;
-		const key = m[1] as string;
-		const raw = m[2] as string;
-		const value = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
-		if (key === "url") out.url = value;
-		else if (key === "command") out.command = value;
-		else if (key === "label") out.label = value;
-	}
-	if (!out.url && !out.command) out.error = "expected url=<url> or command=<cmd>";
-	return out;
-}

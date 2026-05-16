@@ -2,6 +2,7 @@ export { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprot
 export { type BodhiPiConfig, createBodhiPiAgent } from "./acp/agent.js";
 export { BodhiPiClient, createBodhiPiClient } from "./client/client.js";
 export { flattenModelOptions, modelConfigFromOptions } from "./client/config-options.js";
+export { type ParsedMcpAdd, parseMcpAddArgs } from "./client/mcp-slash.js";
 export type {
 	AddProviderOptions,
 	BodhiPiAcpConnection,
