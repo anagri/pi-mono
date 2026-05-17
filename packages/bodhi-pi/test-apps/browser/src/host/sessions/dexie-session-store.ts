@@ -19,9 +19,7 @@ function parseCursor(raw: string | null | undefined): { updatedAt: number; id: s
 	if (!raw) return undefined;
 	let decoded: unknown;
 	try {
-		const json =
-			typeof atob === "function" ? atob(toBase64FromBase64Url(raw)) : Buffer.from(raw, "base64url").toString();
-		decoded = JSON.parse(json);
+		decoded = JSON.parse(atob(toBase64FromBase64Url(raw)));
 	} catch {
 		return undefined;
 	}
@@ -32,9 +30,7 @@ function parseCursor(raw: string | null | undefined): { updatedAt: number; id: s
 }
 
 function encodeCursor(value: { updatedAt: number; id: string }): string {
-	const json = JSON.stringify(value);
-	if (typeof btoa === "function") return toBase64UrlFromBase64(btoa(json));
-	return Buffer.from(json).toString("base64url");
+	return toBase64UrlFromBase64(btoa(JSON.stringify(value)));
 }
 
 function toBase64FromBase64Url(s: string): string {
