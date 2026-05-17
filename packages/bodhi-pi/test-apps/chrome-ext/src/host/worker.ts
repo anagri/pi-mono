@@ -10,7 +10,7 @@
 // Vite 8/rolldown's production output. bodhi-pi tools (read/write/run-script)
 // rely on `Buffer.byteLength` for size accounting.
 
-import { bootstrapAgentWorker } from "@bodhiapp/bodhi-pi-test-app-browser/runtime/bootstrap-worker";
+import { bootstrapAgentWorker } from "@bodhiapp/bodhi-pi-test-app-browser/host/runtime/bootstrap-worker";
 import { Buffer as BufferPolyfill } from "buffer";
 
 (globalThis as { Buffer?: typeof BufferPolyfill }).Buffer = BufferPolyfill;

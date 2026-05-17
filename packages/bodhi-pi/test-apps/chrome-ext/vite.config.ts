@@ -12,7 +12,7 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 // directly, no user gesture needed.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const cryptoShim = fileURLToPath(new URL("./src/agent/crypto-shim.ts", import.meta.url));
+const cryptoShim = fileURLToPath(new URL("./src/host/crypto-shim.ts", import.meta.url));
 
 const polyfills = () =>
 	nodePolyfills({

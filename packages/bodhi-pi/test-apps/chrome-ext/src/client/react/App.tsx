@@ -1,5 +1,5 @@
-import { AppShell } from "@bodhiapp/bodhi-pi-test-app-browser/ui";
-import { createChromeExtAdapter } from "./adapter.ts";
+import { AppShell } from "@bodhiapp/bodhi-pi-test-app-browser/client";
+import { createChromeExtAdapter } from "../acp/adapter.ts";
 
 const adapter = createChromeExtAdapter();
 

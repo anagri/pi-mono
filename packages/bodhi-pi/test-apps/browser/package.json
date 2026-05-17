@@ -15,11 +15,7 @@
 		"./client": "./src/client/index.ts",
 		"./client/react/*": "./src/client/react/*.tsx",
 		"./client/runtime/*": "./src/client/runtime/*.ts",
-		"./client/lib/*": "./src/client/lib/*.ts",
-		"./ui": "./src/client/index.ts",
-		"./runtime/adapter": "./src/client/runtime/adapter.ts",
-		"./runtime/bootstrap-worker": "./src/host/runtime/bootstrap-worker.ts",
-		"./lib/seed-parser": "./src/client/lib/seed-parser-compat.ts"
+		"./client/lib/*": "./src/client/lib/*.ts"
 	},
 	"scripts": {
 		"clean": "shx rm -rf dist",
