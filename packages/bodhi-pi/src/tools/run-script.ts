@@ -1,5 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
+import { byteLengthUtf8, truncateBytesUtf8 } from "@/_internal/utf8.js";
 import { resolvePath, type ToolDeps } from "./index.js";
 import { RUN_SCRIPT_MAX_BYTES } from "./limits.js";
 
@@ -12,8 +13,8 @@ const runScriptSchema = Type.Object({
 type RunScriptInput = Static<typeof runScriptSchema>;
 
 function truncate(label: string, text: string): string {
-	if (Buffer.byteLength(text, "utf-8") <= RUN_SCRIPT_MAX_BYTES) return `${label}:\n${text}`;
-	const trimmed = Buffer.from(text, "utf-8").subarray(0, RUN_SCRIPT_MAX_BYTES).toString("utf-8");
+	if (byteLengthUtf8(text) <= RUN_SCRIPT_MAX_BYTES) return `${label}:\n${text}`;
+	const trimmed = truncateBytesUtf8(text, RUN_SCRIPT_MAX_BYTES);
 	return `${label} (truncated to ${Math.floor(RUN_SCRIPT_MAX_BYTES / 1024)}KB):\n${trimmed}`;
 }
 

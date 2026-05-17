@@ -1,5 +1,5 @@
-import path from "node:path";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { join } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
 
@@ -67,7 +67,7 @@ export interface ProjectSettingsResult {
  * settings with `parseError` set; never throws.
  */
 export async function loadProjectSettings(fs: Filesystem, cwd: string): Promise<ProjectSettingsResult> {
-	const filePath = path.posix.join(cwd, SETTINGS_PATH);
+	const filePath = join(cwd, SETTINGS_PATH);
 	if (!(await fs.exists(filePath))) {
 		return { settings: {}, present: false };
 	}

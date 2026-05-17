@@ -1,4 +1,4 @@
-import path from "node:path";
+import { dirname, join, normalize } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 
 const CONTEXT_FILE_CANDIDATES = ["AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"] as const;
@@ -10,7 +10,7 @@ export interface ContextFile {
 
 async function loadContextFileFromDir(fs: Filesystem, dir: string): Promise<ContextFile | null> {
 	for (const filename of CONTEXT_FILE_CANDIDATES) {
-		const filePath = path.posix.join(dir, filename);
+		const filePath = join(dir, filename);
 		if (!(await fs.exists(filePath))) continue;
 		try {
 			const content = await fs.readTextFile(filePath);
@@ -29,13 +29,13 @@ async function loadContextFileFromDir(fs: Filesystem, dir: string): Promise<Cont
  * instruction lands last in the system prompt.
  *
  * Uses the injected `Filesystem` exclusively — no `node:fs`. Browser hosts
- * with a mounted FSA root terminate naturally when `path.posix.dirname`
- * returns the same dir.
+ * with a mounted FSA root terminate naturally when `dirname` returns the
+ * same dir.
  */
 export async function loadProjectContextFiles(fs: Filesystem, cwd: string): Promise<ContextFile[]> {
 	const collected: ContextFile[] = [];
 	const seen = new Set<string>();
-	let currentDir = path.posix.normalize(cwd);
+	let currentDir = normalize(cwd);
 
 	while (true) {
 		const file = await loadContextFileFromDir(fs, currentDir);
@@ -43,7 +43,7 @@ export async function loadProjectContextFiles(fs: Filesystem, cwd: string): Prom
 			collected.unshift(file);
 			seen.add(file.path);
 		}
-		const parent = path.posix.dirname(currentDir);
+		const parent = dirname(currentDir);
 		if (parent === currentDir) break;
 		currentDir = parent;
 	}

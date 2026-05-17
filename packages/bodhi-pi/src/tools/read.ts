@@ -1,5 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
+import { byteLengthUtf8 } from "@/_internal/utf8.js";
 import { resolvePath, type ToolDeps } from "./index.js";
 import { READ_MAX_BYTES, READ_MAX_LINES } from "./limits.js";
 
@@ -18,7 +19,7 @@ function takeBoundedLines(lines: string[], maxLines: number, maxBytes: number): 
 	let count = 0;
 	for (let i = 0; i < lines.length && i < maxLines; i++) {
 		const line = lines[i];
-		const lineBytes = Buffer.byteLength(line, "utf-8");
+		const lineBytes = byteLengthUtf8(line);
 		const sepBytes = i === 0 ? 0 : 1;
 		if (bytes + sepBytes + lineBytes > maxBytes) break;
 		bytes += sepBytes + lineBytes;

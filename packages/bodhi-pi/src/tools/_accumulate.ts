@@ -1,5 +1,5 @@
 // `maxChars` is JavaScript string length (UTF-16 code units), not UTF-8 bytes.
-// `read.ts` is the byte-aware exception (uses `Buffer.byteLength`).
+// `read.ts` is the byte-aware exception (uses `byteLengthUtf8`).
 
 export type StoppedReason = "items" | "bytes" | null;
 

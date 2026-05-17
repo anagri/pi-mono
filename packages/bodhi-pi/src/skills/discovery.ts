@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join } from "pathe";
 import { parseFrontmatter } from "@/_internal/frontmatter.js";
 import { byName } from "@/_internal/sort.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";

@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentLoopTurnUpdate, AgentMessage, Agent as PiAgent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, StopReason as PiStopReason } from "@earendil-works/pi-ai";
 import { isContextOverflow } from "@earendil-works/pi-ai";
+import { randomUUID } from "@/_internal/uuid.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { StopReason } from "@/events/types.js";
 import { EXT_SESSION_COMPACT } from "@/wire/constants.js";

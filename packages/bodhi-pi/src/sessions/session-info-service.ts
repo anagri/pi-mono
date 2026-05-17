@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { type AgentSideConnection, RequestError } from "@agentclientprotocol/sdk";
+import { randomUUID } from "@/_internal/uuid.js";
 import { walkPath } from "@/sessions/build-context.js";
 import type { SessionEntry } from "@/sessions/entries.js";
 import { requireLiveSession, requireSessionRecord } from "@/sessions/resolution.js";

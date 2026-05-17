@@ -1,4 +1,4 @@
-import path from "node:path";
+import { dirname, normalize } from "pathe";
 import type { DirEntry, FileStat, Filesystem } from "./filesystem.js";
 
 type Entry = { type: "file"; content: string; mtimeMs: number } | { type: "dir"; mtimeMs: number };
@@ -17,10 +17,10 @@ export function createInMemoryFilesystem(): Filesystem {
 	const entries = new Map<string, Entry>();
 	entries.set("/", { type: "dir", mtimeMs: Date.now() });
 
-	const norm = (p: string) => path.posix.normalize(p);
+	const norm = (p: string) => normalize(p);
 
 	function ensureParentDir(p: string): void {
-		const parent = path.posix.dirname(p);
+		const parent = dirname(p);
 		const e = entries.get(parent);
 		if (!e || e.type !== "dir") throw fsError("ENOENT", `parent dir missing: ${parent}`);
 	}

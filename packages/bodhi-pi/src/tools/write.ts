@@ -1,6 +1,7 @@
-import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { dirname } from "pathe";
 import { type Static, Type } from "typebox";
+import { byteLengthUtf8 } from "@/_internal/utf8.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { resolvePath, type ToolDeps } from "./index.js";
 
@@ -21,10 +22,10 @@ export function createWriteTool(deps: ToolDeps): AgentTool<typeof writeSchema> {
 		async execute(_toolCallId: string, { path: filePath, content }: WriteInput) {
 			const absolutePath = resolvePath(deps.cwd, filePath);
 			return withFileMutationQueue(absolutePath, async () => {
-				const parent = path.posix.dirname(absolutePath);
+				const parent = dirname(absolutePath);
 				await deps.filesystem.mkdir(parent, { recursive: true });
 				await deps.filesystem.writeTextFile(absolutePath, content);
-				const bytes = Buffer.byteLength(content, "utf-8");
+				const bytes = byteLengthUtf8(content);
 				return {
 					content: [{ type: "text", text: `Wrote ${bytes} bytes to ${filePath}` }],
 					details: undefined,

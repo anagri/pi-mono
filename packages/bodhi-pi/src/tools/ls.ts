@@ -1,5 +1,5 @@
-import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { join } from "pathe";
 import { type Static, Type } from "typebox";
 import { accumulateBounded, truncationFooter } from "./_accumulate.js";
 import { resolvePath, type ToolDeps } from "./index.js";
@@ -26,7 +26,7 @@ export function createLsTool(deps: ToolDeps): AgentTool<typeof lsSchema> {
 			const fs = deps.filesystem;
 			async function* entries(): AsyncGenerator<string> {
 				for (const child of children) {
-					const childPath = path.posix.join(absoluteDir, child.name);
+					const childPath = join(absoluteDir, child.name);
 					let size = 0;
 					try {
 						const stat = await fs.stat(childPath);

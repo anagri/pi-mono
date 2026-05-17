@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { RequestError } from "@agentclientprotocol/sdk";
+import { randomUUID } from "@/_internal/uuid.js";
 import type { KvStore } from "../kv/kv-store.js";
 import type { AppendEntry } from "../models/registry.js";
 import type { SessionState } from "../sessions/session-state.js";

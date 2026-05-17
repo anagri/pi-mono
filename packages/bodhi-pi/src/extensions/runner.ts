@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Api, Model, TextContent } from "@earendil-works/pi-ai";
 import type { TSchema } from "typebox";
+import { randomUUID } from "@/_internal/uuid.js";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
 import type { BodhiPiEventHandlers, BodhiPiEventType } from "@/events/types.js";
 import type { SessionStore } from "@/sessions/session-store.js";

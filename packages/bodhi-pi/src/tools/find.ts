@@ -1,5 +1,5 @@
-import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { relative } from "pathe";
 import picomatch from "picomatch";
 import { type Static, Type } from "typebox";
 import { accumulateBounded, truncationFooter } from "./_accumulate.js";
@@ -33,7 +33,7 @@ export function createFindTool(deps: ToolDeps): AgentTool<typeof findSchema> {
 				for await (const entry of walk(deps.filesystem, root, { maxEntries: WALK_MAX_ENTRIES })) {
 					if (!entry.isFile) continue;
 					totalScanned++;
-					const rel = path.posix.relative(root, entry.absolutePath);
+					const rel = relative(root, entry.absolutePath);
 					if (!matcher(rel) && !matcher(entry.absolutePath)) continue;
 					yield entry.absolutePath;
 				}

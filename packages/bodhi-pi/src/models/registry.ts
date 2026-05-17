@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
 	RequestError,
 	type SessionConfigOption,
@@ -15,6 +14,7 @@ import {
 	type Model,
 	type ModelThinkingLevel,
 } from "@earendil-works/pi-ai";
+import { randomUUID } from "@/_internal/uuid.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
 import { extractAuthApiKey, extractAuthBaseUrl } from "@/kv/auth-format.js";

@@ -1,10 +1,10 @@
-import path from "node:path";
+import { join } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { type BodhiPiProjectSettings, GLOBAL_SETTINGS_PATH, type ProjectSettingsResult } from "./settings.js";
 
 /** Read `<homeDir>/.bodhi-pi/settings.json`. Node-only; browser hosts omit `homeDir`. Never throws. */
 export async function loadGlobalSettings(fs: Filesystem, homeDir: string): Promise<ProjectSettingsResult> {
-	const filePath = path.posix.join(homeDir, GLOBAL_SETTINGS_PATH);
+	const filePath = join(homeDir, GLOBAL_SETTINGS_PATH);
 	if (!(await fs.exists(filePath))) {
 		return { settings: {}, present: false };
 	}

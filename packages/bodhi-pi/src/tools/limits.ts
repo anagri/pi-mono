@@ -1,4 +1,4 @@
-// `_MAX_BYTES` is UTF-8 bytes (read/run_script — Buffer.byteLength).
+// `_MAX_BYTES` is UTF-8 bytes (read/run_script — byteLengthUtf8).
 // `_MAX_CHARS` is JS string length (ls/find/grep — accumulateBounded).
 export const READ_MAX_LINES = 2000;
 export const READ_MAX_BYTES = 50_000;

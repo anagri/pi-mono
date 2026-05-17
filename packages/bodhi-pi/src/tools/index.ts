@@ -1,5 +1,5 @@
-import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { isAbsolute, join, normalize } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import type { Terminal } from "@/terminal/terminal.js";
@@ -58,8 +58,8 @@ export const BUILTIN_TOOL_SNIPPETS: Record<string, string> = {
  * No `..` traversal guard — hosts that need sandboxing wrap their `Filesystem`.
  */
 export function resolvePath(cwd: string, userPath: string): string {
-	if (path.posix.isAbsolute(userPath)) return path.posix.normalize(userPath);
-	return path.posix.normalize(path.posix.join(cwd, userPath));
+	if (isAbsolute(userPath)) return normalize(userPath);
+	return normalize(join(cwd, userPath));
 }
 
 export function toolKindFor(name: string): "read" | "edit" | "search" | "execute" | "other" {

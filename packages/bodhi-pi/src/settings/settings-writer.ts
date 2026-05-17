@@ -1,4 +1,4 @@
-import path from "node:path";
+import { dirname, join } from "pathe";
 import { isPlainObject } from "@/_internal/object.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { type BodhiPiProjectSettings, GLOBAL_SETTINGS_PATH, loadProjectSettings, SETTINGS_PATH } from "./settings.js";
@@ -64,17 +64,17 @@ export function parseSettingValue(raw: string): unknown {
 }
 
 async function writeJsonAt(fs: Filesystem, filePath: string, value: BodhiPiProjectSettings): Promise<void> {
-	const dir = path.posix.dirname(filePath);
+	const dir = dirname(filePath);
 	await fs.mkdir(dir, { recursive: true });
 	await fs.writeTextFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function projectPath(cwd: string): string {
-	return path.posix.join(cwd, SETTINGS_PATH);
+	return join(cwd, SETTINGS_PATH);
 }
 
 function globalPath(homeDir: string): string {
-	return path.posix.join(homeDir, GLOBAL_SETTINGS_PATH);
+	return join(homeDir, GLOBAL_SETTINGS_PATH);
 }
 
 export async function writeProjectSetting(

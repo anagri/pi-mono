@@ -1,4 +1,4 @@
-import path from "node:path";
+import { basename, join } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 
 export interface WalkEntry {
@@ -18,7 +18,7 @@ export interface WalkOptions {
 const DEFAULT_SKIP = new Set([".git", "node_modules"]);
 
 function defaultSkipDir(absolutePath: string): boolean {
-	return DEFAULT_SKIP.has(path.posix.basename(absolutePath));
+	return DEFAULT_SKIP.has(basename(absolutePath));
 }
 
 /**
@@ -49,7 +49,7 @@ export async function* walk(fs: Filesystem, rootAbsolute: string, opts: WalkOpti
 			continue;
 		}
 		for (const entry of children) {
-			const absolutePath = path.posix.join(dir, entry.name);
+			const absolutePath = join(dir, entry.name);
 			if (entry.isDirectory && skipDir(absolutePath)) continue;
 			yield { absolutePath, isFile: entry.isFile, isDirectory: entry.isDirectory };
 			yielded++;

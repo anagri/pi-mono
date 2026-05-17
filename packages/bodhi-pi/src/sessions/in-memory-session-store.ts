@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/_internal/uuid.js";
 import { walkPath } from "./build-context.js";
 import type {
 	ExtensionEntry,

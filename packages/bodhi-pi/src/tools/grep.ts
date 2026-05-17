@@ -1,5 +1,5 @@
-import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { relative } from "pathe";
 import picomatch from "picomatch";
 import { type Static, Type } from "typebox";
 import { accumulateBounded, truncationFooter } from "./_accumulate.js";
@@ -51,7 +51,7 @@ export function createGrepTool(deps: ToolDeps): AgentTool<typeof grepSchema> {
 			async function* matches(): AsyncGenerator<string> {
 				for await (const entry of walk(deps.filesystem, root, { maxEntries: WALK_MAX_ENTRIES })) {
 					if (!entry.isFile) continue;
-					const rel = path.posix.relative(root, entry.absolutePath);
+					const rel = relative(root, entry.absolutePath);
 					if (globMatcher && !globMatcher(rel) && !globMatcher(entry.absolutePath)) continue;
 					let content: string;
 					try {

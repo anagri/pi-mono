@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
 	type AgentSideConnection,
 	type PromptRequest,
@@ -6,6 +5,7 @@ import {
 	RequestError,
 } from "@agentclientprotocol/sdk";
 import type { StopReason as PiStopReason } from "@earendil-works/pi-ai";
+import { randomUUID } from "@/_internal/uuid.js";
 import { expandPromptTemplate } from "@/commands/prompt-templates.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { StopReason } from "@/events/types.js";
