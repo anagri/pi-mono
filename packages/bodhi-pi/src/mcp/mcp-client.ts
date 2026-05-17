@@ -3,15 +3,38 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker-provider.js";
 import type { KvStore } from "../kv/kv-store.js";
 import { BODHI_PI_VERSION } from "../version.js";
+import { KvOAuthProvider, runAuthFlow } from "./mcp-oauth-provider.js";
+import { OAuthStateKv } from "./mcp-oauth-state-kv.js";
 import { resolveStdioEnv } from "./mcp-stdio-env.js";
 import {
 	MCP_PREFIX,
 	type McpAuthConfig,
 	type McpAuthMode,
+	type McpAuthOAuthPreregisteredConfig,
 	type McpServerEntry,
 	type McpToolInfo,
 	parseMcpServerEntry,
 } from "./mcp-types.js";
+
+/**
+ * Refresh persisted tokens by invoking the SDK's `auth()` driver with no `authorizationCode` —
+ * with a refresh_token in `provider.tokens()`, the driver calls `refreshAuthorization` and
+ * writes the new tokens back via `provider.saveTokens`. No interactive flow needed.
+ *
+ * `state` is unused on the refresh path (SDK only reads it when composing an authorize URL),
+ * so we pass a sentinel; `OAuthStateKv` is similarly unused.
+ */
+async function refreshOauthTokens(kvStore: KvStore, slug: string, cfg: McpAuthOAuthPreregisteredConfig): Promise<void> {
+	const provider = new KvOAuthProvider({
+		kvStore,
+		slug,
+		cfg,
+		redirectUri: cfg.redirectUri ?? "http://localhost/unused-during-refresh",
+		stateKv: new OAuthStateKv(kvStore),
+		state: "unused-during-refresh",
+	});
+	await runAuthFlow(provider, cfg.tokenUrl);
+}
 
 const CLIENT_INFO = { name: "bodhi-pi", version: BODHI_PI_VERSION };
 // MV3 chrome ext / other CSP-restricted runtimes forbid `new Function` (Ajv default).
@@ -116,17 +139,77 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 		// SDK exposes `opts.fetch` (top-level) which wraps every outbound request. We re-read the
 		// latest access token from kv per call so a refresh elsewhere writes new tokens back to
 		// `mcp/<slug>` and the next request picks them up — no transport rebuild required.
+		//
+		// Refresh strategy is two-pronged: eager (60s slack on `expiresAt` before the request) +
+		// lazy (on 401 response, refresh once and retry). Eager catches the common case so the
+		// MCP server never sees an expired token; lazy is the fallback for clock skew / server
+		// early-revoke. Refresh failure falls through with the original 401 — the caller's higher
+		// loop can re-trigger `_bodhi-pi/mcp/oauth/start` to re-auth interactively.
 		const kvStore = ctx.kvStore;
 		const slug = ctx.slug;
-		opts.fetch = async (url, init) => {
-			const headers = new Headers(init?.headers);
+		const REFRESH_SLACK_MS = 60_000;
+		// Per-transport (= per-slug, here) refresh gate. Parallel outbound requests share one
+		// in-flight refresh promise so the OAuth server never sees two simultaneous refresh-grant
+		// calls with the same (single-use) refresh_token.
+		let inFlightRefresh: Promise<void> | null = null;
+		const readEntry = async (): Promise<McpServerEntry | null> => {
 			const raw = await kvStore.get(`${MCP_PREFIX}${slug}`);
-			const entry = parseMcpServerEntry(raw ?? null);
+			return parseMcpServerEntry(raw ?? null);
+		};
+		const setBearerFromEntry = (entry: McpServerEntry | null, headers: Headers): void => {
 			if (entry && entry.auth.mode === "oauth-preregistered" && entry.auth.tokens) {
 				const tokenType = entry.auth.tokens.tokenType ?? "Bearer";
 				headers.set("Authorization", `${tokenType} ${entry.auth.tokens.access.value}`);
 			}
-			return fetch(url, { ...init, headers });
+		};
+		const doRefresh = async (cfg: McpAuthOAuthPreregisteredConfig): Promise<void> => {
+			if (!inFlightRefresh) {
+				inFlightRefresh = refreshOauthTokens(kvStore, slug, cfg).finally(() => {
+					inFlightRefresh = null;
+				});
+			}
+			await inFlightRefresh;
+		};
+		opts.fetch = async (url, init) => {
+			let entry = await readEntry();
+			// Eager refresh: token expires within the slack window AND we have a refresh_token.
+			if (
+				entry &&
+				entry.auth.mode === "oauth-preregistered" &&
+				entry.auth.tokens?.expiresAt !== undefined &&
+				entry.auth.tokens.refresh &&
+				entry.auth.tokens.expiresAt - REFRESH_SLACK_MS < Date.now()
+			) {
+				try {
+					await doRefresh(entry.auth);
+					entry = await readEntry();
+				} catch {
+					// Best-effort; fall through with stale token and let lazy 401 try once more.
+				}
+			}
+			const headers = new Headers(init?.headers);
+			setBearerFromEntry(entry, headers);
+			let response = await fetch(url, { ...init, headers });
+			// Lazy refresh on 401 — single retry to avoid loops.
+			if (
+				response.status === 401 &&
+				entry &&
+				entry.auth.mode === "oauth-preregistered" &&
+				entry.auth.tokens?.refresh
+			) {
+				try {
+					await doRefresh(entry.auth);
+					const refreshed = await readEntry();
+					if (refreshed && refreshed.auth.mode === "oauth-preregistered" && refreshed.auth.tokens) {
+						const retryHeaders = new Headers(init?.headers);
+						setBearerFromEntry(refreshed, retryHeaders);
+						response = await fetch(url, { ...init, headers: retryHeaders });
+					}
+				} catch {
+					// Fall through with the original 401 — re-auth requires the interactive flow.
+				}
+			}
+			return response;
 		};
 	},
 };

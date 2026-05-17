@@ -154,7 +154,21 @@ The flow runs over three ACP extension methods plus a lifecycle event:
 | `_bodhi-pi/mcp/oauth/finish` | `{slug, code, state}` | `{status:"completed" \| "failed", errorMessage?}` | Validates `state`, looks up the codeVerifier, exchanges `code` for tokens via `auth(provider, {authorizationCode})`. Persists tokens to `auth.tokens`. Emits `mcp_oauth_status_change`. |
 | `_bodhi-pi/mcp/oauth/cancel` | `{slug, state}` | `{ok: true}` | Drops the `OAuthStateKv` entry; a later `oauth/finish{state}` errors with `-32602`. Emits `mcp_oauth_status_change{cancelled}`. |
 
-Per-runtime callback capture varies — see [acp.md § MCP methods](./acp.md#mcp-methods) and the individual runtime sections of [hosts.md](./hosts.md). CLI binds an ephemeral `http://127.0.0.1:7777/callback`; HTTP+WS exposes `GET /oauth/callback` on the existing server; browser uses a popup React route; chrome-ext uses `chrome.identity.launchWebAuthFlow` from a background service worker.
+Per-runtime callback capture varies — see [acp.md § MCP methods](./acp.md#mcp-methods) and the individual runtime sections of [hosts.md](./hosts.md):
+
+- **CLI**: `test-apps/cli/src/host/oauth-callback-server.ts` binds an ephemeral `http://127.0.0.1:7777/callback` for the flow duration. The `/mcp oauth start <slug>` slash blocks on the `mcp_oauth_status_change{completed|failed}` lifecycle notification (5-min timeout); test mode passes `--auto` so the slash also fetches the authorize URL itself, letting cli-headless e2e run end-to-end without a browser.
+- **HTTP+WS**: `test-apps/http/src/host/oauth-callback.ts` handles `GET /oauth/callback` on the existing server. State tokens carry a `<base64url(userId)>.<random>` prefix (see `decodeTenantFromState` in `src/mcp/mcp-service.ts`) so the route opens the right user's kvStore and runs the flow directly, without a live agent.
+- **Browser**: `test-apps/browser/src/client/react/OAuthCallback.tsx` is a standalone React component rendered at `/oauth/callback` inside a popup window (detected statically in `main.tsx` so the Worker isn't booted). It parses `?code=&state=`, `postMessage`s to `window.opener`, and closes itself; the opener's chat-slash dispatcher matches the state and calls `_bodhi-pi/mcp/oauth/finish` over ACP.
+- **Chrome-ext**: same `test-apps/browser/src/client/lib/commands.ts` slash but branches on `chrome.identity.launchWebAuthFlow` availability. `chrome.identity.getRedirectURL()` (`https://<ext-id>.chromiumapp.org/`) is the `redirectUri`; Chrome manages the auth window and returns the full redirect URL synchronously. Manifest needs `"permissions": ["identity"]` + `"host_permissions"` for the fixture host.
+
+### Token refresh
+
+Implemented in `src/mcp/mcp-client.ts` inside the `oauth-preregistered` attacher's `opts.fetch` closure (per-request scope). Two prongs:
+
+1. **Eager** — before every outbound request, check `tokens.expiresAt - 60_000 < Date.now()`. If true and `tokens.refresh` is present, call `refreshOauthTokens` (which builds a fresh `KvOAuthProvider` and runs `auth(provider, {serverUrl: tokenUrl})` with no `authorizationCode` — the SDK takes the refresh-token path and writes new tokens via `provider.saveTokens`). Re-read the entry and proceed.
+2. **Lazy** — on a `401` response from the MCP server (the eager path failed or the server early-revoked), refresh once and retry the request with the new bearer. Single retry, no loops.
+
+Parallel requests share one in-flight refresh via a per-transport gate (`inFlightRefresh: Promise<void> | null`) so the OAuth server never sees two simultaneous refresh-grant calls with the same single-use `refresh_token`. `KvOAuthProvider` deliberately does NOT implement `invalidateCredentials` — the SDK would otherwise delete persisted tokens on a transient refresh race, making every subsequent request send no Authorization header. Re-auth after a real server-side revocation goes through the interactive `_bodhi-pi/mcp/oauth/start` flow.
 
 Internally, every header/query value is tagged as a secret: the parser lifts each `{ [name]: value }` entry into `{ name, value, secret: true }` (`McpNamedSecret`). `maskSecrets` (`src/kv/kv-store.ts`) walks the persisted blob and replaces `value` strings on `{value, secret:true}` nodes with `"***"` on every ACP-boundary read (`EXT_KV_GET`, `EXT_KV_LIST`, `EXT_MCP_LIST`). In-process callers (the MCP connection layer in particular) see plaintext.
 

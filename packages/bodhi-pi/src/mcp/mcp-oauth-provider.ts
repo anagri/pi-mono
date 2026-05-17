@@ -155,16 +155,13 @@ export class KvOAuthProvider implements OAuthClientProvider {
 		return entry.codeVerifier;
 	}
 
-	async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier" | "discovery"): Promise<void> {
-		if (scope === "all" || scope === "tokens") {
-			await this.mutate((entry) => {
-				if (entry.auth.mode === "oauth-preregistered") delete entry.auth.tokens;
-			});
-		}
-		if (scope === "all" || scope === "verifier") {
-			await this.opts.stateKv.remove(this.opts.state);
-		}
-	}
+	// `invalidateCredentials` deliberately omitted. Implementing it caused regressions: on a
+	// transient refresh race (two parallel requests both racing to refresh the same token), the
+	// SDK would invalidate stored tokens after the InvalidGrant error, deleting them from kv —
+	// and every subsequent request would then send no Authorization header. Without this method
+	// the SDK still retries auth(), but our persisted state stays intact, so the next request
+	// reads valid tokens (the winning refresh's output) and succeeds. Re-auth after a real
+	// server-side revocation goes through the interactive `_bodhi-pi/mcp/oauth/start` flow.
 
 	getPendingAuthorizeUrl(): URL | undefined {
 		return this.pending.authorizeUrl;
