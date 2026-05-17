@@ -28,8 +28,9 @@ import { pickDefined } from "@/_internal/object.js";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
 import type { BodhiPiEventHandlers } from "@/events/types.js";
+import { ExtensionRunnerHost } from "@/extensions/extension-runner-host.js";
 import { mergeCommands } from "@/extensions/merge.js";
-import { ExtensionRunner } from "@/extensions/runner.js";
+import type { ExtensionRunner } from "@/extensions/runner.js";
 import type { RegisteredExtension } from "@/extensions/types.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { KvService } from "@/kv/kv-service.js";
@@ -179,8 +180,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private readonly sessionInfoService: SessionInfoService;
 	private readonly compactionOrchestrator: CompactionOrchestrator;
 	private readonly sessionGraphService: SessionGraphService;
-	private extensionRunner?: ExtensionRunner;
-	private extensionRunnerReady?: Promise<void>;
+	private readonly extensionRunnerHost: ExtensionRunnerHost;
 	private readonly extHandlers: Map<string, ExtHandler>;
 
 	constructor(
@@ -190,6 +190,15 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const logger: BodhiPiLogger = config.logger ?? console;
 		this.logger = logger;
 		this.events = new EventDispatcher(config.eventHandlers, logger);
+
+		this.extensionRunnerHost = new ExtensionRunnerHost({
+			conn: this.conn,
+			sessionStore: config.sessionStore,
+			events: this.events,
+			logger,
+			factories: config.extensionFactories,
+			requestSlashableRefresh: (sessionId) => this.refreshSlashable(sessionId),
+		});
 
 		this.modelRegistry = new ModelRegistry({
 			...pickDefined({
@@ -201,7 +210,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: this.sessions,
 			events: this.events,
 			appendEntry: this.appendEntry.bind(this),
-			extensionRunner: () => this.extensionRunner,
+			extensionRunner: () => this.extensionRunnerHost.current(),
 		});
 
 		wireInternalEventHandlers({
@@ -280,32 +289,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 		await this.config.sessionStore.setLeafId(sessionId, entry.id);
 	}
 
-	private async ensureExtensionRunner(): Promise<ExtensionRunner | undefined> {
-		const factories = this.config.extensionFactories;
-		if (!factories || factories.length === 0) return undefined;
-		if (this.extensionRunner) return this.extensionRunner;
-		if (!this.extensionRunnerReady) {
-			this.extensionRunnerReady = (async () => {
-				const runner = await ExtensionRunner.build({
-					conn: this.conn,
-					sessionStore: this.config.sessionStore,
-					extensions: factories,
-					requestSlashableRefresh: (sessionId) => this.refreshSlashable(sessionId),
-					logger: this.logger,
-				});
-				this.extensionRunner = runner;
-				const extHandlers = runner.getEventHandlers();
-				for (const [type, list] of Object.entries(extHandlers) as [
-					keyof BodhiPiEventHandlers,
-					NonNullable<BodhiPiEventHandlers[keyof BodhiPiEventHandlers]>,
-				][]) {
-					if (!list || list.length === 0) continue;
-					this.events.appendHandlers(type, list);
-				}
-			})();
-		}
-		await this.extensionRunnerReady;
-		return this.extensionRunner;
+	private ensureExtensionRunner(): Promise<ExtensionRunner | undefined> {
+		return this.extensionRunnerHost.ensure();
 	}
 
 	private bootstrapDeps(): BootstrapDeps {
@@ -316,7 +301,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: this.sessions,
 			modelRegistry: this.modelRegistry,
 			compactionOrchestrator: this.compactionOrchestrator,
-			extensionRunner: () => this.extensionRunner,
+			extensionRunner: () => this.extensionRunnerHost.current(),
 		};
 	}
 
@@ -325,14 +310,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// optional-extension factory failures via _meta. Required-extension failures still throw,
 		// aborting initialize — Hosts that opted in via `required:true` get a hard failure rather
 		// than a degraded agent.
-		let runner: ExtensionRunner | undefined;
 		try {
-			runner = await this.ensureExtensionRunner();
+			await this.ensureExtensionRunner();
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			throw new RequestError(-32603, `bodhi-pi initialize failed: ${message}`);
 		}
-		const failed = runner?.getExtensionErrors().map((e) => e.extensionName) ?? [];
+		const failed = this.extensionRunnerHost.getExtensionErrorNames();
 		const bodhiPiMeta: Record<string, unknown> = {
 			version: BODHI_PI_VERSION,
 			available: this.computeAvailability(),
@@ -607,7 +591,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 
 	/** When `sessionId` is omitted, refresh every loaded session — implicit `registerCommand` is global. */
 	private async refreshSlashable(sessionId?: string): Promise<void> {
-		const runner = this.extensionRunner;
+		const runner = this.extensionRunnerHost.current();
 		const targets = sessionId !== undefined ? [sessionId] : Array.from(this.sessions.keys());
 		for (const id of targets) {
 			const session = this.sessions.get(id);
