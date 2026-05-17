@@ -47,6 +47,12 @@ export interface SlashContext {
 
 export type SlashOutcome = { handled: boolean };
 
+/** Subset of `chrome.identity` we touch for oauth-preregistered in chrome-ext (typed locally to avoid @types/chrome dep). */
+interface ChromeIdentityAPI {
+	launchWebAuthFlow?(opts: { url: string; interactive: boolean }, cb: (responseUrl?: string) => void): void;
+	getRedirectURL?(path?: string): string;
+}
+
 export function isSlash(line: string): boolean {
 	return line.trim().startsWith("/");
 }
@@ -308,7 +314,9 @@ async function handleMcpSubcommand(
 				"data-mcp-slug": slug,
 			});
 		} else if (sub === "oauth") {
-			// `/mcp oauth start <slug> [--auto]` — kicks the popup-based oauth-preregistered flow.
+			// `/mcp oauth start <slug> [--auto]` — kicks the oauth-preregistered flow.
+			// Two paths: chrome-ext (chrome.identity.launchWebAuthFlow) or regular browser
+			// (window.open popup + postMessage). Detected at runtime via chrome.identity presence.
 			const action = rest[0];
 			const oauthSlug = rest[1];
 			const auto = rest.slice(2).includes("--auto");
@@ -316,7 +324,11 @@ async function handleMcpSubcommand(
 				ctx.pushSystemMessage("usage: /mcp oauth start <slug> [--auto]");
 				return { handled: true };
 			}
-			const redirectUri = `${window.location.origin}/oauth/callback`;
+			const chromeIdentity = (globalThis as { chrome?: { identity?: ChromeIdentityAPI } }).chrome?.identity;
+			const useChromeIdentity = typeof chromeIdentity?.launchWebAuthFlow === "function";
+			const redirectUri = useChromeIdentity
+				? chromeIdentity!.getRedirectURL!()
+				: `${window.location.origin}/oauth/callback`;
 			const startResp = (await ctx.conn.extMethod(EXT_MCP_OAUTH_START, {
 				slug: oauthSlug,
 				redirectUri,
@@ -328,24 +340,47 @@ async function handleMcpSubcommand(
 				});
 				return { handled: true };
 			}
-			const completion = new Promise<{ code: string; state: string }>((resolve) => {
-				const onMsg = (e: MessageEvent) => {
-					if (e.origin !== window.location.origin) return;
-					const data = e.data as { kind?: string; code?: string; state?: string };
-					if (data?.kind !== "bodhi-pi-oauth-callback" || !data.code || !data.state) return;
-					if (data.state !== startResp.state) return;
-					window.removeEventListener("message", onMsg);
-					resolve({ code: data.code, state: data.state });
-				};
-				window.addEventListener("message", onMsg);
-			});
-			const urlToOpen = auto ? `${startResp.authorizeUrl}&auto=1` : startResp.authorizeUrl;
-			window.open(urlToOpen, "oauth", "popup=yes,width=500,height=600");
-			ctx.pushSystemMessage(`oauth: opened popup for ${oauthSlug}`, {
-				"data-mcp-event": "oauth-popup-opened",
-				"data-mcp-slug": oauthSlug,
-			});
-			const { code: cbCode, state: cbState } = await completion;
+			const urlToOpen = auto ? `${startResp.authorizeUrl}&auto=1` : startResp.authorizeUrl!;
+			let cbCode: string;
+			let cbState: string;
+			if (useChromeIdentity) {
+				ctx.pushSystemMessage(`oauth: launching chrome.identity for ${oauthSlug}`, {
+					"data-mcp-event": "oauth-popup-opened",
+					"data-mcp-slug": oauthSlug,
+				});
+				const responseUrl = await new Promise<string>((resolve, reject) => {
+					chromeIdentity!.launchWebAuthFlow!({ url: urlToOpen, interactive: true }, (rUrl: string | undefined) => {
+						const err = (globalThis as { chrome?: { runtime?: { lastError?: { message?: string } } } })
+							.chrome?.runtime?.lastError;
+						if (err) reject(new Error(err.message ?? "chrome.identity error"));
+						else if (!rUrl) reject(new Error("chrome.identity returned no responseUrl"));
+						else resolve(rUrl);
+					});
+				});
+				const cb = new URL(responseUrl);
+				cbCode = cb.searchParams.get("code") ?? "";
+				cbState = cb.searchParams.get("state") ?? "";
+			} else {
+				const completion = new Promise<{ code: string; state: string }>((resolve) => {
+					const onMsg = (e: MessageEvent) => {
+						if (e.origin !== window.location.origin) return;
+						const data = e.data as { kind?: string; code?: string; state?: string };
+						if (data?.kind !== "bodhi-pi-oauth-callback" || !data.code || !data.state) return;
+						if (data.state !== startResp.state) return;
+						window.removeEventListener("message", onMsg);
+						resolve({ code: data.code, state: data.state });
+					};
+					window.addEventListener("message", onMsg);
+				});
+				window.open(urlToOpen, "oauth", "popup=yes,width=500,height=600");
+				ctx.pushSystemMessage(`oauth: opened popup for ${oauthSlug}`, {
+					"data-mcp-event": "oauth-popup-opened",
+					"data-mcp-slug": oauthSlug,
+				});
+				const r = await completion;
+				cbCode = r.code;
+				cbState = r.state;
+			}
 			const finishResp = (await ctx.conn.extMethod(EXT_MCP_OAUTH_FINISH, {
 				slug: oauthSlug,
 				code: cbCode,
