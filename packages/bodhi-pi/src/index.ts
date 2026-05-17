@@ -134,6 +134,9 @@ export {
 } from "./kv/kv-store.js";
 export { createInProcessMcpConnectionProvider } from "./mcp/in-process-provider.js";
 export type { McpConnectionProvider, McpProviderConnectResult } from "./mcp/mcp-connection-provider.js";
+export { KvOAuthProvider, runAuthFlow } from "./mcp/mcp-oauth-provider.js";
+export { OAUTH_STATE_DEFAULT_TTL_MS, OAUTH_STATE_PREFIX, OAuthStateKv } from "./mcp/mcp-oauth-state-kv.js";
+export { decodeTenantFromState } from "./mcp/mcp-service.js";
 export type {
 	McpAuthConfig,
 	McpAuthHttpParamConfig,

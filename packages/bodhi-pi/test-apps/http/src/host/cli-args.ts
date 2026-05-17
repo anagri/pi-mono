@@ -8,9 +8,19 @@ export interface CliArgs {
 	dataDir?: string;
 	models?: string;
 	defaultModel?: string;
+	publicBaseUrl?: string;
 }
 
-const KNOWN_FLAGS = new Set(["port", "workspace", "data-dir", "models", "default-model", "help", "h"]);
+const KNOWN_FLAGS = new Set([
+	"port",
+	"workspace",
+	"data-dir",
+	"models",
+	"default-model",
+	"public-base-url",
+	"help",
+	"h",
+]);
 
 export function parseArgs(argv: readonly string[]): CliArgs {
 	const args: Record<string, string | true> = {};
@@ -63,6 +73,15 @@ export function parseArgs(argv: readonly string[]): CliArgs {
 
 	if (typeof args["default-model"] === "string") {
 		out.defaultModel = args["default-model"];
+	}
+
+	if (typeof args["public-base-url"] === "string") {
+		try {
+			new URL(args["public-base-url"]);
+		} catch {
+			throw new Error(`--public-base-url must be a valid URL, got "${args["public-base-url"]}"`);
+		}
+		out.publicBaseUrl = args["public-base-url"].replace(/\/+$/, "");
 	}
 
 	return out;

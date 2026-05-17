@@ -117,6 +117,12 @@ export interface BodhiPiConfig {
 	 */
 	mcpConnectionProvider?: McpConnectionProvider;
 	/**
+	 * Multi-tenant routing token. When set, `_bodhi-pi/mcp/oauth/start` emits a state token of the
+	 * form `<base64url(tenantId)>.<random>` so a process-wide `/oauth/callback` handler can route
+	 * the redirect to the right user's kvStore. Single-tenant hosts (CLI, browser) leave this unset.
+	 */
+	tenantId?: string;
+	/**
 	 * Host-supplied logger for non-fatal internal errors (extension factory failures, event-handler
 	 * exceptions, branch-summarisation fall-through). Defaults to `console.error` when unset.
 	 */
@@ -226,7 +232,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			events: this.events,
 		});
 		this.mcpService = new McpService({
-			...pickDefined({ kvStore: config.kvStore }),
+			...pickDefined({ kvStore: config.kvStore, tenantId: config.tenantId }),
 			events: this.events,
 			sessions: this.sessions,
 			logger,

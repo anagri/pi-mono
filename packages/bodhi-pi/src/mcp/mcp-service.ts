@@ -50,6 +50,13 @@ export interface McpServiceDeps {
 	supportsStdio?: boolean;
 	provider: McpConnectionProvider;
 	appendEntry: AppendEntry;
+	/**
+	 * Multi-tenant routing token used by oauth-preregistered state generation. When set, the
+	 * `state` parameter sent to the authorization server is prefixed with `base64url(tenantId).`,
+	 * letting a process-wide `/oauth/callback` route the redirect to the right user's kvStore
+	 * without holding extra state. Single-tenant hosts (CLI, in-memory) leave this undefined.
+	 */
+	tenantId?: string;
 }
 
 export class McpService {
@@ -58,10 +65,12 @@ export class McpService {
 	private readonly registry: McpRegistry;
 	private readonly provider: McpConnectionProvider;
 	private readonly supportsStdio: boolean;
+	private readonly tenantId: string | undefined;
 
 	constructor(deps: McpServiceDeps) {
 		this.supportsStdio = deps.supportsStdio ?? true;
 		this.provider = deps.provider;
+		this.tenantId = deps.tenantId;
 		this.store = new McpStore({
 			kvStore: deps.kvStore,
 			sessions: deps.sessions,
@@ -260,7 +269,7 @@ export class McpService {
 			);
 		}
 		const stateKv = new OAuthStateKv(kv);
-		const state = randomStateToken();
+		const state = makeStateToken(this.tenantId);
 		const provider = new KvOAuthProvider({
 			kvStore: kv,
 			slug,
@@ -325,9 +334,24 @@ export class McpService {
 	}
 }
 
-function randomStateToken(): string {
+function makeStateToken(tenantId: string | undefined): string {
 	// 24 bytes → 32 base64url chars. Unguessable; doubles as the OAuthStateKv key.
-	return randomBytes(24).toString("base64url");
+	const random = randomBytes(24).toString("base64url");
+	if (tenantId === undefined) return random;
+	// Multi-tenant prefix: `<base64url(tenantId)>.<random>` so a process-wide /oauth/callback
+	// route can split on the first `.` and decode the tenant without holding extra state.
+	return `${Buffer.from(tenantId).toString("base64url")}.${random}`;
+}
+
+/** Inverse of `makeStateToken`'s tenant prefix; returns `null` if the state has no tenant prefix. */
+export function decodeTenantFromState(state: string): string | null {
+	const idx = state.indexOf(".");
+	if (idx <= 0) return null;
+	try {
+		return Buffer.from(state.slice(0, idx), "base64url").toString("utf8");
+	} catch {
+		return null;
+	}
 }
 
 function parseStringArray(value: unknown, errPrefix: string): string[] {

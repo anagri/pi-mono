@@ -55,6 +55,7 @@ const server = await buildServer({
 	...(models.length > 0 ? { models } : {}),
 	...(cli.defaultModel !== undefined ? { defaultModelId: cli.defaultModel } : {}),
 	...(cli.workspace !== undefined ? { workspaceOverride: cli.workspace } : {}),
+	...(cli.publicBaseUrl !== undefined ? { publicBaseUrl: cli.publicBaseUrl } : {}),
 });
 const actualPort = server.port();
 console.log(`bodhi-pi-test-app-http listening on http://localhost:${actualPort}`);

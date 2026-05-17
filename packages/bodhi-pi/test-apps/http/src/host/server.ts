@@ -10,6 +10,7 @@ import { createAcpHandler } from "./acp/handler.js";
 import { wireAgentForWsConnection } from "./agent/wire-agent-ws.js";
 import { handleAgentUpgrade, SUBPROTOCOL, type UpgradeContext } from "./auth/upgrade.js";
 import { ServerMcpStore } from "./mcp/server-mcp-store.js";
+import { handleOauthCallback } from "./oauth-callback.js";
 import { handleProvision } from "./provision.js";
 import { createStaticHandler, type StaticHandler } from "./static.js";
 import { wsToStream } from "./transport/ws-stream.js";
@@ -47,6 +48,11 @@ export interface BuildServerOptions {
 	workspaceOverride?: string;
 	/** Directory to serve static assets from. Defaults to the package's `dist/public`. Set to `null` to disable. */
 	staticDir?: string | null;
+	/**
+	 * Public base URL for the server (used to compose oauth-preregistered redirect_uri). When unset,
+	 * the OAuth handler falls back to the inbound request's `Host` header.
+	 */
+	publicBaseUrl?: string;
 }
 
 export interface ServerHandle {
@@ -87,8 +93,10 @@ export async function buildServer(opts: BuildServerOptions): Promise<ServerHandl
 	const provisionOpts: { dataDir: string; workspaceOverride?: string } = { dataDir: opts.dataDir };
 	if (opts.workspaceOverride !== undefined) provisionOpts.workspaceOverride = opts.workspaceOverride;
 
+	const oauthOpts = { dataDir: opts.dataDir };
+
 	const httpServer = createServer((req, res) => {
-		void handleRequest(req, res, handleAcp, serveStatic, provisionOpts).catch((err) => {
+		void handleRequest(req, res, handleAcp, serveStatic, provisionOpts, oauthOpts).catch((err) => {
 			console.error("[bodhi-pi-http] request handler error:", err);
 			if (!res.headersSent) {
 				res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
@@ -179,6 +187,7 @@ async function handleRequest(
 	handleAcp: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
 	serveStatic: StaticHandler | undefined,
 	provisionOpts: { dataDir: string; workspaceOverride?: string },
+	oauthOpts: { dataDir: string },
 ): Promise<void> {
 	if (req.url === "/healthz") {
 		const body = "ok";
@@ -192,6 +201,11 @@ async function handleRequest(
 
 	if (req.url === "/acp") {
 		await handleAcp(req, res);
+		return;
+	}
+
+	if (req.url?.startsWith("/oauth/callback") && req.method === "GET") {
+		await handleOauthCallback(req, res, oauthOpts);
 		return;
 	}
 
