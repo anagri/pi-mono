@@ -5,9 +5,13 @@ description: Grilling session that challenges your plan against the existing dom
 
 <what-to-do>
 
-Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+Goal: $ARGUMENTS
 
-Ask the questions one at a time, waiting for feedback on each question before continuing.
+If the goal above is empty, ask the user what plan or topic to grill before proceeding.
+
+Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one (in batch if possible). For each question, provide your recommended answer.
+
+Ask the questions in batches of related questions.
 
 If a question can be answered by exploring the codebase, explore the codebase instead.
 
@@ -25,11 +29,8 @@ Most repos have a single context:
 
 ```
 /
+packages/bodhi-pi/
 ├── CONTEXT.md
-├── ai-docs/
-│   └── adr/
-│       ├── 0001-event-sourced-orders.md
-│       └── 0002-postgres-for-write-model.md
 └── src/
 ```
 
@@ -37,19 +38,27 @@ If a `CONTEXT-MAP.md` exists at the root, the repo has multiple contexts. The ma
 
 ```
 /
+packages/bodhi-pi/
 ├── CONTEXT-MAP.md
-├── ai-docs/
-│   └── adr/                          ← system-wide decisions
 ├── src/
-│   ├── ordering/
-│   │   ├── CONTEXT.md
-│   │   └── docs/adr/                 ← context-specific decisions
+│   ├── extensions/
+│   │   └── CONTEXT.md
 │   └── billing/
-│       ├── CONTEXT.md
-│       └── docs/adr/
+│       └── CONTEXT.md
 ```
 
-Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
+Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved.
+
+### Docs
+
+All our docs stay in the root ai-docs folder. All our ai generated docs stay here, and we frequently use it for supplementary context required by the ai coding assistants.
+
+```
+ai-docs/
+└ specs/
+└ plans/
+└ prompts/
+```
 
 ## During the session
 
@@ -73,16 +82,10 @@ When the user states how something works, check whether the code agrees. If you 
 
 When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
 
-Don't couple `CONTEXT.md` to implementation details. Only include terms that are meaningful to domain experts.
+`CONTEXT.md` should be totally devoid of implementation details. Do not treat `CONTEXT.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
 
-### Offer ADRs sparingly
+We also try to maintain a living doc of the architecture in ai-docs/specs/ folder, they are separated by folder.
+This is a flat folder, but contains index.md that acts as entry point getting more info on the contents of the folder.
 
-Only offer to create an ADR when all three are true:
-
-1. **Hard to reverse** — the cost of changing your mind later is meaningful
-2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
-3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
-
-If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](./ADR-FORMAT.md).
-
+So spec doc for bodhi-pi stays in ai-docs/specs/bodhi-pi/
 </supporting-info>
