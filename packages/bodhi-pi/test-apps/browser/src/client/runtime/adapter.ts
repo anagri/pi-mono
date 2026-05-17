@@ -1,11 +1,16 @@
 import { type Agent, type Client, ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import { createMessagePortStream } from "@bodhiapp/bodhi-pi-test-app-utils/message-port-stream";
+import { parseSeedFiles } from "@bodhiapp/bodhi-pi-test-app-utils/seed-parser";
+import type {
+	ConnectCallbacks,
+	ConnectResult,
+	SetupFormValues,
+	TransportAdapter,
+} from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
+import type { WorkerMessage } from "@bodhiapp/bodhi-pi-test-app-utils/worker-message-types";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { parseSeedFiles } from "../lib/seed-parser.ts";
 import { bindFsBridge } from "../lib/worker-fs-bridge.ts";
 import { WORKSPACE_NAME, WORKSPACE_ROOT } from "../lib/workspace-constants.ts";
-import { createMessagePortStream } from "../transport/message-port-stream.ts";
-import type { ConnectCallbacks, ConnectResult, SetupFormValues, TransportAdapter } from "../ui/index.ts";
-import type { WorkerMessage } from "./types.ts";
 
 interface PageConfig {
 	models?: Model<Api>[];

@@ -1,5 +1,5 @@
-// Web Worker entry. Hosts the bodhi-pi agent via the shared ui-lib adapters
-// under `src/ui-lib/`. Init message carries the seedFiles + adapter config;
+// Web Worker entry. Hosts the bodhi-pi agent via the Host-side adapters
+// under `src/host/`. Init message carries the seedFiles + adapter config;
 // `bootstrapAgentWorker` mounts an InMemory ZenFS at `cwd`, then wires Dexie
 // session/kv stores + the AsyncFunction-based script executor.
 //
@@ -8,7 +8,7 @@
 // Vite 8/rolldown's production output. bodhi-pi tools (read/write/run-script)
 // rely on `Buffer.byteLength` for size accounting.
 
-import { bootstrapAgentWorker } from "../ui-lib/runtime/bootstrap-worker";
+import { bootstrapAgentWorker } from "./runtime/bootstrap-worker";
 import { Buffer as BufferPolyfill } from "buffer";
 
 (globalThis as { Buffer?: typeof BufferPolyfill }).Buffer = BufferPolyfill;

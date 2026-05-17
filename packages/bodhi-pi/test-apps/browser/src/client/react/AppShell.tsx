@@ -4,17 +4,21 @@ import type {
 	ContentBlock,
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
+import type {
+	EventEntry,
+	FrameEntry,
+	SetupFormValues,
+	TransportAdapter,
+} from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import type { EventEntry, FrameEntry } from "../lib/frame-log.ts";
+import { extractModelFromConfigOptions, isSlash, tryHandleSlash } from "../lib/commands.ts";
 import { tryHandleSlash as tryHandleAcpSlash } from "../lib/slash-router.ts";
 import { ChatPanel, type ChatMessage, type ChatPanelState, type ChatToolCall } from "./ChatPanel.tsx";
-import { extractModelFromConfigOptions, isSlash, tryHandleSlash } from "./commands.ts";
 import { DevAcpIo } from "./DevAcpIo.tsx";
 import { ErrorBanner } from "./ErrorBanner.tsx";
 import { EventsPanel } from "./EventsPanel.tsx";
-import { SetupForm, type SetupFormValues } from "./SetupForm.tsx";
+import { SetupForm } from "./SetupForm.tsx";
 import { StatusBar } from "./StatusBar.tsx";
-import type { TransportAdapter } from "./transport.ts";
 import { WirePanel } from "./WirePanel.tsx";
 
 type RootState = "needs-init" | "ready" | "streaming" | "closed" | "error";

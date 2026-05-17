@@ -2,7 +2,11 @@
 // (the SUT for the agent). Each query posts a {type:"bodhi-pi-fs-query",id,
 // op, path} message and awaits a {type:"bodhi-pi-fs-reply",id,...} reply.
 
-import type { FsQueryMessage, FsReplyMessage, WorkerMessage } from "../runtime/types.ts";
+import type {
+	FsQueryMessage,
+	FsReplyMessage,
+	WorkerMessage,
+} from "@bodhiapp/bodhi-pi-test-app-utils/worker-message-types";
 
 interface PendingQuery {
 	resolve: (value: { ok: boolean; content?: string; exists?: boolean; error?: string }) => void;

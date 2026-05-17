@@ -1,5 +1,5 @@
 import { WIRE_ROW_ATTRS } from "@bodhiapp/bodhi-pi";
-import type { FrameEntry } from "../lib/frame-log.ts";
+import type { FrameEntry } from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
 
 export interface WirePanelProps {
 	frames: FrameEntry[];

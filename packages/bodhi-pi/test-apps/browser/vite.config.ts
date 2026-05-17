@@ -12,7 +12,7 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 // array under `worker.plugins`. Pattern mirrors packages/bodhi-pi-web.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const cryptoShim = fileURLToPath(new URL("./src/frontend/lib/crypto-shim.ts", import.meta.url));
+const cryptoShim = fileURLToPath(new URL("./src/client/lib/crypto-shim.ts", import.meta.url));
 
 const polyfills = () =>
 	nodePolyfills({
@@ -22,7 +22,7 @@ const polyfills = () =>
 
 export default defineConfig({
 	plugins: [react(), polyfills()],
-	root: path.resolve(here, "src/frontend"),
+	root: path.resolve(here, "src/client/react"),
 	resolve: {
 		alias: [
 			{ find: /^node:crypto$/, replacement: cryptoShim },

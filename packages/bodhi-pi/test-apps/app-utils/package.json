@@ -2,14 +2,18 @@
 	"name": "@bodhiapp/bodhi-pi-test-app-utils",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Cross-runtime base utilities for bodhi-pi test-apps: just-bash adapters and pickDefined. Standalone — no e2e/ deps.",
+	"description": "Cross-runtime base utilities for bodhi-pi test-apps: just-bash adapters, pickDefined, browser-runtime transport types + helpers. Standalone — no e2e/ deps.",
 	"type": "module",
 	"main": "./dist/index.js",
 	"exports": {
 		".": "./dist/index.js",
 		"./pick-defined": "./dist/pick-defined.js",
 		"./just-bash-terminal": "./dist/just-bash-terminal.js",
-		"./just-bash-fs-adapter": "./dist/just-bash-fs-adapter.js"
+		"./just-bash-fs-adapter": "./dist/just-bash-fs-adapter.js",
+		"./transport-types": "./dist/transport-types.js",
+		"./seed-parser": "./dist/seed-parser.js",
+		"./message-port-stream": "./dist/message-port-stream.js",
+		"./worker-message-types": "./dist/worker-message-types.js"
 	},
 	"scripts": {
 		"clean": "shx rm -rf dist",
@@ -17,7 +21,9 @@
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput"
 	},
 	"dependencies": {
+		"@agentclientprotocol/sdk": "^0.21.0",
 		"@bodhiapp/bodhi-pi": "^0.0.1",
+		"@earendil-works/pi-ai": "^0.74.0",
 		"just-bash": "^3.0.1"
 	},
 	"devDependencies": {

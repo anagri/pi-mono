@@ -1,11 +1,5 @@
+import type { SetupFormValues } from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
 import type { FormEvent } from "react";
-
-export interface SetupFormValues {
-	userId: string;
-	userEmail: string;
-	seed: string;
-	configRaw: string;
-}
 
 export interface SetupFormProps {
 	onSubmit(values: SetupFormValues): void;

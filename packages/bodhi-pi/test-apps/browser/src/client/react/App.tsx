@@ -1,5 +1,5 @@
-import { AppShell } from "../ui-lib/ui/index.ts";
-import { createBrowserAdapter } from "./adapter.ts";
+import { createBrowserAdapter } from "../acp/adapter.ts";
+import { AppShell } from "../index.ts";
 
 const adapter = createBrowserAdapter();
 

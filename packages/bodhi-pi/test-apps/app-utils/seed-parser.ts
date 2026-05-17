@@ -8,6 +8,10 @@
 //
 // Empty input (whitespace-only) yields an empty record. Throws on malformed
 // XML or on missing required attributes.
+//
+// Browser-only API: uses DOMParser. This file should only be imported from
+// browser-runtime contexts (browser/chrome-ext frontends, http frontend).
+// Node-side Hosts (cli, http server) must not import this.
 
 export function parseSeedFiles(raw: string): Record<string, string> {
 	const trimmed = raw.trim();

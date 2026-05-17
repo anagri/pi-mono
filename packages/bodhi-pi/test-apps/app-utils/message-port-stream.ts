@@ -1,3 +1,11 @@
+// Convert a Web MessagePort into a Readable/Writable byte-stream pair
+// suitable for ndJsonStream(...). Used at both ends of a Worker boundary:
+// the Host side wraps the worker's `agentPort` for AgentSideConnection; the
+// Client side wraps the main-thread half for ClientSideConnection.
+//
+// Browser API: depends on MessagePort + Web Streams. Browser-runtime Hosts
+// only (browser, chrome-ext); Node-side Hosts use ndjson over stdio instead.
+
 export interface PortByteStream {
 	readable: ReadableStream<Uint8Array>;
 	writable: WritableStream<Uint8Array>;

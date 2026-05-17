@@ -17,6 +17,16 @@ import {
 	parseMcpServerEntry,
 } from "@bodhiapp/bodhi-pi";
 import { createJustBashTerminal } from "@bodhiapp/bodhi-pi-test-app-utils/just-bash-terminal";
+import { createMessagePortStream } from "@bodhiapp/bodhi-pi-test-app-utils/message-port-stream";
+import type {
+	FsQueryMessage,
+	FsReplyMessage,
+	InitMessage,
+	WorkerErrorMessage,
+	WorkerEventMessage,
+	WorkerReadyMessage,
+	WorkerWireMessage,
+} from "@bodhiapp/bodhi-pi-test-app-utils/worker-message-types";
 import { configure, InMemory, fs as zenFs, mount as zenMount } from "@zenfs/core";
 import { Bash } from "just-bash/browser";
 import { createBrowserExtensionLoader } from "../extensions/browser-extension-loader.js";
@@ -27,16 +37,6 @@ import { createSandboxBridge } from "../sandbox/sandbox-bridge.js";
 import { createBrowserScriptExecutor } from "../script-executor/browser-script-executor.js";
 import { createSandboxedBrowserScriptExecutor } from "../script-executor/sandboxed-browser-script-executor.js";
 import { createDexieSessionStore } from "../sessions/dexie-session-store.js";
-import { createMessagePortStream } from "../transport/message-port-stream.js";
-import type {
-	FsQueryMessage,
-	FsReplyMessage,
-	InitMessage,
-	WorkerErrorMessage,
-	WorkerEventMessage,
-	WorkerReadyMessage,
-	WorkerWireMessage,
-} from "./types.js";
 import { tapReadable, tapWritable } from "./wire-tap.js";
 
 declare const self: DedicatedWorkerGlobalScope;

@@ -1,4 +1,4 @@
-import type { EventEntry } from "../lib/frame-log.ts";
+import type { EventEntry } from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
 
 export interface EventsPanelProps {
 	events: EventEntry[];
