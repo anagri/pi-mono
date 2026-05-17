@@ -64,7 +64,7 @@ The `BodhiPiAcpAgent` class at `src/acp/agent.ts:162-555` is a façade that dele
 |---|---|---|
 | `ModelRegistry` | `src/models/registry.ts` | pi-ai catalogue filtering, auth-aware model resolution, `setSessionConfigOption` |
 | `KvService` | `src/kv/kv-service.ts` | `_bodhi-pi/kv/{get,set,list,remove}` + secret masking |
-| `McpService` | `src/mcp/mcp-service.ts` | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,include,exclude}` + hydration |
+| `McpService` | `src/mcp/mcp-service.ts` | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,include,exclude,oauth/start,oauth/finish,oauth/cancel,oauth/discover,oauth/register}` + hydration + DCR add-flow |
 | `SettingsService` | `src/settings/settings-service.ts` | `_bodhi-pi/session/settings/{get,set,unset,list}` + layered merge |
 | `SessionInfoService` | `src/sessions/session-info-service.ts` | `_bodhi-pi/session/{config,setName,stats,export}` |
 | `SessionGraphService` | `src/sessions/session-graph-service.ts` | `_bodhi-pi/session/{tree,navigate,entries,fork,clone,delete}` + cross-branch summarization |
@@ -96,6 +96,8 @@ src/
 ├── mcp/              McpService + McpStore + McpConnectionLifecycle + McpRegistry
 │                     + McpConnectionProvider interface + in-process default
 │                     + mcp-client + mcp-tool-adapter + slug/types
+│                     + KvOAuthProvider + OAuthStateKv + oauth-state-token (OAuth 2.1 PKCE)
+│                     + mcp-stdio-env (resolveStdioEnv)
 ├── models/           ModelRegistry + provider-stream options resolution
 ├── script-executor/  ScriptExecutor interface
 ├── sessions/         SessionStore + SessionEntry union + session-state + bootstrap

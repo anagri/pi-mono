@@ -16,6 +16,7 @@ McpService                ← ACP method handlers + AUTH_INPUT_RESOLVERS dispatc
    ├─ KvOAuthProvider     ← OAuthClientProvider impl backed by KvStore + OAuthStateKv (PKCE, refresh)
    ├─ OAuthStateKv        ← 5-min TTL pending-flow store keyed by `state` (CSRF token doubles as kv key)
    ├─ oauth-state-token.ts ← cross-runtime state-token + base64url helpers; multi-tenant tenantId prefix
+   ├─ mcp-stdio-env.ts    ← resolveStdioEnv: flattens persisted `env` McpNamedSecret[] into the spawn env
    └─ McpConnectionProvider   ← host-injected; owns transports + per-<host,slug> connections
 ```
 
@@ -129,7 +130,7 @@ Method handlers map directly to extension methods — see [acp.md § MCP methods
 
 ## Auth
 
-`auth` is a **top-level discriminator** on `_bodhi-pi/mcp/add` and in the persisted `McpServerEntry`. Three modes are supported today; the `oauth-dcr` mode (Dynamic Client Registration) is tracked separately under `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-dcr.md` and reuses the same envelope shape.
+`auth` is a **top-level discriminator** on `_bodhi-pi/mcp/add` and in the persisted `McpServerEntry`. Four input modes are accepted (`McpAuthInputMode`); they collapse into three persisted modes (`McpAuthMode = "public" | "http-param" | "oauth"`) via `AUTH_INPUT_RESOLVERS` (`src/mcp/mcp-service.ts`). `oauth-preregistered` and `oauth-dcr` both persist as `mode: "oauth"`; `dcrInfo` distinguishes the DCR path on the persisted entry.
 
 | `auth` | Sibling fields | Applied where |
 |---|---|---|
@@ -152,23 +153,28 @@ Method handlers map directly to extension methods — see [acp.md § MCP methods
           "scopes":["repo","read"], "redirectUri":"http://localhost:7777/callback"}
 ```
 
-Validation (`src/mcp/mcp-service.ts:parseAuthInput`):
-- `auth` must be `"public"`, `"http-param"`, or `"oauth-preregistered"` (other values → `-32602`).
+Validation (`src/mcp/mcp-service.ts:resolveAuthInput`):
+- `auth` must be `"public"`, `"http-param"`, `"oauth-preregistered"`, or `"oauth-dcr"` (other values → `-32602`).
 - `auth: "public"` with sibling `headers` / `queries` → `-32602` (refuses silent attachment).
 - `auth: "http-param"` with no headers AND no queries → `-32602` (an empty `http-param` entry is indistinguishable from `"public"` and is a likely bug).
-- `auth: "oauth-preregistered"` requires non-empty `authorizeUrl`, `tokenUrl`, `clientId`; URLs must be `https:` (or `http://localhost*` for fixture); sibling `headers`/`queries` → `-32602`; persisted `tokens` field on add → `-32602` (owned by the oauth handler).
+- `auth: "oauth-preregistered"` requires non-empty `authorizeUrl`, `tokenUrl`, `clientId`; URLs must be `https:` (or `http://localhost*` / `http://127.0.0.1*` for fixture); sibling `headers`/`queries` → `-32602`; persisted `tokens` field on add → `-32602` (owned by the oauth handler).
+- `auth: "oauth-dcr"` requires `url` (the MCP server URL); rejects sibling `headers`/`queries` and persisted `tokens`. When `clientId` is omitted, requires `redirectUri` and a resolvable `registrationEndpoint` (from input or discovery). Discovery failures and DCR failures surface as `-32602` with the underlying error message.
 - `headers` / `queries` must be `{ [name]: string }` objects; non-string values → `-32602`. Duplicate header names are not supported (JSON-object input).
-- stdio entries (`transport === "stdio"`) reject `auth` (any non-`public`), `headers`, and `queries` outright; stdio has no HTTP auth concept.
+- **stdio entries (`transport === "stdio"`) reject every non-`public` `auth` mode, plus `headers` and `queries`**, with `-32602`. Stdio MCP has no HTTP-style authentication; see § Transport gating for the rationale.
 
-### OAuth flow (oauth-preregistered)
+### OAuth flow (oauth-preregistered + oauth-dcr)
 
-The flow runs over three ACP extension methods plus a lifecycle event:
+Once a slug is persisted (via either `auth: "oauth-preregistered"` or `auth: "oauth-dcr"` on `/mcp add`), the interactive flow runs over three ACP extension methods plus a lifecycle event. Two additional standalone methods (`oauth/discover`, `oauth/register`) expose RFC 8414/9728 discovery and RFC 7591 DCR as pure operations for client-side inspection workflows — they do NOT touch any `mcp/<slug>` kv entry.
 
 | Method | Params | Result | Behavior |
 |---|---|---|---|
 | `_bodhi-pi/mcp/oauth/start` | `{slug, redirectUri?}` | `{authorizeUrl, state} \| {status:"completed"}` | Builds `KvOAuthProvider`, calls `runAuthFlow(tokenUrl)`. Returns `{status:"completed"}` when the SDK refreshed an existing token without a redirect; otherwise returns the authorize URL + a CSRF state token. The codeVerifier is persisted to `OAuthStateKv` (5-min TTL) under the state key. |
 | `_bodhi-pi/mcp/oauth/finish` | `{slug, code, state}` | `{status:"completed" \| "failed", errorMessage?}` | Validates `state`, looks up the codeVerifier, exchanges `code` for tokens via `auth(provider, {authorizationCode})`. Persists tokens to `auth.tokens`. Emits `mcp_oauth_status_change`. |
 | `_bodhi-pi/mcp/oauth/cancel` | `{slug, state}` | `{ok: true}` | Drops the `OAuthStateKv` entry; a later `oauth/finish{state}` errors with `-32602`. Emits `mcp_oauth_status_change{cancelled}`. |
+| `_bodhi-pi/mcp/oauth/discover` | `{url}` (MCP server URL) | `{authorizationServerUrl, authorizeUrl?, tokenUrl?, registrationEndpoint?, scopesSupported?, resource?}` | RFC 9728 (`/.well-known/oauth-protected-resource`) → RFC 8414 (`/.well-known/oauth-authorization-server`) discovery via SDK helper `discoverOAuthServerInfo`. Pure read — no kv mutation. `-32603` on discovery failure. |
+| `_bodhi-pi/mcp/oauth/register` | `{registrationEndpoint, redirectUri, scopes?, clientName?, clientUri?}` | `{clientId, clientSecret?, clientIdIssuedAt?, tokenEndpointAuthMethod?, registrationAccessToken?}` | RFC 7591 Dynamic Client Registration via SDK helper `registerClient`. POSTs to the registration endpoint, returns the registered credentials. Pure operation — no kv mutation. `-32603` on registration failure. |
+
+The combined `/mcp add {auth:"oauth-dcr"}` path internally chains discovery → DCR → persists (see § Auth table). Standalone `oauth/discover` and `oauth/register` exist for UIs that want to inspect server metadata or register a client out-of-band before committing.
 
 Per-runtime callback capture varies — see [acp.md § MCP methods](./acp.md#mcp-methods) and the individual runtime sections of [hosts.md](./hosts.md):
 
@@ -192,13 +198,34 @@ Internally, every header/query value is tagged as a secret: the parser lifts eac
 
 ## Transport gating
 
-`BodhiPiConfig.supportsMcpStdio` (default `true`) gates stdio at **add** time, not at connect time — fail loud and early. Set to `false` in Hosts that can't spawn:
+`McpTransport = "http" | "stdio"`. Only two transports are supported, with sharp constraints per Host and per auth mode.
 
-- `test-apps/browser/` (Web Worker — no `child_process`)
-- `test-apps/chrome-ext/` (service worker — same constraint)
-- Stateless rebuild Hosts where a persistent stdio child would leak across requests (`test-apps/http/` per-connection variant)
+### HTTP: Streamable HTTP only — deprecated SSE NOT implemented
 
-`_bodhi-pi/mcp/add` with `command=…` then rejects with `-32601` instead of silently persisting an unusable entry (`src/mcp/mcp-service.ts:109-111`).
+`src/mcp/mcp-client.ts:2` imports `StreamableHTTPClientTransport` from `@modelcontextprotocol/sdk/client/streamableHttp.js` and uses it as the sole HTTP transport. The legacy standalone SSE transport (`@modelcontextprotocol/sdk/client/sse.js`) is **intentionally not wired in**, and `initialize` advertises this to Clients via `agentCapabilities.mcpCapabilities = { http: true, sse: false }` (see `src/acp/agent.ts:344`). MCP servers that only speak the older standalone-SSE protocol are unsupported; the MCP spec deprecated SSE in favour of Streamable HTTP and bodhi-pi tracks the current spec.
+
+### Stdio: CLI-only
+
+`BodhiPiConfig.supportsMcpStdio` (default `true`) gates stdio at **add** time, not at connect time — fail loud and early. Per-Host matrix:
+
+| Host | `supportsMcpStdio` | Where set | Why |
+|---|---|---|---|
+| cli | `true` (default) | n/a (agent default) | Node process can spawn child processes |
+| http | `false` | `test-apps/http/src/host/agent/wire-agent-shared.ts:121` | Per-turn agent rebuild — a long-lived stdio child can't be owned cleanly by an agent instance that dies between requests; and the multi-tenant model has no clean isolation story for spawned children |
+| browser | `false` | `test-apps/browser/src/host/runtime/bootstrap-worker.ts:218` | Web Worker has no `child_process` |
+| chrome-ext | `false` | inherits browser's `bootstrapAgentWorker` | MV3 service worker has no `child_process` |
+
+`_bodhi-pi/mcp/add` with `command=…` against a `supportsMcpStdio: false` Host rejects with `-32601` instead of silently persisting an unusable entry (`src/mcp/mcp-service.ts:130-132`). The dynamic import of `@modelcontextprotocol/sdk/client/stdio.js` in `mcp-client.ts` is the only `node:*`-pulling code path in `src/`, and it stays dead in browser bundles because `supportsMcpStdio: false` prevents the stdio branch from ever executing. **Do not "fix" it to a top-level import** (see `packages/bodhi-pi/CLAUDE.md` source-code rules).
+
+### Stdio has no authentication — only env vars
+
+`resolveAuthInput` (`mcp-service.ts:610-614`) short-circuits when `transport === "stdio"`: any non-`public` `auth` value or sibling `headers` / `queries` rejects with `-32602`. The persisted `auth` is always `{ mode: "public" }` for stdio entries.
+
+Practical consequence:
+- **No bearer / API-key / OAuth for stdio MCP servers.** Credentials reach the child process only via the `env` vector on `/mcp add` (`McpNamedSecret[]`, masked to `***` on ACP reads but plaintext when spawning).
+- An MCP server that requires HTTP-style headers, query-string auth, or OAuth must be reached through the http transport. There is no stdio + bearer combination.
+
+This is by design: stdio MCP servers are local children of the agent process, and the security model is "trust the process you spawned" rather than per-request credential injection.
 
 ## Hydration flow on session boot
 
@@ -286,14 +313,18 @@ This is why the connection abstraction is **provider-injected** rather than an i
 - `test/mcp.test.ts` — service-level behaviour with stub provider.
 - `test/mcp-http-integration.test.ts` — real HTTP MCP server via `spawnMcpEverything` helper.
 - `test/mcp-stdio-integration.test.ts` — real stdio MCP server (same harness).
+- `test/mcp-oauth*.test.ts` — `KvOAuthProvider` state machine, `OAuthStateKv` TTL, oauth handlers, DCR add-flow, refresh + 401 retry.
 - `test/extensions.test.ts` — cross-session inclusion exclude (added in commit `90da4ffa`).
-- Per-Host e2e in each `test-apps/*/e2e/`.
+- e2e: `e2e/shared/mcp-{public-http,stdio,multi,session-resume,auth-header,auth-query}.e2e.ts`, `e2e/cli-headless/mcp-{,oauth,oauth-dcr,stdio,auth,multi-session}.e2e.ts`.
+- e2e-ui (Playwright across browser/http/ws/chrome-ext): `e2e-ui/shared/{mcp-public-http,mcp-auth,mcp-multi,mcp-oauth}.spec.ts`. **DCR is not yet covered by a Playwright spec** — see [mcp-gaps.md § D](./mcp-gaps.md).
 
 ## See also
 
 - [acp.md § MCP methods](./acp.md#mcp-methods) — request/response shapes + error codes.
+- [mcp-gaps.md](./mcp-gaps.md) — known spec ↔ implementation gaps and intentional capability gaps (stdio CLI-only, stdio = public-only, no SSE, DCR Playwright gap).
 - [lifecycle.md § Session boot](./lifecycle.md#session-boot) — where `mcpService.hydrate` fits in `newSession` / `loadSession` / `resumeSession`.
-- [hosts.md](./hosts.md) — which Hosts pass `supportsMcpStdio: false` and which inject custom providers.
+- [hosts.md](./hosts.md) — which Hosts pass `supportsMcpStdio: false` and per-Host OAuth callback wiring.
 - `ai-docs/plans/20260515-mcp-0-research.md` — comparative research (Zed, opencode, mcp-typescript-sdk).
 - `ai-docs/plans/20260515-mcp-3-connection.md` — primary plan that drove the decomposition.
-- `ai-docs/plans/2026-05-16-mcp-target-spec.md` — post-cleanup target shape.
+- `ai-docs/plans/2026-05-16-mcp-target-spec.md` — post-cleanup target shape (note: pre-dates OAuth re-introduction; historical).
+- `ai-docs/plans/20260517-mcp-oauth-prereg.md` — implementation plan for the OAuth re-introduction (commits `aad0b034..fabd6878`) + the DCR extension (commits `c03bfff6..e5e86595`).

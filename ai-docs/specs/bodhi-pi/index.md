@@ -15,13 +15,15 @@ Living architecture map for `packages/bodhi-pi/`. Optimised for **AI coding assi
 | What are the three config surfaces (app-start, disk hierarchy, session-mutable) and how do they compose? | [configuration.md](./configuration.md) |
 | What's already in `src/client/` and how will it become `@bodhiapps/bodhi-pi-client-*`? | [client-sdk-seed.md](./client-sdk-seed.md) |
 | What does `test/` vs `e2e/` vs `e2e-ui/` cover and which stubs to use where? | [testing.md](./testing.md) |
+| Where are the spec ↔ implementation gaps for MCP today? | [mcp-gaps.md](./mcp-gaps.md) |
 
 ## Source-of-truth pointers
 
 - Live reference Hosts: `packages/bodhi-pi/test-apps/{cli,http,browser,chrome-ext}/`. Shared infrastructure: `test-apps/{node-adapters,app-utils}/`.
 - **Deprecated**: `packages/bodhi-pi-{cli,web,http,ws-server,ws-frontend,chrome-ext,node,browser}/` are old test apps kept for historical reference only; they are not maintained. New work must land under `test-apps/`.
 - Recent major change: MCP refactor decomposing `McpService` into `McpStore` + `McpConnectionLifecycle` + `McpRegistry` + per-tenant `McpConnectionProvider` injection. See [mcp.md](./mcp.md).
-- Recent OAuth removal: `_bodhi-pi/mcp/oauth/*` extension methods and the `KvOAuthProvider` machinery were removed; only `auth.mode = "public"` is supported. See [mcp.md § Auth](./mcp.md#auth) and `ai-docs/plans/2026-05-16-mcp-target-spec.md` for the target shape that drove the removal.
+- Recent MCP auth re-introduction: after the cleanup pass that briefly left only `auth: "public"`, four input modes are now supported on `/mcp add` — `"public"`, `"http-param"`, `"oauth-preregistered"`, `"oauth-dcr"` — collapsing into the persisted `McpAuthMode = "public" | "http-param" | "oauth"`. OAuth 2.1 (authorization-code + PKCE), RFC 7591 Dynamic Client Registration, and RFC 8414/9728 discovery all run server-side. See [mcp.md § Auth](./mcp.md#auth) and [mcp-gaps.md](./mcp-gaps.md) for known spec gaps.
+- Known capability gaps (intentional): stdio MCP is CLI-only and accepts only `auth: "public"` (env vars are the sole credential channel). HTTP transport uses Streamable HTTP exclusively — the deprecated SSE transport from the older MCP spec is not implemented (`mcpCapabilities: { http: true, sse: false }`). See [mcp-gaps.md](./mcp-gaps.md).
 
 ## Conventions in these docs
 

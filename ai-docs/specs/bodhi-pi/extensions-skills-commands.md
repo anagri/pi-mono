@@ -109,7 +109,7 @@ This is why bodhi-pi's slash surface is intentionally **flat-and-complete**: eve
 ## MCP servers — see [mcp.md](./mcp.md)
 
 Distinguishing facts vs the above:
-- Lives **outside** the agent process; reached via HTTP-Streamable or stdio.
+- Lives **outside** the agent process; reached via HTTP (Streamable HTTP — deprecated SSE not supported) or stdio (CLI Host only; browser / chrome-ext / http set `supportsMcpStdio: false`).
 - Tools are **namespaced** `<slug>__<tool>` to prevent collisions across servers.
 - Per-session visibility via **Inclusion set** — globally connected, selectively included.
 - Lifecycle owned by a **host-injected ConnectionProvider** so multi-tenant Hosts can survive per-turn rebuilds.

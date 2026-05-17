@@ -9,7 +9,7 @@ Four reference Hosts under `packages/bodhi-pi/test-apps/{cli,http,browser,chrome
 | Host | Package name | Transport | Tenancy | MCP stdio? | Per-turn agent rebuild? |
 |---|---|---|---|---|---|
 | cli | `@bodhiapp/bodhi-pi-test-app-cli` | ndjson over stdin/stdout (RPC mode); in-process for REPL/headless | single | yes | no |
-| http | `@bodhiapp/bodhi-pi-test-app-http` | HTTP+SSE (and WebSocket sibling under `server/agent/wire-agent-ws.ts`) | multi-tenant (SQLite per user) | yes (server-side) | **yes** |
+| http | `@bodhiapp/bodhi-pi-test-app-http` | HTTP+SSE (and WebSocket sibling under `server/agent/wire-agent-ws.ts`) | multi-tenant (SQLite per user) | no (`supportsMcpStdio:false`) — stateless per-turn rebuild can't own a long-lived stdio child | **yes** |
 | browser | `@bodhiapp/bodhi-pi-test-app-browser` | `MessagePort` ndjson between main thread and Web Worker | single | no (`supportsMcpStdio:false`) | no |
 | chrome-ext | `@bodhiapp/bodhi-pi-test-app-chrome-ext` | `MessagePort` ndjson via chrome messaging + sandbox iframe | single | no | no |
 
