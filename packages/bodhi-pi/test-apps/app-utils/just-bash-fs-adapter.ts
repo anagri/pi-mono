@@ -1,5 +1,5 @@
-import path from "node:path";
 import type { Filesystem } from "@bodhiapp/bodhi-pi";
+import { join, resolve } from "pathe";
 import type { CpOptions, FileContent, FsStat, IFileSystem, MkdirOptions, RmOptions } from "just-bash";
 
 interface DirentEntry {
@@ -58,7 +58,7 @@ export function createJustBashFsAdapter(filesystem: Filesystem): IFileSystem {
 			await filesystem.mkdir(dst, { recursive: true });
 			const entries = await filesystem.list(src);
 			for (const entry of entries) {
-				await copyOne(path.posix.join(src, entry.name), path.posix.join(dst, entry.name), recursive);
+				await copyOne(join(src, entry.name), join(dst, entry.name), recursive);
 			}
 			return;
 		}
@@ -120,7 +120,7 @@ export function createJustBashFsAdapter(filesystem: Filesystem): IFileSystem {
 			await filesystem.remove(src, { recursive: s.isDirectory });
 		},
 		resolvePath(base, p) {
-			return path.posix.resolve(base, p);
+			return resolve(base, p);
 		},
 		getAllPaths() {
 			return [];

@@ -25,7 +25,8 @@
 		"@agentclientprotocol/sdk": "^0.21.0",
 		"@bodhiapp/bodhi-pi": "^0.0.1",
 		"@earendil-works/pi-ai": "^0.74.0",
-		"just-bash": "^3.0.1"
+		"just-bash": "^3.0.1",
+		"pathe": "^2.0.3"
 	},
 	"devDependencies": {
 		"@types/node": "^24.3.0",
