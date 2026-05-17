@@ -6,7 +6,7 @@ import type { Readable as NodeReadable, Writable as NodeWritable } from "node:st
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "test-apps", "cli", "dist", "cli.js");
+const TEST_APP_CLI_BIN = path.resolve(here, "..", "..", "test-apps", "cli", "dist", "host", "cli.js");
 
 export interface HeadlessSlashSession {
 	child: ChildProcessByStdio<NodeWritable, NodeReadable, null>;

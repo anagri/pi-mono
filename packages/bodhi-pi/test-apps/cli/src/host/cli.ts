@@ -5,10 +5,12 @@ import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { type BodhiPiEvent, type BodhiPiEventHandlers, LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
 import { createNodePackageExtensionLoader } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import { type Api, getModel, type Model } from "@earendil-works/pi-ai";
+// seam-exception: cli binary entry constructs both AgentSideConnection (Host) and the in-process Client peer (REPL/headless). The REPL imports are the second-half bootstrap; splitting cli.ts into a Host-only entry + a separate Client-only entry would require two npm `bin` entries and is out of scope for the folder split.
+import { runHeadless } from "../client/acp/headless.js";
+// seam-exception: see comment above runHeadless import.
+import { runRepl } from "../client/acp/repl.js";
 import { createCliAgent } from "./agent.js";
 import { resolveConfig } from "./config.js";
-import { runHeadless } from "./repl/headless.js";
-import { runRepl } from "./repl/repl.js";
 const ALL_EVENT_TYPES = [
 	"session_start",
 	"session_shutdown",

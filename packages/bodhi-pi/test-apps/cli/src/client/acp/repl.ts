@@ -14,8 +14,8 @@ import {
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import chalk from "chalk";
-import { handleCommand, isCommand, type ReplState, refreshStateFromConfigOptions } from "./commands.js";
-import { createRenderer } from "./render.js";
+import { handleCommand, isCommand, type ReplState, refreshStateFromConfigOptions } from "../lib/commands.js";
+import { createRenderer } from "../lib/render.js";
 
 const INIT_PARAMS = {
 	protocolVersion: 1,

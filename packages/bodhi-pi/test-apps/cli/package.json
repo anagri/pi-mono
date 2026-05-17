@@ -4,15 +4,15 @@
 	"private": true,
 	"description": "Test-app CLI for bodhi-pi e2e — copy of bodhi-pi-cli with --rpc and --headless modes added for headless spawn-based testing.",
 	"type": "module",
-	"main": "./dist/cli.js",
+	"main": "./dist/host/cli.js",
 	"bin": {
-		"bodhi-pi-test-app-cli": "./dist/cli.js"
+		"bodhi-pi-test-app-cli": "./dist/host/cli.js"
 	},
 	"scripts": {
 		"clean": "shx rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
-		"start": "npm run build && node dist/cli.js"
+		"start": "npm run build && node dist/host/cli.js"
 	},
 	"dependencies": {
 		"@agentclientprotocol/sdk": "^0.21.0",
