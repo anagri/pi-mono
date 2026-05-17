@@ -134,8 +134,40 @@ async function handleOauthSlash(
 	args: string[],
 ): Promise<string> {
 	const action = args[0];
+	if (action === "discover") {
+		const url = args[1];
+		if (!url) return "usage: /mcp oauth discover <mcp-url>";
+		const result = await client.mcpOauthDiscover({ url });
+		const lines = [`oauth-discover: authorizationServer=${result.authorizationServerUrl}`];
+		if (result.authorizeUrl) lines.push(`  authorize: ${result.authorizeUrl}`);
+		if (result.tokenUrl) lines.push(`  token:     ${result.tokenUrl}`);
+		if (result.registrationEndpoint) lines.push(`  register:  ${result.registrationEndpoint}`);
+		if (result.scopesSupported) lines.push(`  scopes:    ${result.scopesSupported.join(" ")}`);
+		if (result.resource) lines.push(`  resource:  ${result.resource}`);
+		return lines.join("\n");
+	}
+	if (action === "register") {
+		const registrationEndpoint = args[1];
+		const redirectUri = args[2];
+		if (!registrationEndpoint || !redirectUri) {
+			return "usage: /mcp oauth register <registration-endpoint> <redirect-uri> [--scopes=a,b]";
+		}
+		const flags = parseFlags(args.slice(3));
+		const scopes = typeof flags.scopes === "string" ? flags.scopes.split(",") : undefined;
+		const result = await client.mcpOauthRegister({
+			registrationEndpoint,
+			redirectUri,
+			...(scopes ? { scopes } : {}),
+		});
+		const lines = [
+			`oauth-register: clientId=${result.clientId}`,
+			`  clientSecret: ${result.clientSecret ? `<set, ${result.clientSecret.length} chars>` : "(none — public client)"}`,
+		];
+		if (result.tokenEndpointAuthMethod) lines.push(`  authMethod:   ${result.tokenEndpointAuthMethod}`);
+		return lines.join("\n");
+	}
 	if (action !== "start" && action !== "cancel") {
-		return "usage: /mcp oauth <start|cancel> <slug> [--auto] [--port=NNNN]";
+		return "usage: /mcp oauth <discover <url>|register <regUrl> <redirectUri>|start <slug>|cancel <slug>>";
 	}
 	const slug = args[1];
 	if (!slug) return `usage: /mcp oauth ${action} <slug>`;
@@ -212,12 +244,13 @@ async function handleOauthSlash(
 	}
 }
 
-function parseFlags(tokens: string[]): { auto?: boolean; port?: string; state?: string } {
-	const out: { auto?: boolean; port?: string; state?: string } = {};
+function parseFlags(tokens: string[]): { auto?: boolean; port?: string; state?: string; scopes?: string } {
+	const out: { auto?: boolean; port?: string; state?: string; scopes?: string } = {};
 	for (const t of tokens) {
 		if (t === "--auto") out.auto = true;
 		else if (t.startsWith("--port=")) out.port = t.slice("--port=".length);
 		else if (t.startsWith("--state=")) out.state = t.slice("--state=".length);
+		else if (t.startsWith("--scopes=")) out.scopes = t.slice("--scopes=".length);
 	}
 	return out;
 }
