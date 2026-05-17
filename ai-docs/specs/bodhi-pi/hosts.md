@@ -26,19 +26,19 @@ All four host packages are `private: true`. None is published to npm.
   - `createBashTerminal()` (just-bash)
   - `createNodePackageExtensionLoader()` (optional)
 - **ACP transport**: in `cli.ts` an `AgentSideConnection` wraps `ndJsonStream(stdout, stdin)`. In RPC mode the Client lives in another process; in REPL/headless mode the Client is a co-process inside the binary.
-- **Host vs Client (per-file)**:
+- **Host vs Client (per-file)** — after the split landed in `ab519a39..ab6e356a`:
 
-| File | Side | Sub-folder target | Role |
-|---|---|---|---|
-| `src/cli.ts` | host | `host/` | Shebang entry; wires `AgentSideConnection`+ in-process client pair |
-| `src/agent.ts` | host | `host/` | `createBodhiPiAgent` + Node-adapter wiring |
-| `src/config.ts` | host | `host/` | CLI arg parsing for Host construction |
-| `src/repl/repl.ts` | client | `client/acp/` | Interactive REPL loop; constructs `BodhiPiClient` via `createBodhiPiClient(clientConn,{cwd})` |
-| `src/repl/headless.ts` | client | `client/acp/` | Non-interactive Client variant; uses `BodhiPiClient` for one-shot prompts |
-| `src/repl/commands.ts` | client | `client/lib/` | Slash dispatcher; imports `BodhiPiClient` type |
-| `src/repl/render.ts` | client | `client/lib/` | Terminal output rendering (no React in cli) |
+| File | Side | Role |
+|---|---|---|
+| `src/host/cli.ts` | host | Shebang entry; wires `AgentSideConnection`+ in-process client pair. Imports the REPL via cross-seam **seam-exception** (the cli binary's `bin` entry constructs both sides) |
+| `src/host/agent.ts` | host | `createBodhiPiAgent` + Node-adapter wiring |
+| `src/host/config.ts` | host | CLI arg parsing for Host construction |
+| `src/client/acp/repl.ts` | client | Interactive REPL loop; constructs `BodhiPiClient` via `createBodhiPiClient(clientConn,{cwd})` |
+| `src/client/acp/headless.ts` | client | Non-interactive Client variant; uses `BodhiPiClient` for one-shot prompts |
+| `src/client/lib/commands.ts` | client | Slash dispatcher; imports `BodhiPiClient` type |
+| `src/client/lib/render.ts` | client | Terminal output rendering (no React in cli) |
 
-No straddling files. Subset of `client/{react,acp,deps,lib}/` because cli has no React.
+Subset of `client/{react,acp,deps,lib}/` — cli has no React. `package.json` `main` + `bin` updated to `./dist/host/cli.js`. e2e helpers (`e2e/cli-headless/*.ts`, `e2e/helpers/cli/harness.ts`) point to the same new dist path.
 
 - **Quirks**: Single-tenant. Agent lifetime = process lifetime. MCP in-process connections live as long as the CLI. In RPC mode the test harness drives slash commands from outside.
 
@@ -46,62 +46,53 @@ No straddling files. Subset of `client/{react,acp,deps,lib}/` because cli has no
 
 The deployment-portability lens — proves the agent works under per-turn rebuild from SQLite.
 
-- **Entrypoint**: `src/server/index.ts` (Node HTTP entry). Frontend at `src/frontend/main.tsx`.
-- **Agent construction** (rebuilt **per request**): `src/server/agent/wire-agent-shared.ts:97` → `buildAgentFactory(opts, label)` → `createBodhiPiAgent({...})` with adapters from `test-apps/node-adapters/`:
+- **Entrypoint**: `src/host/index.ts` (Node HTTP entry). Frontend at `src/client/react/main.tsx`.
+- **Agent construction** (rebuilt **per request**): `src/host/agent/wire-agent-shared.ts:97` → `buildAgentFactory(opts, label)` → `createBodhiPiAgent({...})` with adapters from `test-apps/node-adapters/`:
   - `createNodeFilesystem({ rootCwd })` — per-user workspace under `server/filesystem/user-workspace.ts`
   - `createMultiTenantSqliteSessionStore({ db, userId })`
   - `createNodeKvStore({ dir })` — per-user
   - `createNodeScriptExecutor()`
   - `createJustBashTerminal()` (just-bash)
   - `createNodePackageExtensionLoader()`
-  - `mcpConnectionProvider: serverStore.providerFor(userId)` — `ServerMcpStore` from `server/mcp/server-mcp-store.ts` is the bridge that keeps MCP connections alive across the per-turn rebuilds
+  - `mcpConnectionProvider: serverStore.providerFor(userId)` — `ServerMcpStore` from `host/mcp/server-mcp-store.ts` is the bridge that keeps MCP connections alive across the per-turn rebuilds
 - **ACP transport**:
-  - HTTP+SSE: `AgentSideConnection` instantiated per request in `server/acp/handler.ts`, paired with `createHttpAcpConn()` (`server/acp/http-acp-conn.ts`). Notifications forwarded via `extNotification` to SSE writer.
-  - WebSocket sibling: `server/auth/upgrade.ts` + `server/agent/wire-agent-ws.ts` provide a persistent path that doesn't re-build per turn — same `bodhi-pi` agent, different lifetime profile.
-  - Client side: `frontend/lib/acp-http-client.ts` + `frontend/lib/sse-parser.ts` + `frontend/lib/ws/transport.ts`.
-- **Host vs Client (per-file)**:
+  - HTTP+SSE: `AgentSideConnection` instantiated per request in `host/acp/handler.ts`, paired with `createHttpAcpConn()` (`host/acp/http-acp-conn.ts`). Notifications forwarded via `extNotification` to SSE writer.
+  - WebSocket sibling: `host/auth/upgrade.ts` + `host/agent/wire-agent-ws.ts` provide a persistent path that doesn't re-build per turn — same `bodhi-pi` agent, different lifetime profile.
+  - Client side: `client/acp/acp-http-client.ts` + `client/acp/sse-parser.ts` + `client/acp/ws/transport.ts`.
+- **Host vs Client (per-file)** — after the split landed in `ab6e356a`:
 
-| File | Side | Sub-folder target | Role |
-|---|---|---|---|
-| `src/server/index.ts` | host | `host/` | Node HTTP entry |
-| `src/server/server.ts` | host | `host/` | Server boot orchestration |
-| `src/server/cli-args.ts` (+`.test.ts`) | host | `host/` | Server-side CLI flag parsing |
-| `src/server/static.ts` | host | `host/` | Static asset serving |
-| `src/server/provision.ts` | host | `host/` | Per-user workspace + KV/SQLite provisioning |
-| `src/server/agent/wire-agent.ts` | host | `host/` | Per-request agent factory |
-| `src/server/agent/wire-agent-shared.ts` | host | `host/` | `buildAgentFactory()` — adapter wiring shared across HTTP+WS |
-| `src/server/agent/wire-agent-ws.ts` | host | `host/` | WebSocket sibling agent factory (long-lived) |
-| `src/server/acp/handler.ts` | host | `host/` | HTTP request → `AgentSideConnection` |
-| `src/server/acp/http-acp-conn.ts` | host | `host/` | HTTP+SSE ACP transport adapter (server side) |
-| `src/server/acp/sse.ts` (+`.test.ts`) | host | `host/` | SSE writer |
-| `src/server/acp/inflight.ts` (+`.test.ts`) | host | `host/` | Per-request inflight tracking |
-| `src/server/auth/middleware.ts` (+`.test.ts`) | host | `host/` | Auth middleware |
-| `src/server/auth/token.ts` (+`.test.ts`) | host | `host/` | Token issuance/validation |
-| `src/server/auth/upgrade.ts` | host | `host/` | WebSocket upgrade auth |
-| `src/server/filesystem/user-workspace.ts` | host | `host/` | Per-user FS root resolution |
-| `src/server/mcp/server-mcp-store.ts` | host | `host/` | Per-user `McpConnectionProvider` (D11 reference impl) |
-| `src/server/transport/ws-stream.ts` | host | `host/` | Server-side WebSocket stream adapter |
-| `src/frontend/main.tsx` | client | `client/react/` | React root |
-| `src/frontend/App.tsx` | client | `client/react/` | App component |
-| `src/frontend/index.html` | client | `client/react/` | HTML shell |
-| `src/frontend/index.css` | client | `client/react/` | Styles |
-| `src/frontend/adapter-http.ts` | client | `client/acp/` | HTTP+SSE `TransportAdapter` |
-| `src/frontend/adapter-ws.ts` | client | `client/acp/` | WebSocket `TransportAdapter` |
-| `src/frontend/lib/acp-http-client.ts` | client | `client/acp/` | ACP-over-HTTP client primitives |
-| `src/frontend/lib/sse-parser.ts` (+`.test.ts`) | client | `client/acp/` | SSE parser |
-| `src/frontend/lib/ws/auth.ts` | client | `client/acp/` | WS auth handshake (client side) |
-| `src/frontend/lib/ws/transport.ts` | client | `client/acp/` | WS `Transport` adapter |
-| `src/frontend/lib/ws/ws-stream.ts` | client | `client/acp/` | WS stream wiring |
-| `src/frontend/lib/event-log.ts` | client | `client/lib/` | Dev-only event log buffer |
+| File | Side | Role |
+|---|---|---|
+| `src/host/index.ts` | host | Node HTTP entry |
+| `src/host/server.ts` | host | Server boot orchestration |
+| `src/host/cli-args.ts` (+`.test.ts`) | host | Server-side CLI flag parsing |
+| `src/host/static.ts` | host | Static asset serving |
+| `src/host/provision.ts` | host | Per-user workspace + KV/SQLite provisioning |
+| `src/host/agent/wire-agent{,-shared,-ws}.ts` | host | Per-request agent factory + shared adapter wiring + WS-long-lived sibling |
+| `src/host/acp/handler.ts` | host | HTTP request → `AgentSideConnection` |
+| `src/host/acp/http-acp-conn.ts` | host | HTTP+SSE ACP transport adapter (server side) |
+| `src/host/acp/sse.ts` (+`.test.ts`) | host | SSE writer |
+| `src/host/acp/inflight.ts` (+`.test.ts`) | host | Per-request inflight tracking |
+| `src/host/auth/{middleware,token,upgrade}.ts` (+`.test.ts`) | host | Auth middleware + token issuance/validation + WS upgrade auth |
+| `src/host/filesystem/user-workspace.ts` | host | Per-user FS root resolution |
+| `src/host/mcp/server-mcp-store.ts` | host | Per-user `McpConnectionProvider` (D11 reference impl) |
+| `src/host/transport/ws-stream.ts` | host | Server-side WebSocket stream adapter |
+| `src/client/react/{main.tsx, App.tsx, index.html, index.css}` | client | React root + components + HTML/CSS shell |
+| `src/client/acp/adapter-http.ts` | client | HTTP+SSE `TransportAdapter` (imports `parseSeedFiles` + transport-types from `app-utils`) |
+| `src/client/acp/adapter-ws.ts` | client | WebSocket `TransportAdapter` (imports `parseSeedFiles` + transport-types from `app-utils`) |
+| `src/client/acp/acp-http-client.ts` | client | ACP-over-HTTP client primitives |
+| `src/client/acp/sse-parser.ts` (+`.test.ts`) | client | SSE parser |
+| `src/client/acp/ws/{auth,transport,ws-stream}.ts` | client | WS auth handshake + transport adapter + stream wiring |
+| `src/client/lib/event-log.ts` | client | Dev-only event log buffer |
 
-No straddling files. Note: `adapter-http.ts` + `adapter-ws.ts` are two parallel transports — kept as separate files by design; do not consolidate.
+Note: `adapter-http.ts` + `adapter-ws.ts` are two parallel transports — kept as separate files by design; do not consolidate. http server build still emits `dist/index.js` (rootDir strips host/), so `main` + `start` + e2e helper paths stay at `./dist/index.js`.
 
 - **Quirks**: Per-turn rebuild = the agent is **stateless across requests**. State durability lives entirely in `SessionStore`, `KvStore`, `ServerMcpStore`. Validates the rest of the codebase's "no hidden in-memory state" discipline.
 
 ## browser (`test-apps/browser/`)
 
-- **Entrypoint**: `src/frontend/main.tsx` (React root). Web Worker at `src/frontend/worker.ts`.
-- **Agent construction** (in Web Worker): `src/ui-lib/runtime/bootstrap-worker.ts:209` calls `createBodhiPiAgent({...})` with:
+- **Entrypoint**: `src/client/react/main.tsx` (React root). Web Worker at `src/host/worker.ts`.
+- **Agent construction** (in Web Worker): `src/host/runtime/bootstrap-worker.ts` calls `createBodhiPiAgent({...})` with:
   - `createZenfsFilesystem()` (ZenFS InMemory)
   - `createDexieSessionStore({ dbName })` (IndexedDB)
   - `createDexieKvStore({ dbName })` (IndexedDB; two-table secret segregation `kv` + `kv_secret`)
@@ -111,69 +102,60 @@ No straddling files. Note: `adapter-http.ts` + `adapter-ws.ts` are two parallel 
   - `createInProcessMcpConnectionProvider()`
   - `supportsMcpStdio: false`
 - **ACP transport**:
-  - HOST (Worker side): `AgentSideConnection` wired to `ndJsonStream(writable, readable)` derived from `createMessagePortStream(agentPort)` (`ui-lib/transport/message-port-stream.ts`).
+  - HOST (Worker side): `AgentSideConnection` wired to `ndJsonStream(writable, readable)` derived from `createMessagePortStream(agentPort)` (imported from `@bodhiapp/bodhi-pi-test-app-utils/message-port-stream`).
   - Client (main thread): receives `agentPort: MessagePort` from worker init message, runs `ClientSideConnection` to the same ndjson stream.
-- **Host vs Client (per-file)**:
+- **Host vs Client (per-file)** — after the split landed in `ebb680a7`:
 
-| File | Side | Sub-folder target | Role |
-|---|---|---|---|
-| `src/frontend/worker.ts` | host | `host/` | Web Worker entry; runs `bootstrapAgentWorker()` |
-| `src/ui-lib/runtime/bootstrap-worker.ts` | host | `ui-lib/host/` | Worker boot: ZenFS mount + adapter wiring + `createBodhiPiAgent` |
-| `src/ui-lib/runtime/adapter.ts` | host | `ui-lib/host/` | `createTransportAdapter({workerFactory, createSandboxPort?})` builder |
-| `src/ui-lib/runtime/types.ts` | host | `ui-lib/host/` | Worker init message + bootstrap option types |
-| `src/ui-lib/runtime/wire-tap.ts` | host | `ui-lib/host/` | Optional ndjson wire-tap for dev observability |
-| `src/ui-lib/filesystem/zenfs-filesystem.ts` | host | `ui-lib/host/` | ZenFS `Filesystem` adapter (Host-injected dep) |
-| `src/ui-lib/sessions/dexie-session-store.ts` | host | `ui-lib/host/` | Dexie `SessionStore` adapter |
-| `src/ui-lib/sessions/db.ts` | host | `ui-lib/host/` | Dexie schema definition |
-| `src/ui-lib/kv/dexie-kv-store.ts` | host | `ui-lib/host/` | Dexie `KvStore` adapter (two-table secret segregation) |
-| `src/ui-lib/script-executor/browser-script-executor.ts` | host | `ui-lib/host/` | AsyncFunction `ScriptExecutor` |
-| `src/ui-lib/script-executor/sandboxed-browser-script-executor.ts` | host | `ui-lib/host/` | Sandbox-bridged `ScriptExecutor` for MV3 |
-| `src/ui-lib/extensions/browser-extension-loader.ts` | host | `ui-lib/host/` | Data-URL ESM extension loader |
-| `src/ui-lib/extensions/sandboxed-browser-extension-loader.ts` | host | `ui-lib/host/` | Sandbox-bridged extension loader |
-| `src/ui-lib/sandbox/sandbox-bridge.ts` | host | `ui-lib/host/` | Worker-side bridge to the MV3 sandbox iframe |
-| `src/ui-lib/lib/worker-fs-bridge.ts` | host | `ui-lib/host/` | Worker-side FS-API bridge (used by `runtime/adapter.ts`) |
-| `src/ui-lib/lib/workspace-constants.ts` | shared | `ui-lib/host/` (used at construction only) | Constants — currently consumed only by Host runtime; treat as Host-side until a Client need arises |
-| `src/ui-lib/transport/message-port-stream.ts` | shared | `ui-lib/host/` (Host owns the worker side; Client reuses) | `createMessagePortStream` produces a `Stream` pair used by BOTH `AgentSideConnection` (worker/Host) AND `ClientSideConnection` (main thread). The factory itself can be reused from `ui-lib/host/` by importers; the seam is the MessagePort, not this file |
-| `src/frontend/main.tsx` | client | `client/react/` | React root (main thread) |
-| `src/frontend/App.tsx` | client | `client/react/` | App component |
-| `src/frontend/index.html` | client | `client/react/` | HTML shell |
-| `src/frontend/adapter.ts` | client | `client/acp/` | Creates `TransportAdapter` wired to the worker |
-| `src/frontend/lib/crypto-shim.ts` | client | `client/lib/` | Frontend-bundled SubtleCrypto polyfill |
-| `src/ui-lib/ui/AppShell.tsx`, `ChatPanel.tsx`, `DevAcpIo.tsx`, `ErrorBanner.tsx`, `EventsPanel.tsx`, `SetupForm.tsx`, `StatusBar.tsx`, `WirePanel.tsx` | client | `ui-lib/client/react/` | React components |
-| `src/ui-lib/ui/app-shell.css` | client | `ui-lib/client/react/` | Styles |
-| `src/ui-lib/ui/commands.ts` | client | `ui-lib/client/lib/` | Client-side slash command bindings (uses raw `ClientSideConnection`; not yet `BodhiPiClient` — see `client-sdk-seed.md` § Current consumers) |
-| `src/ui-lib/ui/index.ts` | client | `ui-lib/client/` | Barrel re-exports |
-| `src/ui-lib/ui/transport.ts` | client | `ui-lib/client/acp/` | Defines `TransportAdapter`, `ConnectCallbacks`, `ConnectResult`, `SetupFormValues` — interface types **candidate for promotion to `test-apps/app-utils/`** (the host/client split prompt's "Shared interface types" task) |
-| `src/ui-lib/lib/frame-log.ts` | client | `ui-lib/client/lib/` | Dev-only frame log (consumed by WirePanel/EventsPanel/AppShell + ui/transport.ts) |
-| `src/ui-lib/lib/slash-router.ts` | client | `ui-lib/client/lib/` | Slash command router (consumed by AppShell) |
-| `src/ui-lib/lib/seed-parser.ts` | **straddles** | `ui-lib/client/lib/` (target — see note) | Pure parser of seed-file YAML/JSON. **Currently consumed by Host (`ui-lib/runtime/adapter.ts:21`) AND http Client (`http/src/frontend/adapter-http.ts`).** Per user decision (host/client split prompt § seed-parser), Host should receive already-parsed `seedFiles` via the worker init message; classification target = Client |
+| File | Side | Role |
+|---|---|---|
+| `src/host/worker.ts` | host | Web Worker entry; runs `bootstrapAgentWorker()` |
+| `src/host/runtime/bootstrap-worker.ts` | host | Worker boot: ZenFS mount + adapter wiring + `createBodhiPiAgent` |
+| `src/host/runtime/wire-tap.ts` | host | Optional ndjson wire-tap for dev observability |
+| `src/host/filesystem/zenfs-filesystem.ts` | host | ZenFS `Filesystem` adapter |
+| `src/host/sessions/{dexie-session-store,db}.ts` | host | Dexie `SessionStore` adapter + schema |
+| `src/host/kv/dexie-kv-store.ts` | host | Dexie `KvStore` adapter (two-table secret segregation) |
+| `src/host/script-executor/{browser,sandboxed-browser}-script-executor.ts` | host | AsyncFunction + sandbox-bridged `ScriptExecutor` |
+| `src/host/extensions/{browser,sandboxed-browser}-extension-loader.ts` | host | Data-URL ESM + sandbox-bridged extension loaders |
+| `src/host/sandbox/sandbox-bridge.ts` | host | Worker-side bridge to the MV3 sandbox iframe |
+| `src/client/react/{main.tsx, App.tsx, index.html, app-shell.css, AppShell.tsx, ChatPanel.tsx, DevAcpIo.tsx, ErrorBanner.tsx, EventsPanel.tsx, SetupForm.tsx, StatusBar.tsx, WirePanel.tsx}` | client | React root + 8 React panels + HTML/CSS shell |
+| `src/client/index.ts` | client | Top-level Client barrel re-exporting the React panels + transport types from app-utils |
+| `src/client/acp/adapter.ts` | client | `createBrowserAdapter()` — wires the worker via `new URL("../../host/worker.ts", import.meta.url)` |
+| `src/client/runtime/adapter.ts` | client | `createTransportAdapter({workerFactory, createSandboxPort?})` builder. **Runs on the main thread**; parses `seedFiles` (via app-utils `parseSeedFiles`), creates the worker, posts the init message |
+| `src/client/lib/{crypto-shim,frame-log,slash-router,worker-fs-bridge,workspace-constants,commands}.ts` | client | Client-side utilities: SubtleCrypto polyfill, dev frame-log handlers, slash router, page-side FS-bridge to the worker, workspace path constants, client-side slash command bindings |
 
-**Straddler count: 1** (`ui-lib/lib/seed-parser.ts`). Resolution deferred to the host/client folder-split prompt where Host's `runtime/adapter.ts` will be reshaped to consume parsed input rather than the parser itself.
+**Cross-package promotions to `test-apps/app-utils/`** (consumed by browser, chrome-ext, and http frontends):
+| Symbol | app-utils file | Notes |
+|---|---|---|
+| `TransportAdapter`, `ConnectCallbacks`, `ConnectResult`, `SetupFormValues`, `FrameEntry`, `EventEntry` | `app-utils/transport-types.ts` | Pure type-only contract for the browser-runtime TransportAdapter shape |
+| `parseSeedFiles` | `app-utils/seed-parser.ts` | Browser-only API (DOMParser); imported by browser's `client/runtime/adapter.ts` AND http's `client/acp/adapter-http.ts`/`adapter-ws.ts` |
+| `createMessagePortStream` | `app-utils/message-port-stream.ts` | Both Host (worker side) AND Client (main thread) consume — neither side owns the source |
+| `InitMessage`, `WorkerMessage`, `FsQuery/ReplyMessage`, etc. | `app-utils/worker-message-types.ts` | Shared wire contract between worker (Host) and main thread (Client) |
+
+Zero straddlers post-split. The pre-split straddler (`seed-parser.ts`) was resolved by promotion to `app-utils/` + leaving the Client-side call site (`client/runtime/adapter.ts`) as the sole caller (Host receives pre-parsed `seedFiles` via the init message).
 
 - **Quirks**: Web Worker boundary forces every Agent/Client interaction through async message passing. ZenFS is async-only (vs Node's sync `fs`). Dexie schema migration is the upgrade path for SessionEntry shape changes. MCP slugs reconnect from KV on worker restart.
 
 ## chrome-ext (`test-apps/chrome-ext/`)
 
-- **Entrypoint**: `src/main.tsx` (React root); `src/worker.ts` is the agent worker; `src/sandbox/sandbox.ts` is the MV3 sandbox iframe for unsafe-eval scripts.
-- **Agent construction**: identical to browser via `bootstrapAgentWorker()` from `test-apps/browser`. Differences:
+- **Entrypoint**: `src/client/react/main.tsx` (React root); `src/host/worker.ts` is the agent worker; `src/host/sandbox/sandbox.ts` is the MV3 sandbox iframe for unsafe-eval scripts.
+- **Agent construction**: identical to browser via `bootstrapAgentWorker()` from `@bodhiapp/bodhi-pi-test-app-browser/host/runtime/bootstrap-worker`. Differences:
   - Sandboxed script executor + extension loader because MV3 CSP forbids `unsafe-eval` in the service worker — eval routed through the sandbox iframe.
-  - Crypto shim (`src/agent/crypto-shim.ts`) for `SubtleCrypto` in the sandbox context.
-- **ACP transport**: `MessagePort` ndjson over chrome runtime messaging; same `createMessagePortStream` as browser.
-- **Host vs Client (per-file)**:
+  - Crypto shim (`src/host/crypto-shim.ts`) for `SubtleCrypto` in the sandbox context.
+- **ACP transport**: `MessagePort` ndjson over chrome runtime messaging; same `createMessagePortStream` (`app-utils/message-port-stream`) as browser.
+- **Host vs Client (per-file)** — after the split landed in `ab519a39`:
 
-| File | Side | Sub-folder target | Role |
-|---|---|---|---|
-| `src/worker.ts` | host | `host/` | MV3 service-worker entry; runs `bootstrapAgentWorker()` from browser ui-lib |
-| `src/sandbox/sandbox.ts` | host | `host/` | MV3 sandbox iframe page (runs user-supplied scripts via unsafe-eval — the only place this is allowed in MV3) |
-| `src/agent/crypto-shim.ts` | host | `host/` | SubtleCrypto polyfill bundled into the worker + sandbox pages (vite injects via `vite.config.ts`) |
-| `src/main.tsx` | client | `client/react/` | React root (popup main thread) |
-| `src/App.tsx` | client | `client/react/` | App component |
-| `src/adapter.ts` | client | `client/acp/` | `createChromeExtAdapter()` — `TransportAdapter` over chrome runtime messaging |
-| `src/agent/sandbox.ts` | client | `client/acp/` | `createSandboxPort()` — runs on **main thread**; creates the sandbox iframe and returns a `MessagePort` the Host can use. **Naming hack**: the `agent/` folder is misleading because this file is Client-side infrastructure (the port factory runs in the popup, not the worker). Per user decision (Phase 1 grilling), do NOT rename; documented here so the role is clear |
+| File | Side | Role |
+|---|---|---|
+| `src/host/worker.ts` | host | MV3 service-worker entry; runs `bootstrapAgentWorker()` from browser's `host/runtime/bootstrap-worker` |
+| `src/host/sandbox/sandbox.ts` | host | MV3 sandbox iframe page (runs user-supplied scripts via unsafe-eval — the only place this is allowed in MV3) |
+| `src/host/crypto-shim.ts` | host | SubtleCrypto polyfill bundled into the worker + sandbox pages (vite injects via `vite.config.ts`) |
+| `src/client/react/{main.tsx, App.tsx}` | client | React root + App component (popup main thread) |
+| `src/client/acp/adapter.ts` | client | `createChromeExtAdapter()` — wires the worker via `new URL("../../host/worker.ts", ...)` |
+| `src/client/acp/sandbox-port.ts` | client | `createSandboxPort()` — runs on **main thread**; creates the sandbox iframe and returns a `MessagePort` the Host can use. Renamed from `src/agent/sandbox.ts` during the split to disambiguate from the Host-side `host/sandbox/sandbox.ts` (MV3 iframe page) |
 
-Plus all `host/` and `client/` files inherited from `test-apps/browser/src/ui-lib/{host,client}/`.
+Plus all `host/` and `client/` files inherited from `@bodhiapp/bodhi-pi-test-app-browser/host/*` + `client/*` via subpath imports.
 
-**Naming collision (do not rename per user decision):** `src/agent/sandbox.ts` (port factory, runs on main thread) AND `src/sandbox/sandbox.ts` (MV3 iframe page). Different roles, identical basename — the table above is the canonical reference for which is which.
+The pre-split `src/agent/` folder is gone — `agent/crypto-shim.ts` is now `host/crypto-shim.ts` (the polyfill belongs to the Host workers), and `agent/sandbox.ts` is now `client/acp/sandbox-port.ts` (the port factory runs on the main thread).
 
 - **Quirks**: MV3 service worker shutdown ≈ Dexie + KV persistence assumption. Sandbox iframe is the only place arbitrary user-supplied JS (skill scripts, extension factories) can execute. Identity OAuth flows would land on `chrome.identity.launchWebAuthFlow` (if/when OAuth is re-introduced).
 
@@ -197,14 +179,18 @@ Consumers: `test-apps/cli/` (single-tenant SQLite, single-user KV/FS), `test-app
 
 ### `test-apps/app-utils/` — `@bodhiapp/bodhi-pi-test-app-utils`
 
-Cross-runtime utilities.
+Cross-runtime utilities + browser-runtime shared contracts.
 
 Exports:
 - `pickDefined` — strips undefined fields from config objects
 - `createJustBashTerminal()` — wraps just-bash for Node + browser-safe terminal
 - `createJustBashFsAdapter()` — filesystem adapter via just-bash
+- `transport-types` — `TransportAdapter`, `ConnectCallbacks`, `ConnectResult`, `SetupFormValues`, `FrameEntry`, `EventEntry` (type-only; promoted from browser in the host/client split)
+- `seed-parser` — `parseSeedFiles(raw: string): Record<path, content>` (browser-only DOM API)
+- `message-port-stream` — `createMessagePortStream(port: MessagePort)` returning `{readable, writable}` (consumed by both Host worker and Client main thread)
+- `worker-message-types` — `InitMessage`, `WorkerMessage`, `FsQuery/ReplyMessage` etc. (shared wire contract between worker and main thread)
 
-Consumers: all four Hosts.
+Consumers: all four Hosts (transitively via per-Host imports); browser + chrome-ext + http-frontend depend on the new browser-runtime subpaths.
 
 ## Adding a new Host
 
@@ -214,7 +200,7 @@ If a future Host is added (e.g. a desktop Electron wrapper or a Bun-native CLI),
 2. Choose an ACP transport — anything that gives an async byte stream pair (stdio, MessagePort, WebSocket, HTTP+SSE).
 3. Set `supportsMcpStdio` correctly. Wrong value here = silent UX bug (`add` succeeds but `connect` fails later).
 4. Pass `extensionFactories` discovered by the runtime's own discovery mechanism (Node: `jiti`; browser: data-URL ESM).
-5. Mirror the **Host vs Client** folder split — `src/{host,client}/` with canonical `client/{react,acp,deps,lib}/` sub-folders. See the kickoff prompt at `ai-docs/prompts/2026-05-17-bodhi-pi-test-apps-host-client-split.md`.
+5. Mirror the **Host vs Client** folder split — `src/{host,client}/` with canonical `client/{react,acp,deps,lib}/` sub-folders. Enforcement: `scripts/check-host-client-seam.mjs` (wired into root `npm run check`) forbids relative imports across the seam; use `// seam-exception: <reason>` comment to override with rationale. Reference implementation: any of the four existing Hosts; deliverable plan at `ai-docs/plans/2026-05-17-bodhi-pi-test-apps-host-client-split.md`.
 
 ## See also
 
