@@ -35,7 +35,7 @@ Every entry has `id` (UUID), `parentId` (optional; `null` = root), `timestamp` (
               entryE  ← leaf A (active)
 ```
 
-- `SessionRecord.leafId` (persisted by `SessionStore.setLeafId?.()`) is the tip of the **active branch**.
+- `SessionRecord.leafId` (persisted by `SessionStore.setLeafId()`) is the tip of the **active branch**.
 - `walkPath(entries, leafId)` (`src/sessions/build-context.ts`) walks parent links from leaf back to root, reverses, and yields the linear conversation history fed to the LLM.
 - A session may have many leaves at once (via fork). `_bodhi-pi/session/tree` reports them all (`isLeaf`, `childCount`).
 
@@ -189,11 +189,11 @@ private async appendEntry(sessionId, session, entry) {
   entry.parentId = session.runtime.leafId;            // link to current leaf
   await sessionStore.append(sessionId, entry);
   session.runtime.leafId = entry.id;                  // advance leaf in-memory
-  await sessionStore.setLeafId?.(sessionId, entry.id);// persist leaf for stateless rebuild
+  await sessionStore.setLeafId(sessionId, entry.id); // persist leaf for stateless rebuild
 }
 ```
 
-`setLeafId?` is optional: in-memory stores no-op it, SQLite/Dexie persist so per-turn-rebuild Hosts (http) see the right leaf after restart.
+`setLeafId` is a required `SessionStore` method: every in-tree store implements it (in-memory updates a field; SQLite/Dexie persist so per-turn-rebuild Hosts like `test-apps/http` see the right leaf after restart). Tree-aware features (compaction, fork, branch summary, navigate) depend on it.
 
 ## Settings layering (touches every entry above)
 

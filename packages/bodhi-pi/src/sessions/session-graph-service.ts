@@ -94,7 +94,7 @@ export class SessionGraphService {
 				targetEntryId,
 				cross,
 				async (sid, eid) => {
-					await this.sessionStore.setLeafId?.(sid, eid);
+					await this.sessionStore.setLeafId(sid, eid);
 				},
 			);
 			if (summaryEntry) {
@@ -119,7 +119,7 @@ export class SessionGraphService {
 			// is still emitted so the Client knows context may be lost.
 		}
 
-		await this.sessionStore.setLeafId?.(sessionId, targetEntryId);
+		await this.sessionStore.setLeafId(sessionId, targetEntryId);
 
 		if (session) {
 			session.runtime.leafId = targetEntryId;
@@ -163,9 +163,6 @@ export class SessionGraphService {
 		}
 		const target = record.entries.find((e) => e.id === entryId);
 		if (!target) throw new RequestError(-32602, `unknown entry: ${entryId}`);
-		if (!this.sessionStore.forkRecord) {
-			throw new RequestError(-32603, "session store does not support forking");
-		}
 		const { newSessionId } = await this.sessionStore.forkRecord(sessionId, entryId, position);
 		await this.events.emit({
 			type: "session_fork",
@@ -193,9 +190,6 @@ export class SessionGraphService {
 		const { sessionId, record } = await requireSessionRecord(this.sessionStore, EXT_SESSION_CLONE, params);
 		const leafId = record.leafId ?? record.entries[record.entries.length - 1]?.id;
 		if (!leafId) throw new RequestError(-32603, "cannot clone an empty session");
-		if (!this.sessionStore.forkRecord) {
-			throw new RequestError(-32603, "session store does not support cloning");
-		}
 		const { newSessionId } = await this.sessionStore.forkRecord(sessionId, leafId, "at");
 		await this.events.emit({
 			type: "session_clone",

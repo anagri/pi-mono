@@ -277,7 +277,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		entry.parentId = session.runtime.leafId;
 		await this.config.sessionStore.append(sessionId, entry);
 		session.runtime.leafId = entry.id;
-		await this.config.sessionStore.setLeafId?.(sessionId, entry.id);
+		await this.config.sessionStore.setLeafId(sessionId, entry.id);
 	}
 
 	private async ensureExtensionRunner(): Promise<ExtensionRunner | undefined> {

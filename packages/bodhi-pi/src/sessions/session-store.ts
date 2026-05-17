@@ -55,8 +55,9 @@ export interface ListSessionsResult {
 /**
  * Append-only by design — `session/close` drops runtime state, only `delete()` removes the record.
  * `load()` returns `undefined` for an unknown id; other mutators reject. `list({ cursor })` MUST
- * honour pagination when a previous call returned `nextCursor`. `forkRecord` and `setLeafId` are
- * optional; tree-aware features (compaction, fork, branch summary) require `setLeafId`.
+ * honour pagination when a previous call returned `nextCursor`. `setLeafId` and `forkRecord` are
+ * required — every in-tree store implements them, and tree-aware features (compaction, fork,
+ * branch summary, navigate) depend on their presence.
  */
 export interface SessionStore {
 	create(meta: { cwd: string; parentSessionId?: string }): Promise<SessionRecord>;
@@ -65,11 +66,8 @@ export interface SessionStore {
 
 	append(sessionId: string, entry: SessionEntry): Promise<void>;
 
-	/**
-	 * Stores that don't yet track tree state may treat this as a no-op; tree-aware
-	 * features (compaction, fork) require persistence.
-	 */
-	setLeafId?(sessionId: string, entryId: string | null): Promise<void>;
+	/** Updates the active branch's head. Required by compaction, fork, and `session/navigate`. */
+	setLeafId(sessionId: string, entryId: string | null): Promise<void>;
 
 	/**
 	 * Copy entries reachable from `fromEntryId` (walking parentId backwards) into
@@ -77,7 +75,7 @@ export interface SessionStore {
 	 *   - `"before"` excludes `fromEntryId` (used by /fork: caller re-edits the message at that id)
 	 *   - `"at"` includes `fromEntryId` (used by /clone)
 	 */
-	forkRecord?(
+	forkRecord(
 		sourceSessionId: string,
 		fromEntryId: string,
 		position: "before" | "at",
