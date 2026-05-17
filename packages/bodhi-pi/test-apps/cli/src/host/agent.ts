@@ -1,12 +1,11 @@
 import path from "node:path";
 import type { Agent, AgentSideConnection } from "@agentclientprotocol/sdk";
-import {
-	type BodhiPiEventHandlers,
-	createBodhiPiAgent,
-	type Filesystem,
-	type KvStore,
-	type RegisteredExtension,
-	type SessionStore,
+import type {
+	BodhiPiEventHandlers,
+	Filesystem,
+	KvStore,
+	RegisteredExtension,
+	SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import {
 	createBashTerminal,
@@ -15,7 +14,7 @@ import {
 	createNodeScriptExecutor,
 	createSingleTenantSqliteSessionStore as createSqliteSessionStore,
 } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
-import { pickDefined } from "@bodhiapp/bodhi-pi-test-app-utils/pick-defined";
+import { createBodhiPiHostAgent } from "@bodhiapp/bodhi-pi-test-app-utils/host-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 
 export interface CliAgentOptions {
@@ -49,13 +48,12 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 	const sessionStore = createSqliteSessionStore({ dbPath: opts.dbPath });
 	const kvDir = opts.kvDir ?? (opts.homeDir ? path.join(opts.homeDir, ".bodhi-pi-cli", "kv") : undefined);
 	const kvStore = createNodeKvStore(kvDir ? { dir: kvDir } : {});
-	const factory = createBodhiPiAgent({
-		sessionStore,
-		filesystem,
-		kvStore,
-		scriptExecutor: createNodeScriptExecutor(),
-		terminal: createBashTerminal(),
-		...pickDefined({
+	const factory = createBodhiPiHostAgent(
+		{ sessionStore, filesystem },
+		{
+			kvStore,
+			scriptExecutor: createNodeScriptExecutor(),
+			terminal: createBashTerminal(),
 			models: opts.models,
 			defaultModelId: opts.defaultModelId,
 			getApiKey: opts.getApiKey,
@@ -65,7 +63,7 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 			extensionFactories: opts.extensionFactories,
 			homeDir: opts.homeDir,
 			globalFilesystem,
-		}),
-	});
+		},
+	);
 	return { factory, sessionStore, filesystem, kvStore, cwd: opts.cwd };
 }

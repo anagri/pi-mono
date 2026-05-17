@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Agent, AgentSideConnection, LoadSessionRequest, NewSessionRequest } from "@agentclientprotocol/sdk";
-import { type BodhiPiEvent, type BodhiPiEventHandlers, createBodhiPiAgent, LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
+import { type BodhiPiEvent, type BodhiPiEventHandlers, LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
+import { createBodhiPiHostAgent } from "@bodhiapp/bodhi-pi-test-app-utils/host-agent";
 import {
 	createNodeFilesystem,
 	createNodeKvStore,
@@ -10,7 +11,6 @@ import {
 	type Db,
 } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import { createJustBashTerminal } from "@bodhiapp/bodhi-pi-test-app-utils/just-bash-terminal";
-import { pickDefined } from "@bodhiapp/bodhi-pi-test-app-utils/pick-defined";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { Bash } from "just-bash";
 import type { UserCtx } from "../auth/token.js";
@@ -111,25 +111,24 @@ export async function buildAgentFactory(opts: WireAgentOptions, label: string): 
 	const mcpConnectionProvider = opts.mcpStore.getProviderForUser(String(opts.user.id));
 
 	const factory: AgentFactory = (conn) => {
-		const innerFactory = createBodhiPiAgent({
-			sessionStore,
-			filesystem,
-			kvStore,
-			scriptExecutor,
-			terminal,
-			// stdio MCP requires in-memory + cli host (subprocess lifecycle).
-			supportsMcpStdio: false,
-			mcpConnectionProvider,
-			eventHandlers: createForwardingEventHandlers(conn, label),
-			...pickDefined({
+		const innerFactory = createBodhiPiHostAgent(
+			{ sessionStore, filesystem },
+			{
+				kvStore,
+				scriptExecutor,
+				terminal,
+				// stdio MCP requires in-memory + cli host (subprocess lifecycle).
+				supportsMcpStdio: false,
+				mcpConnectionProvider,
+				eventHandlers: createForwardingEventHandlers(conn, label),
 				models: opts.models,
 				defaultModelId: opts.defaultModelId,
 				getApiKey: opts.getApiKey,
 				systemPrompt: opts.systemPrompt,
 				appendSystemPrompt: opts.appendSystemPrompt,
-			}),
-			...(extensionFactories.length > 0 ? { extensionFactories } : {}),
-		});
+				extensionFactories: extensionFactories.length > 0 ? extensionFactories : undefined,
+			},
+		);
 		const inner = innerFactory(conn);
 		return new Proxy(inner, {
 			get(target, prop, receiver) {

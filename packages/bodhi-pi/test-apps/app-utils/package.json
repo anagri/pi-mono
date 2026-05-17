@@ -8,6 +8,7 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./pick-defined": "./dist/pick-defined.js",
+		"./host-agent": "./dist/host-agent.js",
 		"./just-bash-terminal": "./dist/just-bash-terminal.js",
 		"./just-bash-fs-adapter": "./dist/just-bash-fs-adapter.js",
 		"./transport-types": "./dist/transport-types.js",

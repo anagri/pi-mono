@@ -11,11 +11,11 @@ import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import {
 	type BodhiPiEvent,
 	type BodhiPiEventHandlers,
-	createBodhiPiAgent,
 	createInProcessMcpConnectionProvider,
 	MCP_PREFIX,
 	parseMcpServerEntry,
 } from "@bodhiapp/bodhi-pi";
+import { createBodhiPiHostAgent } from "@bodhiapp/bodhi-pi-test-app-utils/host-agent";
 import { createJustBashTerminal } from "@bodhiapp/bodhi-pi-test-app-utils/just-bash-terminal";
 import { createMessagePortStream } from "@bodhiapp/bodhi-pi-test-app-utils/message-port-stream";
 import type {
@@ -206,23 +206,24 @@ export function bootstrapAgentWorker(): void {
 			// below. Restore is host policy; the SDK never auto-rehydrates.
 			const mcpConnectionProvider = createInProcessMcpConnectionProvider();
 
-			const factory = createBodhiPiAgent({
-				filesystem,
-				sessionStore,
-				kvStore,
-				scriptExecutor,
-				terminal,
-				supportsMcpStdio: false,
-				mcpConnectionProvider,
-				...(models && models.length > 0 ? { models } : {}),
-				...(defaultModelId !== undefined ? { defaultModelId } : {}),
-				...(getApiKey ? { getApiKey } : {}),
-				...(systemPrompt !== undefined ? { systemPrompt } : {}),
-				...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
-				...(homeDir !== undefined ? { homeDir } : {}),
-				eventHandlers: eventForwardingHandlers(),
-				...(extensionFactories.length > 0 ? { extensionFactories } : {}),
-			});
+			const factory = createBodhiPiHostAgent(
+				{ sessionStore, filesystem },
+				{
+					kvStore,
+					scriptExecutor,
+					terminal,
+					supportsMcpStdio: false,
+					mcpConnectionProvider,
+					models: models && models.length > 0 ? models : undefined,
+					defaultModelId,
+					getApiKey,
+					systemPrompt,
+					appendSystemPrompt,
+					homeDir,
+					eventHandlers: eventForwardingHandlers(),
+					extensionFactories: extensionFactories.length > 0 ? extensionFactories : undefined,
+				},
+			);
 
 			const { readable, writable } = createMessagePortStream(agentPort);
 			const teedReadable = tapReadable(readable, (line) => postWireFrame("in", line));
