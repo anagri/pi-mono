@@ -1,5 +1,16 @@
 # Design-smell follow-up — execution plan
 
+## Execution outcome (added after the work landed)
+
+All 9 smells landed as commits on `bodhi-pi/design-smell-followup`. Fork decisions taken at execution time per the recommended defaults: **D8 = C** (per-extension `required?`), **D10 = A** (unify through `event-wiring.ts`), **D6 = A** (canonical `defaultModelId` with back-compat). All 407 in-tree vitest tests pass; the Playwright matrix across browser + chrome-ext (46 tests) passes; `npm run check` (Biome + tsgo across 14 tsconfigs + host/client seam) is clean.
+
+Partial completions explicitly documented in their commits and in the touched specs:
+
+- **D6 partial**: naming reconciled (`defaultModelId` canonical, `defaultModel` kept as back-compat read). `runtime.currentModelId` / `runtime.thinkingLevel` deliberately kept as a fast-path cache rather than computed from `sessionOverrides` — full option-A unification would touch every read site through the prompt loop; tracked as remaining work in `configuration.md § D6`.
+- **D2 partial**: extracted `ExtensionRunnerHost` cleanly (`src/extensions/extension-runner-host.ts`). Did **not** extract `SessionLifecycleManager` or introduce a `Services` bundle — both require touching every method that holds `this.sessions`, which the source backlog estimates at 2-3 weeks. `agent.ts` shrank from 621 → 605 lines (target ≤200 remains aspirational).
+
+All other smells (D1, D3, D5, D8, D9, D10, D12) are fully landed per the per-slice plan below.
+
 ## Context
 
 `ai-docs/plans/2026-05-17-bodhi-pi-design-smell-followup.md` captured 9 deferred architectural design-smells (D1, D2, D3, D5, D6, D8, D9, D10, D12) from the spec-validation PR. That doc is a backlog; this is the **execution** plan that lands all 9 in a single PR as a sequence of independently-reviewable commits.
