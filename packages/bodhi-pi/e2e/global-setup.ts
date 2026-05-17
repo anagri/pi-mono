@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnMcpEverythingHttp } from "../test/helpers/spawn-mcp-everything.js";
+import { type AuthMcpServerHandle, spawnAuthMcpServer } from "./helpers/auth-mcp-server.js";
 import { closeSharedBrowser, ensureSharedBrowser } from "./helpers/browser/launch.js";
 import { waitForViteReady } from "./helpers/browser/wait-for-vite.js";
 import {
@@ -102,6 +103,12 @@ export async function setup(): Promise<() => Promise<void>> {
 	const mcpEverything = await spawnMcpEverythingHttp(MCP_EVERYTHING_PORT);
 	process.env.BODHI_PI_E2E_MCP_EVERYTHING_HTTP_URL = `http://localhost:${MCP_EVERYTHING_PORT}/mcp`;
 
+	const AUTH_MCP_PORT = 33346;
+	const AUTH_MCP_TOKEN = "e2e-test-bearer-token-9z2";
+	const authMcp: AuthMcpServerHandle = await spawnAuthMcpServer(AUTH_MCP_PORT, AUTH_MCP_TOKEN);
+	process.env.BODHI_PI_E2E_MCP_AUTH_HTTP_URL = authMcp.url;
+	process.env.BODHI_PI_E2E_MCP_AUTH_TOKEN = AUTH_MCP_TOKEN;
+
 	// Two shared test-app-http instances for the run: one for the |http| project
 	// (per-turn agent rebuild over HTTP+SSE on /acp) and one for the |ws| project
 	// (stateful per-connection agent over WebSocket on /acp-ws). Separate ports +
@@ -145,6 +152,11 @@ export async function setup(): Promise<() => Promise<void>> {
 			mcpEverything.kill("SIGTERM");
 		} catch {
 			// already exited
+		}
+		try {
+			await authMcp.close();
+		} catch {
+			// already closed
 		}
 		await closeSharedBrowser();
 		await closeSharedChromeExtContext();
