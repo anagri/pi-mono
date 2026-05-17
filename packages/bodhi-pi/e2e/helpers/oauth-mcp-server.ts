@@ -30,10 +30,9 @@ export interface OAuthMcpServerHandle {
 	clientId: string;
 	clientSecret: string;
 	close(): Promise<void>;
-	/** Returns the count of distinct Bearer tokens the `/mcp` endpoint has seen — refresh tests poll this to assert a new token was minted. */
 	uniqueBearerCount(): number;
-	/** Count of clients in the fixture's registry (default + DCR-registered). */
 	registeredClientCount(): number;
+	forceNext401(): void;
 }
 
 export interface SpawnOAuthMcpServerOptions {
@@ -63,7 +62,7 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 	const accessTokens = new Map<string, { expiresAt: number; refreshToken: string }>();
 	const refreshTokens = new Map<string, true>();
 	const seenBearers = new Set<string>();
-	// DCR-registered clients live alongside the default static pair. Keyed by client_id.
+	let forceNext401Flag = false;
 	const registeredClients = new Map<string, { clientSecret: string }>();
 	registeredClients.set(defaultClientId, { clientSecret: defaultClientSecret });
 
@@ -279,7 +278,10 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 			JSON.stringify({
 				access_token: accessToken,
 				refresh_token: refreshToken,
-				token_type: "Bearer",
+				// Lowercase intentional: RFC 6749 §5.1 declares `token_type` case-insensitive and real
+				// providers (Linear) return "bearer". The fixture mirrors that to guard the attacher's
+				// scheme normalisation — `handleMcp` below still strictly demands `Bearer ` on the wire.
+				token_type: "bearer",
 				expires_in: expiresIn,
 			}),
 		);
@@ -293,6 +295,13 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 		}
 		const authHeader = req.headers.authorization;
 		const bearer = typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+		if (forceNext401Flag) {
+			forceNext401Flag = false;
+			res.writeHead(401, { "Content-Type": "application/json" }).end(
+				JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: "forced 401" }, id: null }),
+			);
+			return;
+		}
 		if (!bearer || !accessTokens.has(bearer)) {
 			res.writeHead(401, { "Content-Type": "application/json" }).end(
 				JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: "unauthorized" }, id: null }),
@@ -478,6 +487,9 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 		clientSecret: defaultClientSecret,
 		uniqueBearerCount: () => seenBearers.size,
 		registeredClientCount: () => registeredClients.size,
+		forceNext401: () => {
+			forceNext401Flag = true;
+		},
 		close: async () => {
 			for (const t of transports.values()) {
 				try {

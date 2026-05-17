@@ -77,5 +77,6 @@ test("cli e2e-ui LLM prompt: agent uses get-sum(20, 22) via stdio chat and repli
 	const response = await session.sendChat(
 		`Using the everything-mcp tool "${slug}__get-sum", find the sum of 20 and 22. Reply with just the number.`,
 	);
-	expect.soft(response).toContain("42");
+	expect.soft(response).toMatch(/(^|[^0-9])42([^0-9]|$)/);
+	expect.soft(response).not.toMatch(/4200|4_200|420\b/);
 }, 60_000);

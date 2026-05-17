@@ -6,17 +6,26 @@ External tool providers, transport-pluggable, per-session scoped via inclusion s
 
 Before: `McpService` was a monolith mixing KV persistence, transport lifecycle, per-session visibility, and ACP method handling. Three concerns kept tripping over each other — most painfully on multi-tenant Hosts (http) where the agent rebuilds every turn but connections must persist.
 
-After (commits `2746a86b` decompose, `90da4ffa` dedupe, `6a3966f4` remove un-e2e-covered auth variants):
+After (commits `2746a86b` decompose, `90da4ffa` dedupe, `6a3966f4` remove un-e2e-covered auth variants, plus the OAuth slice landing `b180f61b3f..fabd6878` and the review-cleanup commit that introduced the input-mode dispatch table + OAuth provider factories + `oauth-state-token.ts` extraction):
 
 ```
-McpService                ← ACP method handlers + orchestration
+McpService                ← ACP method handlers + AUTH_INPUT_RESOLVERS dispatch + runDcrAddFlow
    ├─ McpStore            ← KV reads/writes + per-session inclusion-entry append
-   ├─ McpConnectionLifecycle  ← connect/disconnect/reconnect + hydrate + status broadcasts
+   ├─ McpConnectionLifecycle  ← connect/disconnect/reconnect + hydrate + status broadcasts (incl. oauth status)
    ├─ McpRegistry         ← per-session inclusion sets + tool fanout to piAgent.state.tools
+   ├─ KvOAuthProvider     ← OAuthClientProvider impl backed by KvStore + OAuthStateKv (PKCE, refresh)
+   ├─ OAuthStateKv        ← 5-min TTL pending-flow store keyed by `state` (CSRF token doubles as kv key)
+   ├─ oauth-state-token.ts ← cross-runtime state-token + base64url helpers; multi-tenant tenantId prefix
    └─ McpConnectionProvider   ← host-injected; owns transports + per-<host,slug> connections
 ```
 
-Source: `src/mcp/mcp-service.ts:47-100`. Plan that drove it: `ai-docs/plans/20260515-mcp-3-connection.md`. Target shape: `ai-docs/plans/2026-05-16-mcp-target-spec.md`.
+Source: `src/mcp/mcp-service.ts`. Plan that drove the OAuth additions: `ai-docs/plans/20260517-mcp-oauth-prereg.md`. Cleanup plan: `ai-docs/plans/implement-plan-to-fix-enumerated-book.md`.
+
+**Input → persisted auth-mode collapse.** `McpAuthInputMode = "public" | "http-param" | "oauth-preregistered" | "oauth-dcr"` is the user-facing discriminator on `/mcp add`. Both oauth variants collapse to the persisted `McpAuthMode = "public" | "http-param" | "oauth"` via the `AUTH_INPUT_RESOLVERS` dispatch table. `dcrInfo` on the persisted entry preserves provenance (issuer URL, registration endpoint, registration access token).
+
+**Refresh strategy.** Transport-side fetch wrapper in `ATTACHERS.oauth` (`src/mcp/mcp-client.ts`) re-reads the latest access token from KV per request. Eager refresh fires when `tokens.expiresAt - 60s < now`; lazy refresh fires on a `401` from the protected MCP route. Refreshes are single-flight per transport instance via an `inFlightRefresh` gate so a single-use `refresh_token` is never burned by parallel calls. **Known limitation:** interactive `oauth/start` writes to `mcp/<slug>` are NOT serialised against the eager-refresh writer running in another code path; multi-tab + concurrent refresh can race. Deferred fix tracked in the cleanup plan.
+
+**Authorization header normalisation.** RFC 6750 §2.1 fixes the HTTP scheme as `Bearer`. Some providers (e.g. Linear) return lowercase `token_type: "bearer"` in their token response. The attacher hardcodes `Bearer` on the wire regardless of the persisted `tokenType`. The OAuth fixture (`e2e/helpers/oauth-mcp-server.ts`) deliberately returns lowercase to exercise this normalisation.
 
 ## Core types
 

@@ -7,7 +7,7 @@ import type {
 	OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { JsonValue, KvStore } from "../kv/kv-store.js";
-import type { OAuthStateKv } from "./mcp-oauth-state-kv.js";
+import { OAuthStateKv } from "./mcp-oauth-state-kv.js";
 import {
 	MCP_PREFIX,
 	type McpAuthOAuthConfig,
@@ -220,4 +220,28 @@ export async function runAuthFlow(
 		throw new Error("OAuth flow expected authorize URL but provider did not capture one");
 	}
 	return { authorizeUrl: pending.toString(), authorized: false };
+}
+
+export interface MakeProviderOptions {
+	kvStore: KvStore;
+	slug: string;
+	cfg: McpAuthOAuthConfig;
+	redirectUri: string;
+	stateKv: OAuthStateKv;
+	state: string;
+}
+
+export function makeKvOAuthProvider(opts: MakeProviderOptions): KvOAuthProvider {
+	return new KvOAuthProvider(opts);
+}
+
+export function makeRefreshOauthProvider(kvStore: KvStore, slug: string, cfg: McpAuthOAuthConfig): KvOAuthProvider {
+	return new KvOAuthProvider({
+		kvStore,
+		slug,
+		cfg,
+		redirectUri: cfg.redirectUri ?? "http://localhost/unused-during-refresh",
+		stateKv: new OAuthStateKv(kvStore),
+		state: "unused-during-refresh",
+	});
 }

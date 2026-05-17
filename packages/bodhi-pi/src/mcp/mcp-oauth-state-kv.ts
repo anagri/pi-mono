@@ -54,7 +54,8 @@ export class OAuthStateKv {
 	}
 
 	private async pruneExpired(): Promise<void> {
-		const rows = await this.kv.list(OAUTH_STATE_PREFIX);
+		const SCAN_LIMIT = 100;
+		const rows = (await this.kv.list(OAUTH_STATE_PREFIX)).slice(0, SCAN_LIMIT);
 		const now = this.now();
 		for (const row of rows) {
 			const parsed = parseStateEntry(row.value);

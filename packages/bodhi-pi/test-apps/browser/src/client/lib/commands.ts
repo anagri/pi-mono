@@ -6,7 +6,9 @@ import {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
+	EXT_MCP_OAUTH_DISCOVER,
 	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_REGISTER,
 	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
@@ -315,14 +317,73 @@ async function handleMcpSubcommand(
 				"data-mcp-slug": slug,
 			});
 		} else if (sub === "oauth") {
-			// `/mcp oauth start <slug> [--auto]` — kicks the oauth-preregistered flow.
-			// Two paths: chrome-ext (chrome.identity.launchWebAuthFlow) or regular browser
-			// (window.open popup + postMessage). Detected at runtime via chrome.identity presence.
 			const action = rest[0];
+			if (action === "discover") {
+				const url = rest[1];
+				if (!url) {
+					ctx.pushSystemMessage("usage: /mcp oauth discover <mcp-url>");
+					return { handled: true };
+				}
+				const result = (await ctx.conn.extMethod(EXT_MCP_OAUTH_DISCOVER, { url })) as {
+					authorizationServerUrl?: string;
+					authorizeUrl?: string;
+					tokenUrl?: string;
+					registrationEndpoint?: string;
+					scopesSupported?: string[];
+					resource?: string;
+				};
+				const attrs: Record<string, string> = { "data-mcp-event": "oauth-discover" };
+				if (result.authorizationServerUrl) attrs["data-mcp-auth-server"] = result.authorizationServerUrl;
+				if (result.authorizeUrl) attrs["data-mcp-authorize-url"] = result.authorizeUrl;
+				if (result.tokenUrl) attrs["data-mcp-token-url"] = result.tokenUrl;
+				if (result.registrationEndpoint) attrs["data-mcp-registration-endpoint"] = result.registrationEndpoint;
+				if (result.scopesSupported) attrs["data-mcp-scopes-supported"] = result.scopesSupported.join(" ");
+				if (result.resource) attrs["data-mcp-resource"] = result.resource;
+				const lines = [`oauth-discover: authorizationServer=${result.authorizationServerUrl ?? "(none)"}`];
+				if (result.authorizeUrl) lines.push(`  authorize: ${result.authorizeUrl}`);
+				if (result.tokenUrl) lines.push(`  token:     ${result.tokenUrl}`);
+				if (result.registrationEndpoint) lines.push(`  register:  ${result.registrationEndpoint}`);
+				if (result.scopesSupported) lines.push(`  scopes:    ${result.scopesSupported.join(" ")}`);
+				if (result.resource) lines.push(`  resource:  ${result.resource}`);
+				ctx.pushSystemMessage(lines.join("\n"), attrs);
+				return { handled: true };
+			}
+			if (action === "register") {
+				const registrationEndpoint = rest[1];
+				const redirectUri = rest[2];
+				if (!registrationEndpoint || !redirectUri) {
+					ctx.pushSystemMessage("usage: /mcp oauth register <registration-endpoint> <redirect-uri> [--scopes=a,b]");
+					return { handled: true };
+				}
+				const scopesFlag = rest.slice(3).find((a) => a.startsWith("--scopes="));
+				const scopes = scopesFlag ? scopesFlag.slice("--scopes=".length).split(",") : undefined;
+				const result = (await ctx.conn.extMethod(EXT_MCP_OAUTH_REGISTER, {
+					registrationEndpoint,
+					redirectUri,
+					...(scopes ? { scopes } : {}),
+				})) as {
+					clientId: string;
+					clientSecret?: string;
+					tokenEndpointAuthMethod?: string;
+					registrationAccessToken?: string;
+				};
+				const attrs: Record<string, string> = {
+					"data-mcp-event": "oauth-registered",
+					"data-mcp-client-id": result.clientId,
+				};
+				if (result.tokenEndpointAuthMethod) attrs["data-mcp-token-auth-method"] = result.tokenEndpointAuthMethod;
+				const lines = [
+					`oauth-register: clientId=${result.clientId}`,
+					`  clientSecret: ${result.clientSecret ? `<set, ${result.clientSecret.length} chars>` : "(none — public client)"}`,
+				];
+				if (result.tokenEndpointAuthMethod) lines.push(`  authMethod:   ${result.tokenEndpointAuthMethod}`);
+				ctx.pushSystemMessage(lines.join("\n"), attrs);
+				return { handled: true };
+			}
 			const oauthSlug = rest[1];
 			const auto = rest.slice(2).includes("--auto");
 			if (action !== "start" || !oauthSlug) {
-				ctx.pushSystemMessage("usage: /mcp oauth start <slug> [--auto]");
+				ctx.pushSystemMessage("usage: /mcp oauth <discover <url>|register <regUrl> <redirectUri>|start <slug>>");
 				return { handled: true };
 			}
 			const chromeIdentity = (globalThis as { chrome?: { identity?: ChromeIdentityAPI } }).chrome?.identity;

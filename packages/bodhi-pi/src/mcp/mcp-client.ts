@@ -3,8 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker-provider.js";
 import type { KvStore } from "../kv/kv-store.js";
 import { BODHI_PI_VERSION } from "../version.js";
-import { KvOAuthProvider, runAuthFlow } from "./mcp-oauth-provider.js";
-import { OAuthStateKv } from "./mcp-oauth-state-kv.js";
+import { makeRefreshOauthProvider, runAuthFlow } from "./mcp-oauth-provider.js";
 import { resolveStdioEnv } from "./mcp-stdio-env.js";
 import {
 	MCP_PREFIX,
@@ -16,28 +15,12 @@ import {
 	parseMcpServerEntry,
 } from "./mcp-types.js";
 
-/**
- * Refresh persisted tokens by invoking the SDK's `auth()` driver with no `authorizationCode` —
- * with a refresh_token in `provider.tokens()`, the driver calls `refreshAuthorization` and
- * writes the new tokens back via `provider.saveTokens`. No interactive flow needed.
- *
- * `state` is unused on the refresh path (SDK only reads it when composing an authorize URL),
- * so we pass a sentinel; `OAuthStateKv` is similarly unused.
- */
 async function refreshOauthTokens(kvStore: KvStore, slug: string, cfg: McpAuthOAuthConfig): Promise<void> {
-	const provider = new KvOAuthProvider({
-		kvStore,
-		slug,
-		cfg,
-		redirectUri: cfg.redirectUri ?? "http://localhost/unused-during-refresh",
-		stateKv: new OAuthStateKv(kvStore),
-		state: "unused-during-refresh",
-	});
-	await runAuthFlow(provider, cfg.tokenUrl);
+	await runAuthFlow(makeRefreshOauthProvider(kvStore, slug, cfg), cfg.tokenUrl);
 }
 
 const CLIENT_INFO = { name: "bodhi-pi", version: BODHI_PI_VERSION };
-// MV3 chrome ext / other CSP-restricted runtimes forbid `new Function` (Ajv default).
+// MV3 chrome-ext / CSP-restricted runtimes forbid `new Function` (Ajv default)
 const SCHEMA_VALIDATOR = new CfWorkerJsonSchemaValidator();
 
 export interface ConnectedClient {
@@ -47,13 +30,9 @@ export interface ConnectedClient {
 }
 
 export interface ConnectOptions {
-	/** Invoked once when the underlying transport closes unexpectedly (network drop, server crash). Not fired on explicit close(). */
 	onTransportClose?: () => void;
-	/** When false, throws at the stdio branch rather than spawning. Defence in depth beyond `handleAdd`'s chokepoint. Defaults to true. */
 	supportsStdio?: boolean;
-	/** Required for `oauth` entries: lets the attacher re-read the latest access token per request after a refresh writes back. */
 	kvStore?: KvStore;
-	/** Required for `oauth` entries: identifies which `mcp/<slug>` kv key to re-read. */
 	slug?: string;
 }
 
@@ -69,7 +48,7 @@ export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {
 	} else {
 		if (opts.supportsStdio === false) throw new Error("stdio MCP not supported on this runtime");
 		if (!entry.command) throw new Error("stdio MCP entry missing command");
-		// dynamic import keeps node:child_process out of browser bundles.
+		// dynamic import keeps node:child_process out of browser bundles
 		const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
 		const transport = new StdioClientTransport({
 			command: entry.command,
@@ -94,9 +73,7 @@ export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {
 			closedExplicitly = true;
 			try {
 				await client.close();
-			} catch {
-				// best-effort
-			}
+			} catch {}
 		},
 	};
 }
@@ -136,21 +113,10 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 		if (!ctx.kvStore || !ctx.slug) {
 			throw new Error("oauth transport requires kvStore + slug in ConnectOptions");
 		}
-		// SDK exposes `opts.fetch` (top-level) which wraps every outbound request. We re-read the
-		// latest access token from kv per call so a refresh elsewhere writes new tokens back to
-		// `mcp/<slug>` and the next request picks them up — no transport rebuild required.
-		//
-		// Refresh strategy is two-pronged: eager (60s slack on `expiresAt` before the request) +
-		// lazy (on 401 response, refresh once and retry). Eager catches the common case so the
-		// MCP server never sees an expired token; lazy is the fallback for clock skew / server
-		// early-revoke. Refresh failure falls through with the original 401 — the caller's higher
-		// loop can re-trigger `_bodhi-pi/mcp/oauth/start` to re-auth interactively.
 		const kvStore = ctx.kvStore;
 		const slug = ctx.slug;
 		const REFRESH_SLACK_MS = 60_000;
-		// Per-transport (= per-slug, here) refresh gate. Parallel outbound requests share one
-		// in-flight refresh promise so the OAuth server never sees two simultaneous refresh-grant
-		// calls with the same (single-use) refresh_token.
+		// single-flight refresh: refresh_token is single-use, parallel refresh would burn it
 		let inFlightRefresh: Promise<void> | null = null;
 		const readEntry = async (): Promise<McpServerEntry | null> => {
 			const raw = await kvStore.get(`${MCP_PREFIX}${slug}`);
@@ -158,8 +124,8 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 		};
 		const setBearerFromEntry = (entry: McpServerEntry | null, headers: Headers): void => {
 			if (entry && entry.auth.mode === "oauth" && entry.auth.tokens) {
-				const tokenType = entry.auth.tokens.tokenType ?? "Bearer";
-				headers.set("Authorization", `${tokenType} ${entry.auth.tokens.access.value}`);
+				// RFC 6750 §2.1 fixes scheme as "Bearer"; some providers (Linear) return lowercase token_type
+				headers.set("Authorization", `Bearer ${entry.auth.tokens.access.value}`);
 			}
 		};
 		const doRefresh = async (cfg: McpAuthOAuthConfig): Promise<void> => {
@@ -172,7 +138,6 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 		};
 		opts.fetch = async (url, init) => {
 			let entry = await readEntry();
-			// Eager refresh: token expires within the slack window AND we have a refresh_token.
 			if (
 				entry &&
 				entry.auth.mode === "oauth" &&
@@ -183,14 +148,11 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 				try {
 					await doRefresh(entry.auth);
 					entry = await readEntry();
-				} catch {
-					// Best-effort; fall through with stale token and let lazy 401 try once more.
-				}
+				} catch {}
 			}
 			const headers = new Headers(init?.headers);
 			setBearerFromEntry(entry, headers);
 			let response = await fetch(url, { ...init, headers });
-			// Lazy refresh on 401 — single retry to avoid loops.
 			if (response.status === 401 && entry && entry.auth.mode === "oauth" && entry.auth.tokens?.refresh) {
 				try {
 					await doRefresh(entry.auth);
@@ -200,22 +162,13 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 						setBearerFromEntry(refreshed, retryHeaders);
 						response = await fetch(url, { ...init, headers: retryHeaders });
 					}
-				} catch {
-					// Fall through with the original 401 — re-auth requires the interactive flow.
-				}
+				} catch {}
 			}
 			return response;
 		};
 	},
 };
 
-/**
- * Build the SDK transport for an http-streamable MCP server. Dispatch on `auth.mode` to the
- * matching attacher in the strategy table — `public` is a no-op, `http-param` snapshots headers
- * and queries at connect time, `oauth` installs a per-request closure that re-reads
- * the access token from kv. Adding a new auth mode means adding one entry to the `ATTACHERS`
- * table and one branch in `parseAuthInput`.
- */
 export function buildHttpTransport(
 	rawUrl: string,
 	auth: McpAuthConfig,

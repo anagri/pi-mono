@@ -225,6 +225,27 @@ test("oauth/finish errors on invalid/expired state", async () => {
 	);
 });
 
+test("oauth/finish errors when persisted state has aged past expiresAt and removes the entry", async () => {
+	const { harness, client } = await setupClient();
+	await client.mcpAdd({
+		url: "https://mcp.example.com/mcp",
+		auth: "oauth-preregistered",
+		authorizeUrl: "https://auth.example.com/authorize",
+		tokenUrl: "https://auth.example.com/token",
+		clientId: "cid",
+		redirectUri: "http://localhost:7777/callback",
+	});
+	const start = await client.mcpOauthStart({ slug: "example" });
+	const stateKey = `mcp/oauth-state/${start.state!}`;
+	const persisted = (await harness.kvStore.get(stateKey)) as Record<string, unknown> | null;
+	expect(persisted).toBeDefined();
+	await harness.kvStore.set(stateKey, { ...(persisted ?? {}), expiresAt: 1 });
+	await expect(client.mcpOauthFinish({ slug: "example", code: "x", state: start.state! })).rejects.toThrow(
+		/invalid or expired state/,
+	);
+	expect(await harness.kvStore.get(stateKey)).toBeUndefined();
+});
+
 test("oauth/cancel deletes state; later finish errors", async () => {
 	const { client } = await setupClient();
 	await client.mcpAdd({

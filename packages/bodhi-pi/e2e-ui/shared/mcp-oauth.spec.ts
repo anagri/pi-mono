@@ -110,6 +110,33 @@ test("oauth-preregistered (auth: 'oauth-preregistered'): full flow via /mcp add 
 	await expect(await lastSystemEvent(page, "list")).toContainText("connected");
 });
 
+test("oauth slashes: /mcp oauth discover + register expose endpoints and clientId via system events", async ({
+	startApp,
+	chat,
+	page,
+}) => {
+	await startApp();
+	const fix = oauthFixture();
+
+	await chat.send(`/mcp oauth discover ${fix.mcpUrl}`);
+	const discovered = await lastSystemEvent(page, "oauth-discover");
+	await expect(discovered).toBeVisible();
+	const discoveredAuthorize = await discovered.getAttribute("data-mcp-authorize-url");
+	const discoveredToken = await discovered.getAttribute("data-mcp-token-url");
+	const discoveredRegistration = await discovered.getAttribute("data-mcp-registration-endpoint");
+	expect(discoveredAuthorize).toBeTruthy();
+	expect(discoveredToken).toBeTruthy();
+	expect(discoveredRegistration).toBeTruthy();
+
+	const runtimeRedirectUri = await page.evaluate(() => `${window.location.origin}/oauth/callback`);
+	await chat.send(`/mcp oauth register ${discoveredRegistration} ${runtimeRedirectUri}`);
+	const registered = await lastSystemEvent(page, "oauth-registered");
+	await expect(registered).toBeVisible();
+	const clientId = await registered.getAttribute("data-mcp-client-id");
+	expect(clientId).toBeTruthy();
+	expect(clientId!.length).toBeGreaterThan(0);
+});
+
 test("oauth-dcr (auth: 'oauth-dcr'): server runs discovery + DCR then full flow", async ({ startApp, chat, page }) => {
 	await startApp();
 	const fix = oauthFixture();

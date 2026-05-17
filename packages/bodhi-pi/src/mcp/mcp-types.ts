@@ -17,6 +17,19 @@ export type McpTransport = "http" | "stdio";
  */
 export type McpAuthMode = "public" | "http-param" | "oauth";
 
+export type McpAuthInputMode = "public" | "http-param" | "oauth-preregistered" | "oauth-dcr";
+
+export const MCP_AUTH_INPUT_MODES: readonly McpAuthInputMode[] = [
+	"public",
+	"http-param",
+	"oauth-preregistered",
+	"oauth-dcr",
+];
+
+export function isMcpAuthInputMode(value: unknown): value is McpAuthInputMode {
+	return typeof value === "string" && (MCP_AUTH_INPUT_MODES as readonly string[]).includes(value);
+}
+
 export type McpStatus = "connected" | "disconnected" | "error";
 
 export interface McpNamedSecret {
