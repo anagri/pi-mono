@@ -8,7 +8,7 @@ Implemented on `BodhiPiAcpAgent` (`src/acp/agent.ts`). The agent does NOT implem
 
 | Method | File:line | Side effects | Notes |
 |---|---|---|---|
-| `initialize` | `:314-333` | none | Returns `protocolVersion:1`, advertises `loadSession:true`, session caps (`list`, `close`, `resume`), `mcpCapabilities:{http:true, sse:false}`, `_meta["bodhi-pi"]: {version}` |
+| `initialize` | `:314-333` | none | Returns `protocolVersion:1`, advertises `loadSession:true`, session caps (`list`, `close`, `resume`), `mcpCapabilities:{http:true, sse:false}`, `_meta["bodhi-pi"]: {version, available:{kv,mcp,terminal,scriptExecutor,settings}}`. `available.*` is computed at agent construction from the injected adapter set; Clients can disable/hide UX surfaces for `false` namespaces rather than discover the gap by calling and receiving `-32601`. |
 | `authenticate` | `:335-337` | none | Stub — returns `{}`. No auth methods advertised |
 | `newSession` | `:339-356` | creates SessionRecord, builds SessionState, hydrates MCP (no restored slugs), emits `session_start{reason:"new"}` | Returns `{sessionId, configOptions, _meta?}`. `_meta["bodhi-pi"].mcp.notFoundSlugs:string[]` is set when the request's `mcpServers` referenced slugs not present in KV — see [mcp.md § Hydration flow](./mcp.md#hydration-flow-on-session-boot). Per-slug `mcp_status_change{status:"error", errorMessage:"unknown slug"}` events also fire. |
 | `loadSession` | `:358-437` | `rehydrateSession`, **replays history** as `sessionUpdate` notifications, hydrates MCP with restored slugs, emits `session_start{reason:"load"}` | Replays user chunks, tool_call (status:completed), tool_call_update with results/errors. Same `_meta.notFoundSlugs` shape as `newSession` when ephemeral `mcpServers` names unknown slugs. |

@@ -334,10 +334,35 @@ class BodhiPiAcpAgent implements AcpAgent {
 				promptCapabilities: { image: false, audio: false, embeddedContext: false },
 				mcpCapabilities: { http: true, sse: false },
 				_meta: {
-					"bodhi-pi": { version: BODHI_PI_VERSION },
+					"bodhi-pi": {
+						version: BODHI_PI_VERSION,
+						available: this.computeAvailability(),
+					},
 				},
 			},
 			authMethods: [],
+		};
+	}
+
+	/**
+	 * Per-namespace availability flags derived from the injected adapter set. Clients can use these
+	 * to disable/hide UX surfaces (e.g. an MCP panel when `kv:false` means MCP entries can't be
+	 * persisted). The flags are computed at agent construction; they don't change per session.
+	 */
+	private computeAvailability(): {
+		kv: boolean;
+		mcp: boolean;
+		terminal: boolean;
+		scriptExecutor: boolean;
+		settings: boolean;
+	} {
+		return {
+			kv: this.config.kvStore !== undefined,
+			// MCP entries persist in the kvStore — without one, /mcp add and hydration are non-functional.
+			mcp: this.config.kvStore !== undefined,
+			terminal: this.config.terminal !== undefined,
+			scriptExecutor: this.config.scriptExecutor !== undefined,
+			settings: true,
 		};
 	}
 

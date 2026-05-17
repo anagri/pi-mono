@@ -353,7 +353,7 @@ test("permanent delete via _bodhi-pi/session/delete", async () => {
 		sessionStore: store,
 	});
 	const initResult = await clientConn.initialize(stdInitParams);
-	expect(initResult.agentCapabilities?._meta).toEqual({
+	expect(initResult.agentCapabilities?._meta).toMatchObject({
 		"bodhi-pi": { version: BODHI_PI_VERSION },
 	});
 
@@ -384,7 +384,7 @@ test("initialize advertises agentInfo with bodhi-pi name + version", async () =>
 	expect(initResult.agentInfo).toEqual({ name: "bodhi-pi", version: expect.any(String) });
 });
 
-test("initialize advertises capabilities._meta['bodhi-pi'] as a single version stamp", async () => {
+test("initialize advertises capabilities._meta['bodhi-pi'] with version + availability flags", async () => {
 	const mock = await startMock();
 	mock.onMessage(/.*/, { content: "ack" });
 
@@ -396,8 +396,61 @@ test("initialize advertises capabilities._meta['bodhi-pi'] as a single version s
 	});
 
 	const initResult = await clientConn.initialize(stdInitParams);
-	expect(initResult.agentCapabilities?._meta).toEqual({
+	expect(initResult.agentCapabilities?._meta).toMatchObject({
 		"bodhi-pi": { version: BODHI_PI_VERSION },
+	});
+});
+
+test("initialize advertises per-namespace availability reflecting the injected adapter set", async () => {
+	const mock = await startMock();
+	mock.onMessage(/.*/, { content: "ack" });
+	const baseModel = getModel("openai", "gpt-5-mini");
+	const model = { ...baseModel, baseUrl: `${mock.url}/v1` };
+
+	// Harness wires kvStore by default → kv:true, mcp:true. Terminal/scriptExecutor absent.
+	const withKv = createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		sessionStore: createInMemorySessionStore(),
+	});
+	const withKvInit = await withKv.clientConn.initialize(stdInitParams);
+	const withKvAvail = (
+		withKvInit.agentCapabilities?._meta as { "bodhi-pi"?: { available?: Record<string, boolean> } }
+	)?.["bodhi-pi"]?.available;
+	expect(withKvAvail).toEqual({
+		kv: true,
+		mcp: true,
+		terminal: false,
+		scriptExecutor: false,
+		settings: true,
+	});
+
+	// Construct an agent directly without kvStore to verify kv:false / mcp:false.
+	const { createBodhiPiAgent: makeAgent, createInMemoryFilesystem: fs } = await import("@/index.js");
+	const { createInProcessAcpPair } = await import("./helpers/in-process-connection.js");
+	const { clientConn: bareConn } = createInProcessAcpPair(
+		makeAgent({
+			models: [model],
+			defaultModelId: model.id,
+			sessionStore: createInMemorySessionStore(),
+			filesystem: fs(),
+			getApiKey: () => "test-key",
+		}),
+		() => ({
+			sessionUpdate: async () => {},
+			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+		}),
+	);
+	const bareInit = await bareConn.initialize(stdInitParams);
+	const bareAvail = (bareInit.agentCapabilities?._meta as { "bodhi-pi"?: { available?: Record<string, boolean> } })?.[
+		"bodhi-pi"
+	]?.available;
+	expect(bareAvail).toEqual({
+		kv: false,
+		mcp: false,
+		terminal: false,
+		scriptExecutor: false,
+		settings: true,
 	});
 });
 

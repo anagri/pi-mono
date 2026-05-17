@@ -170,11 +170,11 @@ The same conceptual setting can live in two places with different names:
 
 `supportsMcpStdio` defaults to `true` (`src/acp/agent.ts:215`). Hosts that cannot spawn child processes (browser, chrome-ext, stateless HTTP rebuild) MUST explicitly set `false`, otherwise `_bodhi-pi/mcp/add` silently accepts `command=…` entries that subsequent `_bodhi-pi/mcp/connect` calls cannot fulfil. The risk is the default — not the behaviour. A jsdoc warning was added at `src/acp/agent.ts:101-105` (D7 inline-fix).
 
-### D9 — Capability advertisement vs Host-injected reality
+### D9 — Capability advertisement vs Host-injected reality *(resolved)*
 
-`kvStore`, `terminal`, `scriptExecutor`, `mcpConnectionProvider` are optional on `BodhiPiConfig`. When a feature that needs them is invoked, the agent throws `-32601` ("capability missing") — at the call site, not at construction time. The agent's `initialize` response does not advertise WHICH `_bodhi-pi/*` methods are actually available given the Host's adapter set, so Clients learn lazily what works and what doesn't.
+`kvStore`, `terminal`, `scriptExecutor`, `mcpConnectionProvider` are optional on `BodhiPiConfig`. When a feature that needs them is invoked, the agent still throws `-32601` ("capability missing") — at the call site, not at construction time. The `initialize` response now advertises per-namespace availability in `agentCapabilities._meta["bodhi-pi"].available = {kv, mcp, terminal, scriptExecutor, settings}`, computed at agent construction from the injected adapter set. Clients should consult this flag to disable/hide UX surfaces for absent namespaces rather than discovering the gap by call-and-fail.
 
-A richer `agentCapabilities._meta["bodhi-pi"]` payload listing per-namespace availability (e.g. `kv:true, mcp:true, terminal:false`) would let Clients render UX correctly without trial-and-error.
+`mcp` mirrors `kv` because MCP entries persist in the KV store — without one, `/mcp add` and hydration are non-functional even if a connection provider is wired. `settings` is `true` whenever filesystem is injected (which is mandatory), so it is effectively always `true`. See `src/acp/agent.ts` `computeAvailability()`.
 
 ## See also
 
