@@ -24,7 +24,7 @@ test("cli e2e-ui: /mcp* slash commands round-trip via headless stdin/stdout", as
 	});
 	activeSession = session;
 
-	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
+	const added = await session.sendSlash(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	expect.soft(added).toMatch(/^added: /);
 	const slug = added.replace(/^added: /, "").trim();
 	expect.soft(slug.length).toBeGreaterThan(0);
@@ -69,7 +69,7 @@ test("cli e2e-ui LLM prompt: agent uses get-sum(20, 22) via stdio chat and repli
 	});
 	activeSession = session;
 
-	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
+	const added = await session.sendSlash(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const slug = added.replace(/^added: /, "").trim();
 	await session.sendSlash(`/mcp connect ${slug}`);
 	await session.sendSlash(`/mcp include ${slug}`);

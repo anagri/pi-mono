@@ -50,9 +50,11 @@ The plan follows the 7-step TDD gate from `packages/bodhi-pi/CLAUDE.md:61-72`. E
 - `packages/bodhi-pi/CONTEXT.md` (lines 82-90) — extend the MCP glossary entry to mention header/query auth; reuse `McpNamedSecret` cross-reference.
 - `configuration.md` (lines 140-150) — `mcp/<slug>` KV layout still authoritative; add a line noting the new auth blob nesting.
 
-## Approach (7 slices, one commit each)
+## Approach (8 slices, one commit each)
 
-Per the prompt: commit per slice, full matrix passes between commits. Expensive e2e + e2e-ui run at slice boundaries, not per-edit. If matrix gating proves expensive in practice (`feedback_cleanup_plan_phasing`), slices 3+4 (adapter round-trip tests) and slices 5+6 (cli + Playwright) may be combined — but only after each runs green individually.
+Per the prompt: commit per slice, full matrix passes between commits. Expensive e2e + e2e-ui run at slice boundaries, not per-edit. If matrix gating proves expensive in practice (`feedback_cleanup_plan_phasing`), slices 4+5 (adapter round-trip tests) and slices 6+7 (cli + Playwright) may be combined — but only after each runs green individually.
+
+**Slice 2 (the fix-up slice)** is non-negotiable: the slash UX migration in slice 1 broke every existing `/mcp add url=…` and `/mcp add command=…` invocation in the cli-headless e2e suite (`e2e/cli-headless/mcp*.e2e.ts`) and the Playwright e2e-ui suite (`e2e-ui/shared/mcp-*.spec.ts`). Slice 2 rewrites those invocations to the JSON-object shape so `just test-e2e` and `just test-e2e-ui` stay green. From here on every subsequent slice must end with the full e2e + e2e-ui suites passing.
 
 ### Slice 1 — Core integration tests + impl
 
@@ -64,35 +66,55 @@ Per the prompt: commit per slice, full matrix passes between commits. Expensive 
 
 Impl: widen types (`mcp-types.ts`), rewrite `parseAuthConfig`, rewrite `handleAdd` to accept JSON, replace `parseMcpAddArgs` in `client/mcp-slash.ts` with JSON parse, attach headers + queries inside `connectMcp` (`mcp-client.ts:29`). Add the `maskSecrets` regression test in `kv/kv-store.test.ts` for nested header/query arrays.
 
-### Slice 2 — Core e2e against real authenticated MCP
+### Slice 2 — Migrate existing e2e + e2e-ui /mcp add invocations to JSON
+
+**Why this slice exists:** slice 1 replaced the `key=value` slash parser with a single JSON-object parser. Every test that previously typed `/mcp add url=https://x command=npx args=[…]` now parses as `invalid JSON` and the whole flow short-circuits. This slice is the propagation step.
+
+Files to rewrite (each `/mcp add …` line becomes `/mcp add {…JSON…}`):
+- `packages/bodhi-pi/e2e/cli-headless/mcp.e2e.ts` — public-mode http add.
+- `packages/bodhi-pi/e2e/cli-headless/mcp-multi-session.e2e.ts` — multi-session http add.
+- `packages/bodhi-pi/e2e/cli-headless/mcp-stdio.e2e.ts` — stdio add (`command`, `args` shape).
+- `packages/bodhi-pi/e2e-ui/shared/mcp-public-http.spec.ts` — Playwright public-mode.
+- `packages/bodhi-pi/e2e-ui/shared/mcp-multi.spec.ts` — Playwright multi.
+- `packages/bodhi-pi/test-apps/cli/src/client/acp/headless.ts` — `/help` text still documents the old `url=…` syntax; rewrite to JSON example.
+- `packages/bodhi-pi-cli/src/repl/commands.ts` — same `/help` text (deprecated package; minimal update to keep it compiling and the docs accurate).
+
+Note: `bodhi-pi/e2e/shared/mcp-*.e2e.ts` already migrated in slice 1 for typecheck; verify they actually run.
+
+Verification: `just test-e2e` and `just test-e2e-ui` end with all `mcp-*` files green. Pre-existing failure `chat.e2e.ts > switching model mid-session changes provenance` is unrelated to this work and stays as-is.
+
+### Slice 3 — Core e2e against real authenticated MCP
 
 `packages/bodhi-pi/e2e/`:
 - Add `helpers/example-remote-server.ts` — spawn `https://github.com/modelcontextprotocol/example-remote-server` configured with a known bearer + query param, on a new port (`global-setup.ts:101-103` currently uses 33345 for `mcp-everything`; pick 33346 for the new fixture).
 - `e2e/shared/mcp-auth-header.e2e.ts` — gpt-4o-mini round-trip: add → connect → tool-call → assert side-effect with `Authorization` header.
 - `e2e/shared/mcp-auth-query.e2e.ts` — same with `?api_key=…`.
-- `e2e/shared/mcp-public-http.e2e.ts:17-62` — confirm the existing public-mode e2e still passes against `mcp-everything` after the slash JSON migration.
 
-### Slice 3 — Node adapter round-trip
+### Slice 4 — Node adapter round-trip
 
 `packages/bodhi-pi/test-apps/node-adapters/`:
 - Add a unit test in the kv adapter test file round-tripping a serialized `McpServerEntry` with mixed headers + queries through the SQLite-backed store. Expected: zero adapter code change because the store is opaque JSON.
 
-### Slice 4 — Browser/chrome-ext adapter round-trip
+### Slice 4 — Node adapter round-trip (renumbered)
+
+(was slice 3 — same content)
+
+### Slice 5 — Browser/chrome-ext adapter round-trip
 
 `packages/bodhi-pi/test-apps/browser/src/host/kv/dexie-kv-store.test.ts` (or its sibling spec file):
 - Vitest + fake-indexeddb test round-tripping the new entry shape. chrome-ext gets coverage for free via subpath imports.
 
-### Slice 5 — CLI e2e through stdin/stdout
+### Slice 6 — CLI e2e (cli-headless) for http-param auth
 
-`packages/bodhi-pi/test-apps/cli/e2e/`:
-- New e2e file `mcp-auth.e2e.ts` driving `/mcp add {…JSON…}` through `bodhi-pi-cli` stdin. Assert: JSON parses correctly; `/mcps` (via the round-trip through `_bodhi-pi/mcp/list`) shows masked `***` values; tool call against the example-remote-server fixture succeeds.
+`packages/bodhi-pi/e2e/cli-headless/`:
+- New e2e file `mcp-auth.e2e.ts` driving `/mcp add {…JSON…ith auth: http-param…}` through `bodhi-pi-test-app-cli --headless` stdin. Assert: JSON parses correctly; `/mcps` (via the round-trip through `_bodhi-pi/mcp/list`) shows masked `***` values; tool call against the example-remote-server fixture succeeds.
 
-### Slice 6 — Playwright across browser + chrome-ext
+### Slice 7 — Playwright across browser + chrome-ext for http-param auth
 
-`packages/bodhi-pi/test-apps/browser/e2e/` + `packages/bodhi-pi/test-apps/chrome-ext/e2e/`:
-- Extend the existing public-mode spec (`e2e-ui/shared/mcp-public-http.spec.ts:16-85`) or add a sibling spec for header/query auth. The browser test-app's slash input field already accepts arbitrary text — drive a JSON `/mcp add {…}` invocation through it. Use `data-testid` selectors per `playwright` skill conventions.
+`packages/bodhi-pi/e2e-ui/shared/`:
+- Extend the migrated public-mode spec or add a sibling spec for header/query auth. The browser test-app's slash input field already accepts arbitrary text — drive a JSON `/mcp add {…}` invocation through it. Use `data-testid` selectors per `playwright` skill conventions.
 
-### Slice 7 — HTTP host integration + cross-turn isolation
+### Slice 8 — HTTP host integration + cross-turn isolation
 
 `packages/bodhi-pi/test-apps/http/test/integration/`:
 - New faux-provider integration test proving: (a) auth shape persists across per-turn agent rebuild; (b) per-user kv prefix at `wire-agent-shared.ts:108-110` isolates two users' auth blobs (user A's `Authorization` header is not readable by user B). The cross-user isolation case is load-bearing security per the prompt.

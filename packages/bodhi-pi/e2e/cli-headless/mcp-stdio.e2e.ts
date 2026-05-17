@@ -10,7 +10,7 @@ afterEach(async () => {
 	}
 });
 
-test("cli e2e-ui (stdio): /mcp add command=npx … round-trip via headless stdin/stdout", async () => {
+test("cli e2e-ui (stdio): /mcp add {command:npx,…} round-trip via headless stdin/stdout", async () => {
 	const session = await startHeadlessSlashSession({
 		model: "gpt-4o-mini",
 		provider: "openai",
@@ -19,7 +19,7 @@ test("cli e2e-ui (stdio): /mcp add command=npx … round-trip via headless stdin
 	activeSession = session;
 
 	const added = await session.sendSlash(
-		`/mcp add command=npx args=["--yes","@modelcontextprotocol/server-everything","stdio"]`,
+		`/mcp add {"command":"npx","args":["--yes","@modelcontextprotocol/server-everything","stdio"]}`,
 	);
 	expect.soft(added).toMatch(/^added: /);
 	const slug = added.replace(/^added: /, "").trim();

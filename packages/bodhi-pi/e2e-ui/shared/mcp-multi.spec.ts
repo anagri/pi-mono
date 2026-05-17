@@ -34,11 +34,11 @@ test("mcp-multi: two MCPs connected, only one included, /mcp include surfaces th
 	await startApp();
 
 	const addedEvents = systemEventsLocator(page, "added");
-	await chat.send(`/mcp add url=${mcpEverythingUrl()} label=everything`);
+	await chat.send(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public","label":"everything"}`);
 	await expect(addedEvents).toHaveCount(1);
 	const slugA = (await addedEvents.nth(0).getAttribute("data-mcp-slug")) ?? "";
 
-	await chat.send(`/mcp add url=${DEEPWIKI_URL} label=deepwiki`);
+	await chat.send(`/mcp add {"url":"${DEEPWIKI_URL}","auth":"public","label":"deepwiki"}`);
 	await expect(addedEvents).toHaveCount(2);
 	const slugB = (await addedEvents.nth(1).getAttribute("data-mcp-slug")) ?? "";
 	expect(slugB).not.toEqual(slugA);
@@ -82,7 +82,7 @@ test("mcp-multi: page reload auto-restores connected MCPs (browser/chrome-ext on
 	test.skip(!inProcess, "page-reload restore only applies to in-process worker hosts");
 
 	await startApp();
-	await chat.send(`/mcp add url=${mcpEverythingUrl()}`);
+	await chat.send(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const added = await lastSystemEvent(page, "added");
 	await expect(added).toBeVisible();
 	const slug = (await added.getAttribute("data-mcp-slug")) ?? "";
@@ -112,7 +112,7 @@ test("mcp-multi: /mcp exclude hides tools from this session without disconnectin
 }) => {
 	await startApp();
 
-	await chat.send(`/mcp add url=${mcpEverythingUrl()}`);
+	await chat.send(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const added = await lastSystemEvent(page, "added");
 	const slug = (await added.getAttribute("data-mcp-slug")) ?? "";
 

@@ -36,7 +36,7 @@ test("cli multi-session: /mcp disconnect from session B drops tools in session A
 	const session = await newCliSession();
 	activeSession = session;
 
-	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
+	const added = await session.sendSlash(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const slug = added.replace(/^added: /, "").trim();
 	await session.sendSlash(`/mcp connect ${slug}`);
 
@@ -74,7 +74,7 @@ test("cli multi-session: /mcp exclude in session B leaves session A's tools inta
 	const session = await newCliSession();
 	activeSession = session;
 
-	const added = await session.sendSlash(`/mcp add url=${mcpEverythingUrl()}`);
+	const added = await session.sendSlash(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const slug = added.replace(/^added: /, "").trim();
 	await session.sendSlash(`/mcp connect ${slug}`);
 	await session.sendSlash(`/mcp include ${slug}`); // session A includes

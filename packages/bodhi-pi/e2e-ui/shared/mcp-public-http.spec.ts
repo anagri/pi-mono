@@ -16,7 +16,7 @@ async function lastSystemEvent(page: import("@playwright/test").Page, event: str
 test("mcp public+http LLM prompt: agent uses get-sum(20, 22) and replies with 42", async ({ startApp, chat, page }) => {
 	await startApp();
 
-	await chat.send(`/mcp add url=${mcpEverythingUrl()}`);
+	await chat.send(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const added = await lastSystemEvent(page, "added");
 	await expect(added).toBeVisible();
 	const slug = (await added.getAttribute("data-mcp-slug")) ?? "";
@@ -45,7 +45,7 @@ test("mcp public+http via /mcp* slash commands: add → list → connect → too
 }) => {
 	await startApp();
 
-	await chat.send(`/mcp add url=${mcpEverythingUrl()}`);
+	await chat.send(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const added = await lastSystemEvent(page, "added");
 	await expect(added).toBeVisible();
 	const slug = (await added.getAttribute("data-mcp-slug")) ?? "";
