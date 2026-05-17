@@ -497,3 +497,54 @@ test("builtin tools win on name collision (extension can't shadow `read`)", asyn
 
 	expect(extensionToolCalled).toBe(false);
 });
+
+test("optional factory failure: agent boots; initialize _meta surfaces failed name", async () => {
+	const faux = newProvider();
+	faux.setResponses([() => fauxAssistantMessage("ok")]);
+
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		filesystem: createInMemoryFilesystem(),
+		sessionStore: createInMemorySessionStore(),
+		extensionFactories: [
+			{
+				name: "broken",
+				factory: () => {
+					throw new Error("boom");
+				},
+			},
+		],
+	});
+
+	const init = await harness.clientConn.initialize(stdInitParams);
+	const meta = init.agentCapabilities?._meta as { "bodhi-pi"?: { extensions?: { failed?: string[] } } } | undefined;
+	expect(meta?.["bodhi-pi"]?.extensions?.failed).toEqual(["broken"]);
+
+	// Agent is still usable — newSession succeeds despite the failed extension.
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+	expect(typeof sessionId).toBe("string");
+});
+
+test("required factory failure: initialize throws and aborts agent boot", async () => {
+	const faux = newProvider();
+	faux.setResponses([() => fauxAssistantMessage("ok")]);
+
+	const harness = createTestHarness({
+		models: [modelOf(faux)],
+		defaultModelId: modelOf(faux).id,
+		filesystem: createInMemoryFilesystem(),
+		sessionStore: createInMemorySessionStore(),
+		extensionFactories: [
+			{
+				name: "load-bearing",
+				required: true,
+				factory: () => {
+					throw new Error("factory broke");
+				},
+			},
+		],
+	});
+
+	await expect(harness.clientConn.initialize(stdInitParams)).rejects.toThrow(/load-bearing/);
+});

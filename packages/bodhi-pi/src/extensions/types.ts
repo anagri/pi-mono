@@ -109,4 +109,13 @@ export type ExtensionFactory = (pi: ExtensionAPI) => void | Promise<void>;
 export interface RegisteredExtension {
 	name: string;
 	factory: ExtensionFactory;
+	/**
+	 * When `true`, a factory-throw aborts `ExtensionRunner.build()` (and therefore aborts the
+	 * agent's first session-bootstrap call). When `false`/omitted, factory failures are logged
+	 * and the runner proceeds without this extension's contributions. Hosts mark extensions
+	 * `required: true` when their tools/commands/providers are load-bearing (e.g. the only
+	 * provider, or a security-gating extension). Failed extension names are always surfaced
+	 * via `initialize` `_meta["bodhi-pi"].extensions.failed[]` regardless of `required`.
+	 */
+	required?: boolean;
 }

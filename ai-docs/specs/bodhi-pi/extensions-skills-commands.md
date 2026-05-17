@@ -42,11 +42,19 @@ interface ExtensionAPI {
 
 **Headless by design.** Extensions cannot register keyboard shortcuts, status bar items, or message renderers. The agent has no TUI; rendering is the UI's responsibility. (Coding-agent's `ctx.ui.*`, `registerFlag`, `registerShortcut`, etc. are intentionally absent — see `src/extensions/types.ts:75-80`.)
 
-**Runner lifecycle.** `ExtensionRunner.build(...)` is invoked lazily on the first session method (`ensureExtensionRunner` at `src/acp/agent.ts:274-300`). It:
+**Runner lifecycle.** `ExtensionRunner.build(...)` is invoked from `initialize` (`ensureExtensionRunner` at `src/acp/agent.ts:...`). It:
 - runs every factory once
 - collects tools/commands/providers/event-handlers
 - exposes `getTools()` / `getCommands()` for merge into session state
 - exposes `getEventHandlers()` which are appended onto the `EventDispatcher`
+- exposes `getExtensionErrors()` for the agent to surface failed names
+
+**Failure policy: per-extension severity.** `RegisteredExtension.required: boolean` (default `false`) controls how `ExtensionRunner.build()` reacts to a factory throw:
+
+- `required: false` (default) — error is captured and logged via the Host-supplied `logger`; the runner proceeds without this extension's contributions. The failed name appears in `initialize` `_meta["bodhi-pi"].extensions.failed[]` so Clients can render a warning UI.
+- `required: true` — the first such failure aborts the runner build, which propagates as a `-32603` error from `initialize`. The agent is not usable. Hosts opt into this only when an extension's tools/commands/providers are load-bearing (e.g. the only provider, or a security-gating extension).
+
+Failed names are surfaced via `initialize` `_meta` **regardless** of `required`. Visibility is orthogonal to the abort/continue choice.
 
 **`ProviderConfig`** lets an extension contribute a `Model<Api>` that becomes a valid `setSessionConfigOption("model", id)` target — used by extensions that wrap a custom provider not in pi-ai's catalogue (e.g. a local Ollama at a non-default URL).
 

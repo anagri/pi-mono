@@ -321,6 +321,23 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}
 
 	async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
+		// Build the runner here (not lazily at first session/new) so initialize can surface any
+		// optional-extension factory failures via _meta. Required-extension failures still throw,
+		// aborting initialize — Hosts that opted in via `required:true` get a hard failure rather
+		// than a degraded agent.
+		let runner: ExtensionRunner | undefined;
+		try {
+			runner = await this.ensureExtensionRunner();
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			throw new RequestError(-32603, `bodhi-pi initialize failed: ${message}`);
+		}
+		const failed = runner?.getExtensionErrors().map((e) => e.extensionName) ?? [];
+		const bodhiPiMeta: Record<string, unknown> = {
+			version: BODHI_PI_VERSION,
+			available: this.computeAvailability(),
+		};
+		if (failed.length > 0) bodhiPiMeta.extensions = { failed };
 		return {
 			protocolVersion: 1,
 			agentInfo: { name: "bodhi-pi", version: BODHI_PI_VERSION },
@@ -333,12 +350,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 				},
 				promptCapabilities: { image: false, audio: false, embeddedContext: false },
 				mcpCapabilities: { http: true, sse: false },
-				_meta: {
-					"bodhi-pi": {
-						version: BODHI_PI_VERSION,
-						available: this.computeAvailability(),
-					},
-				},
+				_meta: { "bodhi-pi": bodhiPiMeta },
 			},
 			authMethods: [],
 		};

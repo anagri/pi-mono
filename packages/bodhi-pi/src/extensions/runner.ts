@@ -98,6 +98,13 @@ export class ExtensionRunner {
 				// host-supplied logger so dev-tools / stderr surfaces it without explicit access.
 				runner.errors.push({ extensionName: ext.name, error: err });
 				runner.logger.error(`[bodhi-pi extension:${ext.name}] factory threw`, err);
+				// Required extensions abort the runner build — their tools/commands/providers
+				// are load-bearing, so silently continuing would leave the agent in a degraded
+				// state the Host explicitly opted out of.
+				if (ext.required) {
+					const message = err instanceof Error ? err.message : String(err);
+					throw new Error(`required extension '${ext.name}' failed to initialize: ${message}`);
+				}
 			}
 		}
 		return runner;
