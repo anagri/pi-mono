@@ -2,14 +2,18 @@ import { type ChildProcess, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
+import { type AuthMcpServerHandle, spawnAuthMcpServer } from "../e2e/helpers/auth-mcp-server.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CHROME_EXT_DIR = path.resolve(here, "..", "test-apps", "chrome-ext");
 
 const REQUIRED = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 const MCP_EVERYTHING_PORT = 33346;
+const AUTH_MCP_PORT = 33347;
+const AUTH_MCP_TOKEN = "e2e-ui-test-bearer-token-7y3";
 
 let mcpEverythingChild: ChildProcess | undefined;
+let authMcp: AuthMcpServerHandle | undefined;
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
 	loadEnv({ path: path.join(here, "..", "e2e", ".env.test") });
@@ -23,9 +27,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 	await runBuild(CHROME_EXT_DIR);
 	mcpEverythingChild = await spawnMcpEverythingHttp(MCP_EVERYTHING_PORT);
 	process.env.BODHI_PI_E2E_UI_MCP_EVERYTHING_HTTP_URL = `http://localhost:${MCP_EVERYTHING_PORT}/mcp`;
+	authMcp = await spawnAuthMcpServer(AUTH_MCP_PORT, AUTH_MCP_TOKEN);
+	process.env.BODHI_PI_E2E_UI_MCP_AUTH_HTTP_URL = authMcp.url;
+	process.env.BODHI_PI_E2E_UI_MCP_AUTH_TOKEN = AUTH_MCP_TOKEN;
 	return async () => {
 		try {
 			mcpEverythingChild?.kill("SIGTERM");
+		} catch {}
+		try {
+			await authMcp?.close();
 		} catch {}
 	};
 }
