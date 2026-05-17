@@ -1,11 +1,11 @@
-import { parseSeedFiles } from "@bodhiapp/bodhi-pi-test-app-browser/lib/seed-parser";
+import { parseSeedFiles } from "@bodhiapp/bodhi-pi-test-app-utils/seed-parser";
 import type {
 	ConnectCallbacks,
 	ConnectResult,
 	SetupFormValues,
 	TransportAdapter,
-} from "@bodhiapp/bodhi-pi-test-app-browser/ui";
-import { connect, LIFECYCLE_EVENT_METHOD } from "./lib/ws/transport.ts";
+} from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
+import { connect, LIFECYCLE_EVENT_METHOD } from "./ws/transport.ts";
 
 interface ProvisionResponse {
 	token: string;

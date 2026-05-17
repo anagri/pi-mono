@@ -18,5 +18,5 @@
 		"erasableSyntaxOnly": true,
 		"noFallthroughCasesInSwitch": true
 	},
-	"include": ["src/frontend"]
+	"include": ["src/client"]
 }

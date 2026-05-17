@@ -2,13 +2,13 @@
 	"extends": "../../../../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "./dist",
-		"rootDir": "./src/server",
+		"rootDir": "./src/host",
 		"declaration": true,
 		"sourceMap": true,
 		"paths": {
-			"@/*": ["./src/server/*"]
+			"@/*": ["./src/host/*"]
 		}
 	},
-	"include": ["src/server/**/*.ts"],
-	"exclude": ["test", "e2e", "dist", "node_modules", "src/frontend", "**/*.test.ts"]
+	"include": ["src/host/**/*.ts"],
+	"exclude": ["test", "e2e", "dist", "node_modules", "src/client", "**/*.test.ts"]
 }

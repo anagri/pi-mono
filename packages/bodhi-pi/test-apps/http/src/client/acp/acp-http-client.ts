@@ -16,7 +16,7 @@
  *    (one per SSE event, or the final JSON response for non-SSE methods) is
  *    pushed to a configured EventLog when set.
  */
-import type { EventLog } from "./event-log.ts";
+import type { EventLog } from "../lib/event-log.ts";
 import { parseSse } from "./sse-parser.ts";
 
 export type SessionNotificationHandler = (notification: {

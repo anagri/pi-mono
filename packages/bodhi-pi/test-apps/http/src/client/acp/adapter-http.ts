@@ -1,12 +1,12 @@
-import { parseSeedFiles } from "@bodhiapp/bodhi-pi-test-app-browser/lib/seed-parser";
+import { parseSeedFiles } from "@bodhiapp/bodhi-pi-test-app-utils/seed-parser";
 import type {
 	ConnectCallbacks,
 	ConnectResult,
 	SetupFormValues,
 	TransportAdapter,
-} from "@bodhiapp/bodhi-pi-test-app-browser/ui";
-import { AcpHttpClient } from "./lib/acp-http-client.ts";
-import { createEventLog } from "./lib/event-log.ts";
+} from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
+import { AcpHttpClient } from "./acp-http-client.ts";
+import { createEventLog } from "../lib/event-log.ts";
 
 interface ProvisionResponse {
 	token: string;

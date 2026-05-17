@@ -6,8 +6,8 @@ const here = path.dirname(new URL(import.meta.url).pathname);
 
 export default defineConfig({
 	plugins: [react()],
-	root: path.resolve(here, "src/frontend"),
-	publicDir: path.resolve(here, "src/frontend/public"),
+	root: path.resolve(here, "src/client/react"),
+	publicDir: path.resolve(here, "src/client/react/public"),
 	server: {
 		port: 5173,
 		strictPort: true,

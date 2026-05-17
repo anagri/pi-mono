@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { AppShell } from "@bodhiapp/bodhi-pi-test-app-browser/ui";
-import { createHttpAdapter } from "./adapter-http.ts";
-import { createWsAdapter } from "./adapter-ws.ts";
+import { AppShell } from "@bodhiapp/bodhi-pi-test-app-browser/client";
+import { createHttpAdapter } from "../acp/adapter-http.ts";
+import { createWsAdapter } from "../acp/adapter-ws.ts";
 
 export default function App() {
 	const { pathname } = useLocation();
