@@ -69,10 +69,10 @@ Per-session inclusion sets + tool fanout.
 
 Connection-lifecycle behaviours that need to coordinate Store + Registry + provider together.
 
-- `hydrate(sessionId, ephemeral, restoredSlugs)` — three-way semantics (lines 50-83):
-  - `ephemeral === undefined` → restore from `restoredSlugs` (no new entry).
-  - `ephemeral === []` → empty inclusion (writes new entry only if there was prior non-empty).
-  - `ephemeral === [A, B, …]` → connect + include named slugs from KV, write new snapshot. Unknown slugs silently skipped.
+- `hydrate(sessionId, ephemeral, restoredSlugs) → { notFoundSlugs }` — three-way semantics:
+  - `ephemeral === undefined` → restore from `restoredSlugs` (no new entry); `notFoundSlugs: []`.
+  - `ephemeral === []` → empty inclusion (writes new entry only if there was prior non-empty); `notFoundSlugs: []`.
+  - `ephemeral === [A, B, …]` → connect + include named slugs from KV, write new snapshot. **Unknown slugs are dropped and surfaced two ways**: collected into the returned `notFoundSlugs` array (lifted into `_meta["bodhi-pi"].mcp.notFoundSlugs` on the session-bootstrap response by the agent) AND emitted as per-slug `mcp_status_change{status:"error", errorMessage:"unknown slug"}` events (both on the EventDispatcher and on the ACP wire via `LIFECYCLE_EVENT_METHOD`). `session/new` still succeeds — the unknown slug is a visibility signal, not a failure.
 - `tryProviderConnect / tryProviderReconnect` — wrap provider calls with error → `-32603` translation + `emitStatusBroadcast(slug, "error", msg)`. Lines 89-109.
 - `emitStatusBroadcast(slug, status, errorMessage?)` — emits to `EventDispatcher` AND sends a `LIFECYCLE_EVENT_METHOD` notification on the ACP wire. Fans out across every loaded session. Lines 111-123.
 - `emitToolsBroadcast(slug, toolNames)` — analogous, but for tool-name changes. Lines 125-132.
@@ -137,8 +137,14 @@ sequenceDiagram
       L->>P: connect(slug, entry) [best-effort]
       L->>S: persistStatus(slug, entry, "connected")
     end
+    loop slug in ephemeral \ KV (unknown)
+      L->>A: mcp_status_change{status:"error", errorMessage:"unknown slug"}
+      Note over L: also collected into notFoundSlugs[]
+    end
     L->>R: setInclusion(referenced)
     L->>S: persistInclusion(sessionId, referenced)
+    L-->>A: { notFoundSlugs }
+    Note over A: lifted into response<br/>_meta["bodhi-pi"].mcp.notFoundSlugs
   end
 ```
 

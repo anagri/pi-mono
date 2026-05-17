@@ -91,7 +91,7 @@ export class McpService {
 		sessionId: string,
 		ephemeral: Parameters<McpConnectionLifecycle["hydrate"]>[1],
 		restoredSlugs: string[] | null,
-	): Promise<void> {
+	): Promise<{ notFoundSlugs: string[] }> {
 		return this.lifecycle.hydrate(sessionId, ephemeral, restoredSlugs);
 	}
 

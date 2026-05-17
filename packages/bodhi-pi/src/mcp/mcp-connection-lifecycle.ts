@@ -45,12 +45,18 @@ export class McpConnectionLifecycle {
 	 *   `ephemeral === undefined` → restoredSlugs (session-stored wins; no new entry written)
 	 *   `ephemeral === []`        → empty (writes new snapshot entry only if there was a prior non-empty inclusion)
 	 *   `ephemeral === [A, B...]` → connect+include named slugs that exist in kv (writes new snapshot entry).
-	 *                                Unknown slugs are silently skipped.
+	 *                                Unknown slugs are dropped and reported via the returned `notFoundSlugs` array
+	 *                                plus a per-slug `mcp_status_change{status:"error", errorMessage:"unknown slug"}`
+	 *                                event so Hosts/Clients can surface the dropping.
 	 */
-	async hydrate(sessionId: string, ephemeral: McpServer[] | undefined, restoredSlugs: string[] | null): Promise<void> {
+	async hydrate(
+		sessionId: string,
+		ephemeral: McpServer[] | undefined,
+		restoredSlugs: string[] | null,
+	): Promise<{ notFoundSlugs: string[] }> {
 		if (ephemeral === undefined) {
 			this.registry.setInclusion(sessionId, restoredSlugs ?? []);
-			return;
+			return { notFoundSlugs: [] };
 		}
 
 		if (ephemeral.length === 0) {
@@ -58,16 +64,21 @@ export class McpConnectionLifecycle {
 			if (restoredSlugs && restoredSlugs.length > 0) {
 				await this.store.persistInclusion(sessionId, []);
 			}
-			return;
+			return { notFoundSlugs: [] };
 		}
 
 		const persisted = await this.store.loadPersistedEntries();
 		const persistedBySlug = new Map(persisted.map((p) => [p.slug, p.entry] as const));
 		const referenced: string[] = [];
+		const notFoundSlugs: string[] = [];
 		for (const s of ephemeral) {
 			const slug = sanitizeSlug(s.name);
 			const entry = persistedBySlug.get(slug);
-			if (!entry) continue;
+			if (!entry) {
+				notFoundSlugs.push(slug);
+				await this.emitStatusForSession(sessionId, slug, "error", "unknown slug");
+				continue;
+			}
 			referenced.push(slug);
 			if (!this.provider.isConnected(slug)) {
 				try {
@@ -80,6 +91,19 @@ export class McpConnectionLifecycle {
 		}
 		this.registry.setInclusion(sessionId, referenced);
 		await this.store.persistInclusion(sessionId, referenced);
+		return { notFoundSlugs };
+	}
+
+	private async emitStatusForSession(
+		sessionId: string,
+		slug: string,
+		status: "connected" | "disconnected" | "error",
+		errorMessage?: string,
+	): Promise<void> {
+		const payload: Record<string, unknown> = { type: "mcp_status_change", sessionId, slug, status };
+		if (errorMessage !== undefined) payload.errorMessage = errorMessage;
+		await this.events.emit(payload as never);
+		await this.notifyLifecycle(payload);
 	}
 
 	closeSession(sessionId: string): void {

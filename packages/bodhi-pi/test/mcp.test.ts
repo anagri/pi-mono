@@ -217,3 +217,45 @@ test("session hydration calls McpService.hydrate; no auto-connect for disconnect
 	const { sessionId } = await client.newSession({ cwd: "/proj" });
 	expect(typeof sessionId).toBe("string");
 });
+
+test("hydrate surfaces unknown slugs via _meta and mcp_status_change error events", async () => {
+	const model = newFaux();
+	const events: import("@/index.js").BodhiPiEvent[] = [];
+	const harness = createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		eventHandlers: {
+			mcp_status_change: [(e) => void events.push(e)],
+		},
+	});
+	const client = bindClient(harness);
+	await client.initialize(stdInitParams);
+
+	// Seed one known entry; request hydration referencing one known + two unknown slugs.
+	await harness.kvStore.set("mcp/known", {
+		transport: "http",
+		url: "https://mcp.known.example/mcp",
+		auth: { mode: "public" },
+		label: "known",
+		addedAt: "2026-05-17T00:00:00.000Z",
+		lastKnownStatus: "disconnected",
+	});
+
+	const result = await client.newSession({
+		cwd: "/proj",
+		mcpServers: [
+			{ name: "known", type: "http", url: "https://mcp.known.example/mcp", headers: [] },
+			{ name: "ghost-a", type: "http", url: "https://nope.example/a", headers: [] },
+			{ name: "ghost-b", type: "http", url: "https://nope.example/b", headers: [] },
+		],
+	});
+
+	const meta = result._meta as { "bodhi-pi"?: { mcp?: { notFoundSlugs?: string[] } } } | undefined;
+	expect(meta?.["bodhi-pi"]?.mcp?.notFoundSlugs).toEqual(["ghost-a", "ghost-b"]);
+
+	const errorEvents = events.filter((e) => e.type === "mcp_status_change" && e.status === "error");
+	expect(errorEvents.map((e) => (e as { slug: string }).slug)).toEqual(["ghost-a", "ghost-b"]);
+	for (const e of errorEvents) {
+		expect((e as { errorMessage?: string }).errorMessage).toBe("unknown slug");
+	}
+});

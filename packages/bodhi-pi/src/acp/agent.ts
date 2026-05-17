@@ -151,6 +151,11 @@ function skillToAvailableCommand(s: Skill): AvailableCommand {
 	return { name: `skill:${s.name}`, description: s.description };
 }
 
+function metaWithNotFoundSlugs(notFoundSlugs: string[]): { _meta?: Record<string, unknown> } {
+	if (notFoundSlugs.length === 0) return {};
+	return { _meta: { "bodhi-pi": { mcp: { notFoundSlugs } } } };
+}
+
 export function createBodhiPiAgent(config: BodhiPiConfig) {
 	if (!config.sessionStore) {
 		throw new Error("BodhiPiConfig.sessionStore is required (no default fallback)");
@@ -346,7 +351,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		await buildSessionStateFn(this.bootstrapDeps(), { sessionId: record.id, model: null, cwd: record.cwd });
 		await this.advertiseSlashable(record.id);
 		// New session: no prior `mcp_inclusion_set` entry, so restoredSlugs=null.
-		await this.mcpService.hydrate(record.id, params.mcpServers, null);
+		const { notFoundSlugs } = await this.mcpService.hydrate(record.id, params.mcpServers, null);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: record.id,
@@ -356,6 +361,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		return {
 			sessionId: record.id,
 			configOptions: await this.modelRegistry.buildAllConfigOptions(record.id),
+			...metaWithNotFoundSlugs(notFoundSlugs),
 		};
 	}
 
@@ -428,7 +434,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 		}
 
 		await this.advertiseSlashable(params.sessionId);
-		await this.mcpService.hydrate(params.sessionId, params.mcpServers, restored.mcpInclusion);
+		const { notFoundSlugs } = await this.mcpService.hydrate(
+			params.sessionId,
+			params.mcpServers,
+			restored.mcpInclusion,
+		);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
@@ -437,6 +447,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		return {
 			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
+			...metaWithNotFoundSlugs(notFoundSlugs),
 		};
 	}
 
@@ -445,7 +456,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 		// Per ACP spec: rehydrate without replaying history.
 		const restored = await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
 		await this.advertiseSlashable(params.sessionId);
-		await this.mcpService.hydrate(params.sessionId, params.mcpServers, restored.mcpInclusion);
+		const { notFoundSlugs } = await this.mcpService.hydrate(
+			params.sessionId,
+			params.mcpServers,
+			restored.mcpInclusion,
+		);
 		await this.events.emit({
 			type: "session_start",
 			sessionId: params.sessionId,
@@ -454,6 +469,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		return {
 			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
+			...metaWithNotFoundSlugs(notFoundSlugs),
 		};
 	}
 
