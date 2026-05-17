@@ -6,12 +6,16 @@ export const MCP_PREFIX = "mcp/";
 export type McpTransport = "http" | "stdio";
 
 /**
- * Top-level auth discriminator. `"public"` carries no credentials. `"http-param"` attaches
+ * Persisted auth discriminator. `"public"` carries no credentials. `"http-param"` attaches
  * static headers and/or query parameters to every request against an HTTP-streamable MCP server.
- * `"oauth-preregistered"` runs the OAuth 2.1 authorization-code-with-PKCE flow using
- * pre-registered `client_id` / `client_secret`; no DCR, no RFC 8414 discovery.
+ * `"oauth"` runs the OAuth 2.1 authorization-code-with-PKCE flow with persisted credentials.
+ *
+ * `/mcp add` accepts TWO input variants that both persist as `"oauth"`: `auth: "oauth-preregistered"`
+ * (user provides `client_id` + URLs directly) and `auth: "oauth-dcr"` (server runs RFC 9728/8414
+ * discovery + RFC 7591 dynamic client registration). The persisted entry's `dcrInfo` field
+ * preserves whether DCR ran and against which issuer.
  */
-export type McpAuthMode = "public" | "http-param" | "oauth-preregistered";
+export type McpAuthMode = "public" | "http-param" | "oauth";
 
 export type McpStatus = "connected" | "disconnected" | "error";
 
@@ -38,8 +42,20 @@ export interface McpOAuthTokens {
 	tokenType?: string;
 }
 
-export interface McpAuthOAuthPreregisteredConfig {
-	mode: "oauth-preregistered";
+/**
+ * RFC 7591 DCR metadata. Present on entries created via `auth: "oauth-dcr"`. The
+ * `registrationAccessToken` is the RFC 7592 management token returned by the registration
+ * endpoint; persisted as secret so future delete/update of the dynamic registration can use it.
+ */
+export interface McpDcrInfo {
+	issuerUrl: string;
+	registrationEndpoint: string;
+	registeredAt: number;
+	registrationAccessToken?: McpNamedSecret;
+}
+
+export interface McpAuthOAuthConfig {
+	mode: "oauth";
 	authorizeUrl: string;
 	tokenUrl: string;
 	clientId: string;
@@ -48,9 +64,10 @@ export interface McpAuthOAuthPreregisteredConfig {
 	redirectUri?: string;
 	tokenAuthMethod?: "basic" | "post";
 	tokens?: McpOAuthTokens;
+	dcrInfo?: McpDcrInfo;
 }
 
-export type McpAuthConfig = McpAuthPublicConfig | McpAuthHttpParamConfig | McpAuthOAuthPreregisteredConfig;
+export type McpAuthConfig = McpAuthPublicConfig | McpAuthHttpParamConfig | McpAuthOAuthConfig;
 
 export interface McpServerEntry {
 	transport: McpTransport;
@@ -144,7 +161,7 @@ export function serializeAuthConfig(auth: McpAuthConfig): JsonValue {
 		return out;
 	}
 	const out: { [k: string]: JsonValue } = {
-		mode: "oauth-preregistered",
+		mode: "oauth",
 		authorizeUrl: auth.authorizeUrl,
 		tokenUrl: auth.tokenUrl,
 		clientId: auth.clientId,
@@ -159,6 +176,17 @@ export function serializeAuthConfig(auth: McpAuthConfig): JsonValue {
 		if (auth.tokens.expiresAt !== undefined) t.expiresAt = auth.tokens.expiresAt;
 		if (auth.tokens.tokenType !== undefined) t.tokenType = auth.tokens.tokenType;
 		out.tokens = t;
+	}
+	if (auth.dcrInfo !== undefined) {
+		const d: { [k: string]: JsonValue } = {
+			issuerUrl: auth.dcrInfo.issuerUrl,
+			registrationEndpoint: auth.dcrInfo.registrationEndpoint,
+			registeredAt: auth.dcrInfo.registeredAt,
+		};
+		if (auth.dcrInfo.registrationAccessToken !== undefined) {
+			d.registrationAccessToken = serializeNamedSecret(auth.dcrInfo.registrationAccessToken);
+		}
+		out.dcrInfo = d;
 	}
 	return out;
 }
@@ -183,15 +211,15 @@ function parseAuthConfigStored(value: JsonValue | undefined): McpAuthConfig | nu
 		}
 		return cfg;
 	}
-	if (obj.mode === "oauth-preregistered") {
+	if (obj.mode === "oauth") {
 		const authorizeUrl = obj.authorizeUrl;
 		const tokenUrl = obj.tokenUrl;
 		const clientId = obj.clientId;
 		if (typeof authorizeUrl !== "string" || typeof tokenUrl !== "string" || typeof clientId !== "string") {
 			return null;
 		}
-		const cfg: McpAuthOAuthPreregisteredConfig = {
-			mode: "oauth-preregistered",
+		const cfg: McpAuthOAuthConfig = {
+			mode: "oauth",
 			authorizeUrl,
 			tokenUrl,
 			clientId,
@@ -207,9 +235,26 @@ function parseAuthConfigStored(value: JsonValue | undefined): McpAuthConfig | nu
 		}
 		const tokens = parseOAuthTokens(obj.tokens);
 		if (tokens !== null) cfg.tokens = tokens;
+		const dcrInfo = parseDcrInfo(obj.dcrInfo);
+		if (dcrInfo !== null) cfg.dcrInfo = dcrInfo;
 		return cfg;
 	}
 	return null;
+}
+
+function parseDcrInfo(value: JsonValue | undefined): McpDcrInfo | null {
+	if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const obj = value as { [k: string]: JsonValue };
+	if (typeof obj.issuerUrl !== "string" || typeof obj.registrationEndpoint !== "string") return null;
+	if (typeof obj.registeredAt !== "number") return null;
+	const out: McpDcrInfo = {
+		issuerUrl: obj.issuerUrl,
+		registrationEndpoint: obj.registrationEndpoint,
+		registeredAt: obj.registeredAt,
+	};
+	const rat = parseNamedSecret(obj.registrationAccessToken);
+	if (rat !== null) out.registrationAccessToken = rat;
+	return out;
 }
 
 function parseOAuthTokens(value: JsonValue | undefined): McpOAuthTokens | null {

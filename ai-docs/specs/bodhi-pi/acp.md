@@ -78,7 +78,7 @@ Throws `-32601` when host omitted `kvStore`.
 
 | Method | Params | Response | Side effects | Throws |
 |---|---|---|---|---|
-| `_bodhi-pi/mcp/add` | `{url, auth: "public" \| "http-param" \| "oauth-preregistered", headers?, queries?, authorizeUrl?, tokenUrl?, clientId?, clientSecret?, scopes?, redirectUri?, tokenAuthMethod?, label?}` for http; `{command, args?, env?, label?}` for stdio | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`); tags every header/query/env/clientSecret value `secret:true` | `-32602` if neither `url` nor `command`; `-32602` on auth-shape errors (see [mcp.md § Auth](./mcp.md#auth)); `-32601` if `command` and `!supportsStdio` |
+| `_bodhi-pi/mcp/add` | `{url, auth: "public" \| "http-param" \| "oauth-preregistered" \| "oauth-dcr", headers?, queries?, authorizeUrl?, tokenUrl?, registrationEndpoint?, issuerUrl?, clientId?, clientSecret?, scopes?, redirectUri?, tokenAuthMethod?, clientName?, label?}` for http; `{command, args?, env?, label?}` for stdio | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`); tags every header/query/env/clientSecret value `secret:true`; `auth: "oauth-dcr"` additionally runs RFC 9728+8414 discovery and RFC 7591 DCR before persisting | `-32602` if neither `url` nor `command`; `-32602` on auth-shape errors (see [mcp.md § Auth](./mcp.md#auth)); `-32603` on discovery/DCR failure; `-32601` if `command` and `!supportsStdio` |
 | `_bodhi-pi/mcp/remove` | `{slug}` | `{slug}` | `provider.disconnect(slug)`, KV remove, emits `mcp_status_change{status:"disconnected"}` | |
 | `_bodhi-pi/mcp/connect` | `{slug}` | `{tools:[…]}` | `provider.connect(...)`, status broadcasts, persists `lastKnownStatus:"connected"` | `-32602` unknown slug; `-32603` from provider error |
 | `_bodhi-pi/mcp/disconnect` | `{slug}` | `{slug}` | `provider.disconnect`, persists `disconnected`, broadcasts | — |
@@ -90,6 +90,8 @@ Throws `-32601` when host omitted `kvStore`.
 | `_bodhi-pi/mcp/oauth/start` | `{slug, redirectUri?}` | `{authorizeUrl, state} \| {status:"completed"}` | builds `KvOAuthProvider`, runs the auth flow; persists codeVerifier to `OAuthStateKv` under `state` (5-min TTL); emits `mcp_oauth_status_change{status:"started"\|"completed"}` | `-32602` unknown slug or not oauth-preregistered; `-32602` if no redirectUri available |
 | `_bodhi-pi/mcp/oauth/finish` | `{slug, code, state}` | `{status:"completed" \| "failed", errorMessage?}` | exchanges `code` for tokens; persists to `auth.tokens` (secret-tagged); emits `mcp_oauth_status_change` | `-32602` invalid/expired state |
 | `_bodhi-pi/mcp/oauth/cancel` | `{slug, state}` | `{ok: true}` | drops the `OAuthStateKv` entry; emits `mcp_oauth_status_change{status:"cancelled"}` | — |
+| `_bodhi-pi/mcp/oauth/discover` | `{url}` (MCP server URL) | `{authorizationServerUrl, authorizeUrl?, tokenUrl?, registrationEndpoint?, scopesSupported?, resource?}` | RFC 9728 + 8414 discovery via SDK's `discoverOAuthServerInfo`; pure read, no kv mutation | `-32603` on discovery failure |
+| `_bodhi-pi/mcp/oauth/register` | `{registrationEndpoint, redirectUri, scopes?, clientName?, clientUri?}` | `{clientId, clientSecret?, clientIdIssuedAt?, tokenEndpointAuthMethod?, registrationAccessToken?}` | RFC 7591 DCR via SDK's `registerClient`; pure write to the auth server, no kv mutation | `-32603` on registration failure |
 
 See [mcp.md](./mcp.md) for the connection model and per-tenant ConnectionProvider story.
 

@@ -24,11 +24,16 @@ export interface OAuthMcpServerHandle {
 	mcpUrl: string;
 	authorizeUrl: string;
 	tokenUrl: string;
+	/** RFC 7591 DCR endpoint exposed by the fixture. */
+	registrationEndpoint: string;
+	/** Static pre-registered client; DCR-registered clients live alongside it. */
 	clientId: string;
 	clientSecret: string;
 	close(): Promise<void>;
 	/** Returns the count of distinct Bearer tokens the `/mcp` endpoint has seen — refresh tests poll this to assert a new token was minted. */
 	uniqueBearerCount(): number;
+	/** Count of clients in the fixture's registry (default + DCR-registered). */
+	registeredClientCount(): number;
 }
 
 export interface SpawnOAuthMcpServerOptions {
@@ -50,14 +55,17 @@ interface PendingAuthCode {
 }
 
 export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Promise<OAuthMcpServerHandle> {
-	const clientId = opts.clientId ?? "oauth-e2e-client";
-	const clientSecret = opts.clientSecret ?? "oauth-e2e-secret-7q3";
+	const defaultClientId = opts.clientId ?? "oauth-e2e-client";
+	const defaultClientSecret = opts.clientSecret ?? "oauth-e2e-secret-7q3";
 	const expiresIn = opts.expiresInSeconds ?? 3600;
 	const transports = new Map<string, StreamableHTTPServerTransport>();
 	const pendingCodes = new Map<string, PendingAuthCode>();
 	const accessTokens = new Map<string, { expiresAt: number; refreshToken: string }>();
 	const refreshTokens = new Map<string, true>();
 	const seenBearers = new Set<string>();
+	// DCR-registered clients live alongside the default static pair. Keyed by client_id.
+	const registeredClients = new Map<string, { clientSecret: string }>();
+	registeredClients.set(defaultClientId, { clientSecret: defaultClientSecret });
 
 	const baseUrl = `http://localhost:${opts.port}`;
 
@@ -139,7 +147,7 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 			res.writeHead(400, { "Content-Type": "text/plain" }).end("invalid authorize params");
 			return;
 		}
-		if (incomingClientId !== clientId) {
+		if (!registeredClients.has(incomingClientId)) {
 			res.writeHead(400, { "Content-Type": "text/plain" }).end(`unknown client_id ${incomingClientId}`);
 			return;
 		}
@@ -198,7 +206,8 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 			presentedId = params.get("client_id") ?? undefined;
 			presentedSecret = params.get("client_secret") ?? undefined;
 		}
-		if (!presentedId || presentedId !== clientId || !presentedSecret || !constantEq(presentedSecret, clientSecret)) {
+		const expected = presentedId ? registeredClients.get(presentedId) : undefined;
+		if (!presentedId || !expected || !presentedSecret || !constantEq(presentedSecret, expected.clientSecret)) {
 			res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "invalid_client" }));
 			return;
 		}
@@ -322,12 +331,94 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 		await transports.get(sessionId)!.handleRequest(req, res);
 	}
 
+	function asMetadataJson(res: ServerResponse, body: object): void {
+		const payload = JSON.stringify(body);
+		applyCors(res);
+		res.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }).end(
+			payload,
+		);
+	}
+
+	async function handleRegister(req: IncomingMessage, res: ServerResponse): Promise<void> {
+		const body = await readBody(req);
+		let parsed: { redirect_uris?: string[]; client_name?: string; scope?: string } = {};
+		try {
+			parsed = body.length > 0 ? JSON.parse(body) : {};
+		} catch {
+			res.writeHead(400, { "Content-Type": "application/json" }).end(
+				JSON.stringify({ error: "invalid_request", error_description: "invalid JSON" }),
+			);
+			return;
+		}
+		if (!Array.isArray(parsed.redirect_uris) || parsed.redirect_uris.length === 0) {
+			res.writeHead(400, { "Content-Type": "application/json" }).end(
+				JSON.stringify({ error: "invalid_redirect_uri", error_description: "redirect_uris required" }),
+			);
+			return;
+		}
+		const newClientId = `dcr-${randomBytes(8).toString("base64url")}`;
+		const newClientSecret = randomBytes(24).toString("base64url");
+		registeredClients.set(newClientId, { clientSecret: newClientSecret });
+		const out = {
+			client_id: newClientId,
+			client_secret: newClientSecret,
+			client_id_issued_at: Math.floor(Date.now() / 1000),
+			redirect_uris: parsed.redirect_uris,
+			grant_types: ["authorization_code", "refresh_token"],
+			response_types: ["code"],
+			token_endpoint_auth_method: "client_secret_basic",
+			...(parsed.client_name ? { client_name: parsed.client_name } : {}),
+			...(parsed.scope ? { scope: parsed.scope } : {}),
+		};
+		const payload = JSON.stringify(out);
+		applyCors(res);
+		res.writeHead(201, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }).end(
+			payload,
+		);
+	}
+
 	const server = createServer(async (req, res) => {
 		try {
 			const url = new URL(req.url ?? "/", baseUrl);
-			if (req.method === "OPTIONS" && (url.pathname === "/mcp" || url.pathname === "/token")) {
+			if (
+				req.method === "OPTIONS" &&
+				(url.pathname === "/mcp" ||
+					url.pathname === "/token" ||
+					url.pathname === "/register" ||
+					url.pathname.startsWith("/.well-known/"))
+			) {
 				applyCors(res);
 				res.writeHead(204).end();
+				return;
+			}
+			// RFC 9728 protected resource metadata — points discovery clients at this server as
+			// both the resource AND the authorization server.
+			if (url.pathname === "/.well-known/oauth-protected-resource" && req.method === "GET") {
+				asMetadataJson(res, {
+					resource: `${baseUrl}/mcp`,
+					authorization_servers: [baseUrl],
+					scopes_supported: ["read", "write"],
+				});
+				return;
+			}
+			// RFC 8414 authorization server metadata.
+			if (url.pathname === "/.well-known/oauth-authorization-server" && req.method === "GET") {
+				asMetadataJson(res, {
+					issuer: baseUrl,
+					authorization_endpoint: `${baseUrl}/authorize`,
+					token_endpoint: `${baseUrl}/token`,
+					registration_endpoint: `${baseUrl}/register`,
+					response_types_supported: ["code"],
+					grant_types_supported: ["authorization_code", "refresh_token"],
+					code_challenge_methods_supported: ["S256"],
+					token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
+					scopes_supported: ["read", "write"],
+				});
+				return;
+			}
+			// RFC 7591 Dynamic Client Registration.
+			if (url.pathname === "/register" && req.method === "POST") {
+				await handleRegister(req, res);
 				return;
 			}
 			if (url.pathname === "/authorize" && req.method === "GET") {
@@ -366,9 +457,11 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 		mcpUrl: `${baseUrl}/mcp`,
 		authorizeUrl: `${baseUrl}/authorize`,
 		tokenUrl: `${baseUrl}/token`,
-		clientId,
-		clientSecret,
+		registrationEndpoint: `${baseUrl}/register`,
+		clientId: defaultClientId,
+		clientSecret: defaultClientSecret,
 		uniqueBearerCount: () => seenBearers.size,
+		registeredClientCount: () => registeredClients.size,
 		close: async () => {
 			for (const t of transports.values()) {
 				try {

@@ -10,7 +10,7 @@ import type { JsonValue, KvStore } from "../kv/kv-store.js";
 import type { OAuthStateKv } from "./mcp-oauth-state-kv.js";
 import {
 	MCP_PREFIX,
-	type McpAuthOAuthPreregisteredConfig,
+	type McpAuthOAuthConfig,
 	type McpServerEntry,
 	parseMcpServerEntry,
 	serializeMcpServerEntry,
@@ -19,7 +19,7 @@ import {
 export interface KvOAuthProviderOptions {
 	kvStore: KvStore;
 	slug: string;
-	cfg: McpAuthOAuthPreregisteredConfig;
+	cfg: McpAuthOAuthConfig;
 	redirectUri: string;
 	stateKv: OAuthStateKv;
 	/** Pre-allocated state token for this flow; ties saveCodeVerifier writes to a stable key. */
@@ -101,9 +101,18 @@ export class KvOAuthProvider implements OAuthClientProvider {
 		// no-op — discoveryState is statically derived from cfg, no need to cache.
 	}
 
+	async validateResourceURL(): Promise<URL | undefined> {
+		// Per the prompt's locked decisions: RFC 8707 resource indicators are NOT used in bodhi-pi.
+		// Returning `undefined` here tells the SDK to omit the `resource` parameter from the token
+		// request — without this override, the SDK fetches `/.well-known/oauth-protected-resource`
+		// from `serverUrl` even when our `discoveryState` is cached, and rejects when the discovered
+		// resource doesn't match `serverUrl` (the token endpoint, in our case).
+		return undefined;
+	}
+
 	async tokens(): Promise<OAuthTokens | undefined> {
 		const entry = await this.readEntry();
-		const persisted = entry?.auth.mode === "oauth-preregistered" ? entry.auth.tokens : undefined;
+		const persisted = entry?.auth.mode === "oauth" ? entry.auth.tokens : undefined;
 		if (!persisted) return undefined;
 		const out: OAuthTokens = {
 			access_token: persisted.access.value,
@@ -118,7 +127,7 @@ export class KvOAuthProvider implements OAuthClientProvider {
 
 	async saveTokens(tokens: OAuthTokens): Promise<void> {
 		await this.mutate((entry) => {
-			if (entry.auth.mode !== "oauth-preregistered") return;
+			if (entry.auth.mode !== "oauth") return;
 			const access = { name: "access", value: tokens.access_token, secret: true as const };
 			const next: McpServerEntry["auth"] = {
 				...entry.auth,

@@ -60,7 +60,7 @@ test("/mcp add oauth-preregistered persists clientId + clientSecret (masked on A
 	const stored = await harness.kvStore.get("mcp/example");
 	expect(stored).toMatchObject({
 		auth: {
-			mode: "oauth-preregistered",
+			mode: "oauth",
 			authorizeUrl: "https://auth.example.com/authorize",
 			tokenUrl: "https://auth.example.com/token",
 			clientId: "cid-abc",
@@ -79,7 +79,7 @@ test("/mcp add oauth-preregistered persists clientId + clientSecret (masked on A
 		mode: string;
 		clientSecret: { name: string; value: string; secret: true };
 	};
-	expect(listAuth.mode).toBe("oauth-preregistered");
+	expect(listAuth.mode).toBe("oauth");
 	expect(listAuth.clientSecret).toEqual({ name: "clientSecret", value: "***", secret: true });
 });
 
@@ -189,13 +189,13 @@ test("oauth/start returns authorizeUrl + state for a freshly added entry", async
 	expect(result.authorizeUrl).toContain(`state=${result.state}`);
 });
 
-test("oauth/start errors when slug not configured for oauth-preregistered", async () => {
+test("oauth/start errors when slug not configured for oauth", async () => {
 	const { client } = await setupClient();
 	await client.mcpAdd({
 		url: "https://mcp.example.com/mcp",
 		auth: "public",
 	});
-	await expect(client.mcpOauthStart({ slug: "example" })).rejects.toThrow(/not configured for oauth-preregistered/);
+	await expect(client.mcpOauthStart({ slug: "example" })).rejects.toThrow(/not configured for oauth/);
 });
 
 test("oauth/start errors when no redirect URI configured anywhere", async () => {

@@ -10,7 +10,7 @@ import {
 	MCP_PREFIX,
 	type McpAuthConfig,
 	type McpAuthMode,
-	type McpAuthOAuthPreregisteredConfig,
+	type McpAuthOAuthConfig,
 	type McpServerEntry,
 	type McpToolInfo,
 	parseMcpServerEntry,
@@ -24,7 +24,7 @@ import {
  * `state` is unused on the refresh path (SDK only reads it when composing an authorize URL),
  * so we pass a sentinel; `OAuthStateKv` is similarly unused.
  */
-async function refreshOauthTokens(kvStore: KvStore, slug: string, cfg: McpAuthOAuthPreregisteredConfig): Promise<void> {
+async function refreshOauthTokens(kvStore: KvStore, slug: string, cfg: McpAuthOAuthConfig): Promise<void> {
 	const provider = new KvOAuthProvider({
 		kvStore,
 		slug,
@@ -51,9 +51,9 @@ export interface ConnectOptions {
 	onTransportClose?: () => void;
 	/** When false, throws at the stdio branch rather than spawning. Defence in depth beyond `handleAdd`'s chokepoint. Defaults to true. */
 	supportsStdio?: boolean;
-	/** Required for `oauth-preregistered` entries: lets the attacher re-read the latest access token per request after a refresh writes back. */
+	/** Required for `oauth` entries: lets the attacher re-read the latest access token per request after a refresh writes back. */
 	kvStore?: KvStore;
-	/** Required for `oauth-preregistered` entries: identifies which `mcp/<slug>` kv key to re-read. */
+	/** Required for `oauth` entries: identifies which `mcp/<slug>` kv key to re-read. */
 	slug?: string;
 }
 
@@ -131,10 +131,10 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 			opts.requestInit = { headers };
 		}
 	},
-	"oauth-preregistered": (_url, opts, auth, ctx) => {
-		if (auth.mode !== "oauth-preregistered") return;
+	oauth: (_url, opts, auth, ctx) => {
+		if (auth.mode !== "oauth") return;
 		if (!ctx.kvStore || !ctx.slug) {
-			throw new Error("oauth-preregistered transport requires kvStore + slug in ConnectOptions");
+			throw new Error("oauth transport requires kvStore + slug in ConnectOptions");
 		}
 		// SDK exposes `opts.fetch` (top-level) which wraps every outbound request. We re-read the
 		// latest access token from kv per call so a refresh elsewhere writes new tokens back to
@@ -157,12 +157,12 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 			return parseMcpServerEntry(raw ?? null);
 		};
 		const setBearerFromEntry = (entry: McpServerEntry | null, headers: Headers): void => {
-			if (entry && entry.auth.mode === "oauth-preregistered" && entry.auth.tokens) {
+			if (entry && entry.auth.mode === "oauth" && entry.auth.tokens) {
 				const tokenType = entry.auth.tokens.tokenType ?? "Bearer";
 				headers.set("Authorization", `${tokenType} ${entry.auth.tokens.access.value}`);
 			}
 		};
-		const doRefresh = async (cfg: McpAuthOAuthPreregisteredConfig): Promise<void> => {
+		const doRefresh = async (cfg: McpAuthOAuthConfig): Promise<void> => {
 			if (!inFlightRefresh) {
 				inFlightRefresh = refreshOauthTokens(kvStore, slug, cfg).finally(() => {
 					inFlightRefresh = null;
@@ -175,7 +175,7 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 			// Eager refresh: token expires within the slack window AND we have a refresh_token.
 			if (
 				entry &&
-				entry.auth.mode === "oauth-preregistered" &&
+				entry.auth.mode === "oauth" &&
 				entry.auth.tokens?.expiresAt !== undefined &&
 				entry.auth.tokens.refresh &&
 				entry.auth.tokens.expiresAt - REFRESH_SLACK_MS < Date.now()
@@ -191,16 +191,11 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 			setBearerFromEntry(entry, headers);
 			let response = await fetch(url, { ...init, headers });
 			// Lazy refresh on 401 — single retry to avoid loops.
-			if (
-				response.status === 401 &&
-				entry &&
-				entry.auth.mode === "oauth-preregistered" &&
-				entry.auth.tokens?.refresh
-			) {
+			if (response.status === 401 && entry && entry.auth.mode === "oauth" && entry.auth.tokens?.refresh) {
 				try {
 					await doRefresh(entry.auth);
 					const refreshed = await readEntry();
-					if (refreshed && refreshed.auth.mode === "oauth-preregistered" && refreshed.auth.tokens) {
+					if (refreshed && refreshed.auth.mode === "oauth" && refreshed.auth.tokens) {
 						const retryHeaders = new Headers(init?.headers);
 						setBearerFromEntry(refreshed, retryHeaders);
 						response = await fetch(url, { ...init, headers: retryHeaders });
@@ -217,7 +212,7 @@ const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
 /**
  * Build the SDK transport for an http-streamable MCP server. Dispatch on `auth.mode` to the
  * matching attacher in the strategy table — `public` is a no-op, `http-param` snapshots headers
- * and queries at connect time, `oauth-preregistered` installs a per-request closure that re-reads
+ * and queries at connect time, `oauth` installs a per-request closure that re-reads
  * the access token from kv. Adding a new auth mode means adding one entry to the `ATTACHERS`
  * table and one branch in `parseAuthInput`.
  */

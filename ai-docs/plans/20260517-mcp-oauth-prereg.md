@@ -340,3 +340,148 @@ End-to-end proofs:
 10. **Refresh** (commit 6): fixture issues 1-second token; test sleeps 2s, makes a tool call; fixture's request log records a different Bearer than the first call.
 11. **401 retry** (commit 6): fixture returns 401 once for a known token; client refreshes, retries, succeeds. On second 401, asserts `mcp_oauth_status_change{failed}` emitted.
 12. **Manual smoke** (after commit 6): document one real-MCP-server smoke (e.g., GitHub or a test provider) in commit 6's message, including the `/mcp add` payload.
+
+---
+
+# Extension — `auth = "oauth-dcr"` (RFC 7591 Dynamic Client Registration)
+
+## Context
+
+The pre-registered flow above lands first. This extension adds **DCR (RFC 7591)** so users can connect to OAuth-supporting MCP servers without manually registering a client through the provider's admin UI. The bodhi-pi server runs RFC 9728 (Protected Resource Metadata) → RFC 8414 (Authorization Server Metadata) → RFC 7591 (Dynamic Client Registration) and persists the registered credentials in the same shape that `oauth-preregistered` uses.
+
+**Reference pattern**: `/Users/amir36/Documents/workspace/src/github.com/BodhiSearch/BodhiApp` ts-client exposes `/mcps/oauth/discover-mcp`, `/mcps/oauth/discover-as`, `/mcps/oauth/dynamic-register` as separate fine-grained endpoints. bodhi-pi mirrors this pattern: discovery and registration are individually-callable, AND a combined `/mcp add {auth: "oauth-dcr"}` chains them in one ACP call.
+
+## Locked decisions (carry over from grilling)
+
+1. **Server-side discovery + DCR**, keeping client light. Same per-user kv store; same per-tenant routing for the callback.
+2. **Allow overrides** on input — user can short-circuit any step. Required: `url`. Optional: `issuerUrl`, `registrationEndpoint`, `authorizeUrl`, `tokenUrl`, `scopes`, `redirectUri`, `tokenAuthMethod`, `clientName`.
+3. **Persisted mode unified to `"oauth"`** — drop the `"oauth-preregistered"` enum value. Both `auth: "oauth-preregistered"` and `auth: "oauth-dcr"` on `/mcp add` persist as `mode: "oauth"`. Distinct input discriminators, single persisted shape. Optional `dcrInfo` field on the entry tracks DCR-specific metadata (issuerUrl, registrationEndpoint, registeredAt, registrationAccessToken) so `/mcp/list` can surface it.
+
+## Persisted shape changes
+
+In `packages/bodhi-pi/src/mcp/mcp-types.ts`:
+
+```ts
+export type McpAuthMode = "public" | "http-param" | "oauth";  // was: "oauth-preregistered"
+
+export interface McpDcrInfo {
+  issuerUrl: string;                       // authorization server URL discovered via RFC 9728
+  registrationEndpoint: string;            // URL used for DCR (RFC 7591)
+  registeredAt: number;                    // unix epoch ms when DCR succeeded
+  registrationAccessToken?: McpNamedSecret; // RFC 7592 management token (secret:true)
+}
+
+export interface McpAuthOAuthConfig {       // renamed from McpAuthOAuthPreregisteredConfig
+  mode: "oauth";
+  authorizeUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret?: McpNamedSecret;
+  scopes?: string[];
+  redirectUri?: string;
+  tokenAuthMethod?: "basic" | "post";
+  tokens?: McpOAuthTokens;
+  dcrInfo?: McpDcrInfo;                    // set when entry was created via auth: "oauth-dcr"
+}
+```
+
+Rename is cross-cutting: serializeAuthConfig, parseAuthConfigStored, every test that asserts `mode: "oauth-preregistered"` (test/mcp-oauth.test.ts, test/mcp-oauth-refresh.test.ts, test-apps/http/.../oauth-multi-tenant.test.ts) becomes `mode: "oauth"`. The wire-input alias `auth: "oauth-preregistered"` on `/mcp add` is kept so client-side callers don't break.
+
+## New ACP wire surface
+
+Two new methods + the existing `oauth/{start,finish,cancel}` stay unchanged:
+
+```text
+_bodhi-pi/mcp/oauth/discover  →  RFC 9728 + 8414 in one call
+_bodhi-pi/mcp/oauth/register  →  RFC 7591 standalone
+```
+
+| Method | Params | Result |
+|---|---|---|
+| `_bodhi-pi/mcp/oauth/discover` | `{url}` (MCP server URL) | `{authorizationServerUrl, authorizeUrl?, tokenUrl?, registrationEndpoint?, scopesSupported?, resource?}` |
+| `_bodhi-pi/mcp/oauth/register` | `{registrationEndpoint, redirectUri, scopes?, clientName?, clientUri?}` | `{clientId, clientSecret?, clientIdIssuedAt?, tokenEndpointAuthMethod?, registrationAccessToken?}` |
+
+Implementation uses SDK helpers directly:
+- `discoverOAuthServerInfo` from `@modelcontextprotocol/sdk/client/auth.js` → returns `{authorizationServerUrl, authorizationServerMetadata, resourceMetadata}`. Map fields to the response shape.
+- `registerClient` from same module → POSTs to registration_endpoint with `OAuthClientMetadata`, returns `OAuthClientInformationFull`.
+
+These methods are pure operations: they don't touch any `mcp/<slug>` kv entry. They exist for client-side workflows where the UI wants to inspect discovery results before committing to a connection. The combined `/mcp add {auth: "oauth-dcr"}` chains them internally.
+
+## `/mcp add` — input mode `auth: "oauth-dcr"`
+
+New branch in `parseAuthInput`:
+
+```text
+/mcp add {
+  url: "https://example/mcp",
+  auth: "oauth-dcr",
+  scopes?: ["read","write"],
+  // any of these short-circuit the corresponding discovery/DCR step:
+  issuerUrl?, authorizeUrl?, tokenUrl?, registrationEndpoint?,
+  redirectUri?, tokenAuthMethod?, clientName?
+}
+```
+
+Flow inside `handleAdd` when `auth === "oauth-dcr"`:
+
+1. **Discovery** (skip if `authorizeUrl`, `tokenUrl`, `registrationEndpoint` ALL provided):
+   - Call `discoverOAuthServerInfo(url)` to get `authorizationServerUrl` + metadata.
+   - Extract `authorize_endpoint`, `token_endpoint`, `registration_endpoint` from the metadata.
+   - User overrides take precedence over discovered values.
+2. **Registration** (skip if `clientId` is provided — fallback to pre-registered):
+   - Need `registrationEndpoint` (from input or discovery).
+   - Need `redirectUri` (from input, default per-runtime).
+   - Call `registerClient(authServerUrl, {clientMetadata, ...})` with our metadata (grant_types: [authorization_code, refresh_token], response_types: [code], scope, redirect_uris).
+   - Capture `client_id`, `client_secret`, `registration_access_token`, `token_endpoint_auth_method`.
+3. **Persist** as `mode: "oauth"` with `dcrInfo: {issuerUrl, registrationEndpoint, registeredAt: Date.now(), registrationAccessToken?}`.
+4. **Return** `{slug}` (same as other add modes).
+
+Validation errors mirror oauth-preregistered:
+- `url` (or sufficient overrides) required → `-32602` if missing
+- URL must be https (or localhost) → `-32602`
+- stdio transport rejects auth → `-32602`
+- Persisted `tokens` field forbidden on add → `-32602`
+
+After `/mcp add {auth: "oauth-dcr"}` succeeds, the user runs `/mcp oauth start <slug>` exactly as in the pre-registered case — same runtime code paths, same callback handling, same refresh strategy.
+
+## Fixture extensions (`e2e/helpers/oauth-mcp-server.ts`)
+
+Add three endpoints to make DCR drivable in-process:
+
+- `GET /.well-known/oauth-protected-resource` (RFC 9728) — served on the MCP host (`baseUrl`). Returns `{resource, authorization_servers: [baseUrl]}` so discovery routes back to the same fixture process.
+- `GET /.well-known/oauth-authorization-server` (RFC 8414) — returns full metadata: `{issuer, authorization_endpoint, token_endpoint, registration_endpoint, response_types_supported, code_challenge_methods_supported, grant_types_supported, scopes_supported, token_endpoint_auth_methods_supported}`.
+- `POST /register` (RFC 7591) — accepts `OAuthClientMetadata` body. Validates `redirect_uris[0]`. Returns `{client_id, client_secret, client_id_issued_at, token_endpoint_auth_method: "client_secret_basic"}`. Stores `{clientId → clientSecret}` so subsequent token-grant calls work.
+
+For test isolation, the existing fixture's `clientId/clientSecret` constants become the DEFAULT only — `POST /register` mints fresh pairs. The `/token` endpoint checks against the running set (existing + DCR-registered).
+
+## Implementation slices (2 commits, depth-first)
+
+### Commit 6 — Mode unification + discover/register handlers + `auth: "oauth-dcr"` add mode + fixture + integration tests
+
+- Rename `McpAuthMode` "oauth-preregistered" → "oauth"; rename `McpAuthOAuthPreregisteredConfig` → `McpAuthOAuthConfig`; add `McpDcrInfo`. Update parsers/serializers. Update src/index.ts exports.
+- Update all tests asserting `mode: "oauth-preregistered"` to `mode: "oauth"`.
+- Keep `auth: "oauth-preregistered"` accepted on `/mcp add` (input alias for the same persisted shape, no DCR).
+- New wire constants `EXT_MCP_OAUTH_DISCOVER`, `EXT_MCP_OAUTH_REGISTER` in `src/wire/constants.ts`.
+- Implement `handleOauthDiscover` and `handleOauthRegister` in `mcp-service.ts` (use SDK's `discoverOAuthServerInfo` + `registerClient`).
+- Extend `parseAuthInput` with the `oauth-dcr` branch: chains discovery → DCR → returns the `McpAuthOAuthConfig` with `dcrInfo`.
+- Extend `BodhiPiClient` with `mcpOauthDiscover` + `mcpOauthRegister` methods.
+- Extend fixture `oauth-mcp-server.ts` with the three new endpoints.
+- New tests `test/mcp-oauth-dcr.test.ts` covering: discover happy path, register happy path, `/mcp add {auth: "oauth-dcr"}` end-to-end (discovers + registers + persists in one call), validation errors (missing url, stdio rejection, persisted-tokens rejection, override precedence).
+- Spec updates: mcp.md § Auth gains the `oauth-dcr` row + a "DCR flow" subsection; acp.md gets `oauth/discover` + `oauth/register` rows; CONTEXT.md glossary entries for DCR + RFC 9728 + RFC 7591.
+
+### Commit 7 — CLI fine-grained slashes + cli-headless e2e
+
+- New `/mcp oauth discover <url>` and `/mcp oauth register <regUrl>` slashes in `test-apps/cli/src/client/acp/headless.ts` for inspection workflows.
+- Extend the existing `/mcp add` slash JSON parser already accepts `auth: "oauth-dcr"` (no extra slash work needed — the slash hands the JSON to `mcpAdd`).
+- New `e2e/cli-headless/mcp-oauth-dcr.e2e.ts` drives `/mcp add {auth: "oauth-dcr", url: <fixture>}` against the fixture, then `/mcp oauth start <slug> --auto`, then `/mcp connect`. Asserts the full DCR + flow chain works end-to-end via the cli binary.
+
+Browser + chrome-ext runtimes need NO additional work: the DCR path runs entirely server-side (via the Worker for browser/chrome-ext). The slash command for `/mcp add` already accepts JSON — passing `{auth: "oauth-dcr", url: …}` routes to the handler. The existing OAuth chat slash (`/mcp oauth start`) works unchanged on the resulting persisted entry.
+
+## Verification
+
+- `/mcp add {auth: "oauth-dcr", url: <fixture-mcp-url>}` → returns `{slug}` after discovery + DCR completes.
+- `client.mcpList()` shows the new entry with `auth.mode === "oauth"`, `auth.dcrInfo.issuerUrl` present, `clientSecret.value === "***"`.
+- `/mcp oauth start <slug>` runs the standard flow against the DCR-registered client.
+- Cross-tenant: user A's DCR-registered clientId not visible to user B (mirrors commit 2's multi-tenant story).
+- Override precedence: if `clientId` is passed on `auth: "oauth-dcr"`, DCR is skipped (pre-registered fallback).
+- Discover-only and register-only methods are individually callable for client-side workflows that want inspection.

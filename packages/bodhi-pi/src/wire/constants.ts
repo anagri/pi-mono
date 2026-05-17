@@ -119,3 +119,18 @@ export const EXT_MCP_OAUTH_FINISH = "_bodhi-pi/mcp/oauth/finish";
  * `oauth/finish{state}` errors with `-32602`.
  */
 export const EXT_MCP_OAUTH_CANCEL = "_bodhi-pi/mcp/oauth/cancel";
+
+/**
+ * RFC 9728 + 8414 discovery for an MCP server. Params: `{url}` (the MCP server URL).
+ * Returns `{authorizationServerUrl, authorizeUrl?, tokenUrl?, registrationEndpoint?, scopesSupported?, resource?}`.
+ * Pure operation — does not touch any persisted entry. Use to inspect what an MCP server supports
+ * before committing to `/mcp add`.
+ */
+export const EXT_MCP_OAUTH_DISCOVER = "_bodhi-pi/mcp/oauth/discover";
+/**
+ * RFC 7591 Dynamic Client Registration against an explicit registration endpoint. Params:
+ * `{registrationEndpoint, redirectUri, scopes?, clientName?, clientUri?}`. Returns the
+ * `{clientId, clientSecret?, clientIdIssuedAt?, tokenEndpointAuthMethod?, registrationAccessToken?}`
+ * from the registration response. Pure operation — does not touch any persisted entry.
+ */
+export const EXT_MCP_OAUTH_REGISTER = "_bodhi-pi/mcp/oauth/register";

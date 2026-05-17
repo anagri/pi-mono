@@ -98,8 +98,12 @@ export type RemoveProviderOptions = SessionRef;
 // --- MCP --------------------------------------------------------------
 
 export type McpTransport = "http" | "stdio";
-/** Auth mode discriminator. Mirrors the wire shape accepted by `_bodhi-pi/mcp/add`. */
-export type McpAuthMode = "public" | "http-param" | "oauth-preregistered";
+/**
+ * Wire-input auth discriminator on `_bodhi-pi/mcp/add`. `"oauth-preregistered"` and `"oauth-dcr"`
+ * both persist as `mode: "oauth"` on `McpServerEntry` — they differ in how credentials were
+ * obtained (manually pre-registered vs. RFC 7591 dynamic client registration).
+ */
+export type McpAuthMode = "public" | "http-param" | "oauth-preregistered" | "oauth-dcr";
 export type McpStatus = "connected" | "disconnected" | "error";
 
 export interface McpNamedValueInput {
@@ -136,6 +140,29 @@ export type McpAddHttpParams =
 			redirectUri?: string;
 			tokenAuthMethod?: "basic" | "post";
 			label?: string;
+	  }
+	| {
+			url: string;
+			auth: "oauth-dcr";
+			/** Optional override — caller-supplied issuerUrl shortcuts RFC 9728 protected-resource probing. */
+			issuerUrl?: string;
+			/** Override — skip RFC 8414 discovery of authorize_endpoint. */
+			authorizeUrl?: string;
+			/** Override — skip RFC 8414 discovery of token_endpoint. */
+			tokenUrl?: string;
+			/** Override — skip RFC 8414 discovery of registration_endpoint. */
+			registrationEndpoint?: string;
+			/** Override — skip RFC 7591 DCR entirely; treat as pre-registered with this client_id. */
+			clientId?: string;
+			/** Override — supply client_secret when also supplying clientId. */
+			clientSecret?: string;
+			scopes?: string[];
+			/** Required when DCR runs (the registered redirect_uris must include the runtime's callback URL). */
+			redirectUri?: string;
+			tokenAuthMethod?: "basic" | "post";
+			/** Override — passed as `client_name` on DCR; defaults to "bodhi-pi". */
+			clientName?: string;
+			label?: string;
 	  };
 
 export interface McpOauthStartParams {
@@ -165,6 +192,35 @@ export interface McpOauthCancelParams {
 
 export interface McpOauthCancelResult {
 	ok: true;
+}
+
+export interface McpOauthDiscoverParams {
+	url: string;
+}
+
+export interface McpOauthDiscoverResult {
+	authorizationServerUrl: string;
+	authorizeUrl?: string;
+	tokenUrl?: string;
+	registrationEndpoint?: string;
+	scopesSupported?: string[];
+	resource?: string;
+}
+
+export interface McpOauthRegisterParams {
+	registrationEndpoint: string;
+	redirectUri: string;
+	scopes?: string[];
+	clientName?: string;
+	clientUri?: string;
+}
+
+export interface McpOauthRegisterResult {
+	clientId: string;
+	clientSecret?: string;
+	clientIdIssuedAt?: number;
+	tokenEndpointAuthMethod?: string;
+	registrationAccessToken?: string;
 }
 
 export interface McpAddStdioParams {

@@ -15,7 +15,7 @@ export interface OauthCallbackOptions {
 }
 
 /**
- * Handle `GET /oauth/callback?code=&state=` for the oauth-preregistered flow. The state token
+ * Handle `GET /oauth/callback?code=&state=` for the oauth flow. The state token
  * carries the routing tenant id (`<base64url(userId)>.<random>` per `decodeTenantFromState`),
  * so the handler can open the right user's kvStore without auth — the random suffix + 5-min
  * TTL on `OAuthStateKv` is the CSRF guard.
@@ -56,8 +56,8 @@ export async function handleOauthCallback(
 
 	const rawEntry = await kvStore.get(`${MCP_PREFIX}${stateEntry.slug}`);
 	const entry = parseMcpServerEntry(rawEntry ?? null);
-	if (!entry || entry.auth.mode !== "oauth-preregistered") {
-		writeHtml(res, 400, `mcp/${stateEntry.slug} is not configured for oauth-preregistered`);
+	if (!entry || entry.auth.mode !== "oauth") {
+		writeHtml(res, 400, `mcp/${stateEntry.slug} is not configured for oauth`);
 		return;
 	}
 

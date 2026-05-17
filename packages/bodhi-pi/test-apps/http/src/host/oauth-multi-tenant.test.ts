@@ -11,7 +11,7 @@ import {
 	parseMcpServerEntry,
 	runAuthFlow,
 	serializeMcpServerEntry,
-	type McpAuthOAuthPreregisteredConfig,
+	type McpAuthOAuthConfig,
 	type McpServerEntry,
 } from "@bodhiapp/bodhi-pi";
 import { createNodeKvStore } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
@@ -31,7 +31,7 @@ afterEach(async () => {
 	await rm(dataDir, { recursive: true, force: true });
 });
 
-function buildPersistedEntry(cfg: McpAuthOAuthPreregisteredConfig, url: string): McpServerEntry {
+function buildPersistedEntry(cfg: McpAuthOAuthConfig, url: string): McpServerEntry {
 	return {
 		transport: "http",
 		url,
@@ -54,8 +54,8 @@ test("oauth-preregistered: /oauth/callback routes to the tenant in state; bob ne
 		// Alice's persisted entry + state. We construct these directly (the real flow uses
 		// McpService.handleOauthStart with tenantId="alice" — covered by the cli e2e). Here we
 		// focus on the routing/isolation surface specifically.
-		const aliceCfg: McpAuthOAuthPreregisteredConfig = {
-			mode: "oauth-preregistered",
+		const aliceCfg: McpAuthOAuthConfig = {
+			mode: "oauth",
 			authorizeUrl: fixture.authorizeUrl,
 			tokenUrl: fixture.tokenUrl,
 			clientId: fixture.clientId,
@@ -100,8 +100,8 @@ test("oauth-preregistered: /oauth/callback routes to the tenant in state; bob ne
 		// Alice's kv now has tokens.
 		const aliceAfter = parseMcpServerEntry((await aliceKv.get(`${MCP_PREFIX}localhost`)) ?? null);
 		expect(aliceAfter).toBeTruthy();
-		expect(aliceAfter!.auth.mode).toBe("oauth-preregistered");
-		const aliceTokens = (aliceAfter!.auth as McpAuthOAuthPreregisteredConfig).tokens;
+		expect(aliceAfter!.auth.mode).toBe("oauth");
+		const aliceTokens = (aliceAfter!.auth as McpAuthOAuthConfig).tokens;
 		expect(aliceTokens?.access.value.length ?? 0).toBeGreaterThan(0);
 
 		// Bob's kv has nothing — neither the entry nor any OAuth state.

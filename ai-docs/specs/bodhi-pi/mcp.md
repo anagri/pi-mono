@@ -29,14 +29,14 @@ Source: `src/mcp/mcp-service.ts:47-100`. Plan that drove it: `ai-docs/plans/2026
   command?: string;                   // when transport === "stdio"
   args?: string[];
   env?: McpNamedSecret[];             // tagged secret:true; masked on ACP reads
-  auth:                               // top-level discriminator
+  auth:                               // persisted discriminator (`mode`)
     | { mode: "public" }
     | { mode: "http-param";
         headers?: McpNamedSecret[];   // tagged secret:true; masked on ACP reads
         queries?: McpNamedSecret[];   // tagged secret:true; masked on ACP reads
       }
-    | { mode: "oauth-preregistered";
-        authorizeUrl: string;
+    | { mode: "oauth";                // unified OAuth shape — populated via auth: "oauth-preregistered"
+        authorizeUrl: string;         //   or auth: "oauth-dcr" on /mcp add (see below)
         tokenUrl: string;
         clientId: string;
         clientSecret?: McpNamedSecret; // tagged secret:true; masked on ACP reads
@@ -48,6 +48,12 @@ Source: `src/mcp/mcp-service.ts:47-100`. Plan that drove it: `ai-docs/plans/2026
           refresh?: McpNamedSecret;
           expiresAt?: number;          // unix epoch ms
           tokenType?: string;          // usually "Bearer"
+        };
+        dcrInfo?: {                    // populated when entry was created via auth: "oauth-dcr"
+          issuerUrl: string;
+          registrationEndpoint: string;
+          registeredAt: number;
+          registrationAccessToken?: McpNamedSecret; // RFC 7592 management token, secret:true
         };
       };
   label: string;
@@ -120,7 +126,8 @@ Method handlers map directly to extension methods — see [acp.md § MCP methods
 |---|---|---|
 | `"public"` | (none) | No credentials. Sibling `headers`/`queries` → `-32602`. |
 | `"http-param"` | `headers?: Record<string,string>`; `queries?: Record<string,string>` | Headers attach via `requestInit.headers`; queries append to `URL.searchParams` before constructing `StreamableHTTPClientTransport`. Both are sent on every request against the server. At least one of `headers` or `queries` must be non-empty — otherwise `-32602`. |
-| `"oauth-preregistered"` | `authorizeUrl`, `tokenUrl`, `clientId` (required); `clientSecret`, `scopes`, `redirectUri`, `tokenAuthMethod` (optional) | OAuth 2.1 authorization-code-with-PKCE flow driven by `@modelcontextprotocol/sdk/client/auth.auth()`. The `KvOAuthProvider` (`src/mcp/mcp-oauth-provider.ts`) implements `OAuthClientProvider`, persists tokens to `auth.tokens` under `mcp/<slug>`, and short-circuits RFC 8414 discovery by returning the user-supplied URLs from `discoveryState()`. The transport's `opts.fetch` injects `Authorization: Bearer <access>` per request — read from kv each call so refreshes flow through automatically. |
+| `"oauth-preregistered"` | `authorizeUrl`, `tokenUrl`, `clientId` (required); `clientSecret`, `scopes`, `redirectUri`, `tokenAuthMethod` (optional) | Persists as `mode: "oauth"`. OAuth 2.1 authorization-code-with-PKCE flow driven by `@modelcontextprotocol/sdk/client/auth.auth()`. The `KvOAuthProvider` (`src/mcp/mcp-oauth-provider.ts`) implements `OAuthClientProvider`, persists tokens to `auth.tokens` under `mcp/<slug>`, and short-circuits RFC 8414 discovery by returning the user-supplied URLs from `discoveryState()`. `validateResourceURL` returns `undefined` so RFC 8707 resource indicators are skipped per the bodhi-pi contract. The transport's `opts.fetch` injects `Authorization: Bearer <access>` per request — read from kv each call so refreshes flow through automatically. |
+| `"oauth-dcr"` | `url` (the MCP server URL, required); optional overrides: `issuerUrl`, `authorizeUrl`, `tokenUrl`, `registrationEndpoint`, `clientId`, `clientSecret`, `scopes`, `redirectUri`, `tokenAuthMethod`, `clientName` | Persists as `mode: "oauth"` with `dcrInfo` set. Server runs RFC 9728 (`/.well-known/oauth-protected-resource`) → RFC 8414 (`/.well-known/oauth-authorization-server`) → RFC 7591 (`POST <registration_endpoint>`) via SDK helpers `discoverOAuthServerInfo` + `registerClient`. Any override short-circuits the corresponding discovery/DCR step. If `clientId` override is supplied, DCR is skipped entirely (fallback to pre-registered shape, no `dcrInfo`). Once `/mcp add` returns, the entry behaves identically to a pre-registered one — same `oauth/start/finish/cancel` handlers, same refresh strategy, same callback wiring. |
 
 `_bodhi-pi/mcp/add` examples:
 

@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { RequestError } from "@agentclientprotocol/sdk";
+import { discoverOAuthServerInfo, registerClient } from "@modelcontextprotocol/sdk/client/auth.js";
+import type { OAuthClientMetadata } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
 import { type KvStore, maskSecrets } from "../kv/kv-store.js";
@@ -13,7 +15,9 @@ import {
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
 	EXT_MCP_OAUTH_CANCEL,
+	EXT_MCP_OAUTH_DISCOVER,
 	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_REGISTER,
 	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
@@ -31,7 +35,8 @@ import {
 	MCP_PREFIX,
 	type McpAuthConfig,
 	type McpAuthHttpParamConfig,
-	type McpAuthOAuthPreregisteredConfig,
+	type McpAuthOAuthConfig,
+	type McpDcrInfo,
 	type McpListEntry,
 	type McpNamedSecret,
 	type McpServerEntry,
@@ -51,7 +56,7 @@ export interface McpServiceDeps {
 	provider: McpConnectionProvider;
 	appendEntry: AppendEntry;
 	/**
-	 * Multi-tenant routing token used by oauth-preregistered state generation. When set, the
+	 * Multi-tenant routing token used by oauth state generation. When set, the
 	 * `state` parameter sent to the authorization server is prefixed with `base64url(tenantId).`,
 	 * letting a process-wide `/oauth/callback` route the redirect to the right user's kvStore
 	 * without holding extra state. Single-tenant hosts (CLI, in-memory) leave this undefined.
@@ -103,6 +108,8 @@ export class McpService {
 			[EXT_MCP_OAUTH_START, this.handleOauthStart.bind(this)],
 			[EXT_MCP_OAUTH_FINISH, this.handleOauthFinish.bind(this)],
 			[EXT_MCP_OAUTH_CANCEL, this.handleOauthCancel.bind(this)],
+			[EXT_MCP_OAUTH_DISCOVER, this.handleOauthDiscover.bind(this)],
+			[EXT_MCP_OAUTH_REGISTER, this.handleOauthRegister.bind(this)],
 		];
 	}
 
@@ -132,7 +139,9 @@ export class McpService {
 		const args = parseStringArray(params.args, `${EXT_MCP_ADD}: args`);
 		const env = parseNamedSecretListParam(params.env);
 		const label = typeof params.label === "string" && params.label.length > 0 ? params.label : undefined;
-		const auth = parseAuthInput(params, transport);
+		// oauth-dcr is async (network: discovery + DCR); all other branches are sync validation.
+		const auth: McpAuthConfig =
+			params.auth === "oauth-dcr" ? await runDcrAddFlow(params, transport) : parseAuthInput(params, transport);
 		const candidate = transport === "http" ? slugifyUrl(url ?? "") : slugifyCommand(command ?? "", args);
 		const slug = await resolveUniqueSlug(candidate, kv);
 		const entry: McpServerEntry = {
@@ -257,8 +266,8 @@ export class McpService {
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
 		if (!entry) throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: unknown mcp ${slug}`);
-		if (entry.auth.mode !== "oauth-preregistered") {
-			throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: ${slug} is not configured for oauth-preregistered`);
+		if (entry.auth.mode !== "oauth") {
+			throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: ${slug} is not configured for oauth`);
 		}
 		const paramRedirectUri = typeof params.redirectUri === "string" ? params.redirectUri : undefined;
 		const redirectUri = paramRedirectUri ?? entry.auth.redirectUri;
@@ -299,8 +308,8 @@ export class McpService {
 		}
 		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
 		const entry = parseMcpServerEntry(raw ?? null);
-		if (!entry || entry.auth.mode !== "oauth-preregistered") {
-			throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: ${slug} is not configured for oauth-preregistered`);
+		if (!entry || entry.auth.mode !== "oauth") {
+			throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: ${slug} is not configured for oauth`);
 		}
 		const provider = new KvOAuthProvider({
 			kvStore: kv,
@@ -332,6 +341,243 @@ export class McpService {
 		await this.lifecycle.emitOauthStatusBroadcast(slug, "cancelled");
 		return { ok: true };
 	}
+
+	private async handleOauthDiscover(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const url = requireStringParam(EXT_MCP_OAUTH_DISCOVER, params, "url");
+		const info = await discoverOAuthServerInfo(url).catch((err) => {
+			throw new RequestError(
+				-32603,
+				`${EXT_MCP_OAUTH_DISCOVER}: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		});
+		const md = info.authorizationServerMetadata;
+		const out: Record<string, unknown> = {
+			authorizationServerUrl: info.authorizationServerUrl,
+		};
+		if (md?.authorization_endpoint) out.authorizeUrl = md.authorization_endpoint;
+		if (md?.token_endpoint) out.tokenUrl = md.token_endpoint;
+		if (md?.registration_endpoint) out.registrationEndpoint = md.registration_endpoint;
+		if (md?.scopes_supported) out.scopesSupported = md.scopes_supported;
+		if (info.resourceMetadata?.resource) out.resource = info.resourceMetadata.resource;
+		return out;
+	}
+
+	private async handleOauthRegister(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const registrationEndpoint = requireStringParam(EXT_MCP_OAUTH_REGISTER, params, "registrationEndpoint");
+		const redirectUri = requireStringParam(EXT_MCP_OAUTH_REGISTER, params, "redirectUri");
+		const scopes = params.scopes;
+		const clientName = typeof params.clientName === "string" ? params.clientName : "bodhi-pi";
+		const clientUri = typeof params.clientUri === "string" ? params.clientUri : undefined;
+		let scope: string | undefined;
+		if (scopes !== undefined) {
+			if (!Array.isArray(scopes) || !scopes.every((s) => typeof s === "string")) {
+				throw new RequestError(-32602, `${EXT_MCP_OAUTH_REGISTER}: scopes must be a string[]`);
+			}
+			scope = (scopes as string[]).join(" ");
+		}
+		const clientMetadata: OAuthClientMetadata = {
+			redirect_uris: [redirectUri],
+			grant_types: ["authorization_code", "refresh_token"],
+			response_types: ["code"],
+			client_name: clientName,
+			token_endpoint_auth_method: "client_secret_basic",
+		};
+		if (scope) clientMetadata.scope = scope;
+		if (clientUri) clientMetadata.client_uri = clientUri as `https://${string}` | `http://${string}`;
+		// Use the registration_endpoint URL as the authorization server URL — registerClient ignores
+		// it except for error messages when metadata is absent (which it is here, by design).
+		const registered = await registerClient(registrationEndpoint, {
+			metadata: { registration_endpoint: registrationEndpoint } as Parameters<typeof registerClient>[1]["metadata"],
+			clientMetadata,
+			...(scope !== undefined ? { scope } : {}),
+		}).catch((err) => {
+			throw new RequestError(
+				-32603,
+				`${EXT_MCP_OAUTH_REGISTER}: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		});
+		const out: Record<string, unknown> = { clientId: registered.client_id };
+		if (registered.client_secret) out.clientSecret = registered.client_secret;
+		if (registered.client_id_issued_at) out.clientIdIssuedAt = registered.client_id_issued_at;
+		if (registered.token_endpoint_auth_method) out.tokenEndpointAuthMethod = registered.token_endpoint_auth_method;
+		const ratField = (registered as { registration_access_token?: string }).registration_access_token;
+		if (ratField) out.registrationAccessToken = ratField;
+		return out;
+	}
+}
+
+/**
+ * Combined discovery + DCR flow for `auth: "oauth-dcr"` on `/mcp add`. Runs RFC 9728 + 8414
+ * discovery on the MCP server's `url` (unless the user supplied all of authorizeUrl, tokenUrl,
+ * registrationEndpoint as overrides), then RFC 7591 DCR against the registration endpoint
+ * (unless the user supplied a `clientId` override, in which case we fall back to pre-registered
+ * shape with no DCR). Returns a fully-populated `McpAuthOAuthConfig` ready to persist.
+ */
+async function runDcrAddFlow(
+	params: Record<string, unknown>,
+	transport: "http" | "stdio",
+): Promise<McpAuthOAuthConfig> {
+	if (transport === "stdio") {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: stdio entries do not accept auth/headers/queries`);
+	}
+	const hasHeaders = params.headers !== undefined;
+	const hasQueries = params.queries !== undefined;
+	if (hasHeaders || hasQueries) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: auth "oauth-dcr" rejects sibling headers/queries`);
+	}
+	if (params.tokens !== undefined) {
+		throw new RequestError(
+			-32602,
+			`${EXT_MCP_ADD}: tokens field is owned by the oauth handler; do not pass on /mcp add`,
+		);
+	}
+	const url = requireNonEmptyString(params.url, "url");
+	const overrideAuthorize = typeof params.authorizeUrl === "string" ? params.authorizeUrl : undefined;
+	const overrideToken = typeof params.tokenUrl === "string" ? params.tokenUrl : undefined;
+	const overrideRegistration =
+		typeof params.registrationEndpoint === "string" ? params.registrationEndpoint : undefined;
+	const overrideIssuer = typeof params.issuerUrl === "string" ? params.issuerUrl : undefined;
+	const overrideClientId = typeof params.clientId === "string" ? params.clientId : undefined;
+	const overrideClientSecret = typeof params.clientSecret === "string" ? params.clientSecret : undefined;
+	const overrideRedirectUri = typeof params.redirectUri === "string" ? params.redirectUri : undefined;
+	const overrideTokenAuthMethod = params.tokenAuthMethod;
+	const overrideClientName = typeof params.clientName === "string" ? params.clientName : "bodhi-pi";
+
+	// Discovery: skip when caller provided all the discovered fields explicitly OR when only DCR is
+	// desired and registrationEndpoint is supplied.
+	let authorizeUrl = overrideAuthorize;
+	let tokenUrl = overrideToken;
+	let registrationEndpoint = overrideRegistration;
+	let issuerUrl = overrideIssuer;
+	let scopesDiscovered: string[] | undefined;
+	const needsDiscovery =
+		authorizeUrl === undefined ||
+		tokenUrl === undefined ||
+		(registrationEndpoint === undefined && overrideClientId === undefined);
+	if (needsDiscovery) {
+		const info = await discoverOAuthServerInfo(overrideIssuer ?? url).catch((err) => {
+			throw new RequestError(
+				-32603,
+				`${EXT_MCP_ADD}: oauth-dcr discovery failed: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		});
+		issuerUrl = issuerUrl ?? info.authorizationServerUrl;
+		const md = info.authorizationServerMetadata;
+		if (!md) {
+			throw new RequestError(
+				-32603,
+				`${EXT_MCP_ADD}: oauth-dcr discovery returned no metadata for ${overrideIssuer ?? url}`,
+			);
+		}
+		authorizeUrl = authorizeUrl ?? md.authorization_endpoint;
+		tokenUrl = tokenUrl ?? md.token_endpoint;
+		registrationEndpoint = registrationEndpoint ?? md.registration_endpoint;
+		scopesDiscovered = md.scopes_supported;
+	}
+	if (!authorizeUrl) throw new RequestError(-32603, `${EXT_MCP_ADD}: oauth-dcr could not resolve authorizeUrl`);
+	if (!tokenUrl) throw new RequestError(-32603, `${EXT_MCP_ADD}: oauth-dcr could not resolve tokenUrl`);
+	validateOauthUrl(authorizeUrl, "authorizeUrl");
+	validateOauthUrl(tokenUrl, "tokenUrl");
+
+	// Scope: user override > discovered server-supported scopes (default empty for "use default" semantics).
+	let scopes: string[] | undefined;
+	if (params.scopes !== undefined) {
+		if (!Array.isArray(params.scopes) || !params.scopes.every((s) => typeof s === "string")) {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: scopes must be a string[]`);
+		}
+		const userScopes = params.scopes as string[];
+		if (userScopes.length > 0) scopes = userScopes;
+	} else if (scopesDiscovered && scopesDiscovered.length > 0) {
+		scopes = scopesDiscovered;
+	}
+
+	let clientId = overrideClientId;
+	let clientSecret = overrideClientSecret;
+	let tokenAuthMethodResolved: "basic" | "post" | undefined;
+	if (overrideTokenAuthMethod !== undefined) {
+		if (overrideTokenAuthMethod !== "basic" && overrideTokenAuthMethod !== "post") {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: tokenAuthMethod must be "basic" or "post"`);
+		}
+		tokenAuthMethodResolved = overrideTokenAuthMethod;
+	}
+	let registrationAccessToken: string | undefined;
+	let dcrRan = false;
+
+	// DCR: only when the caller didn't supply a clientId override.
+	if (!clientId) {
+		if (!registrationEndpoint) {
+			throw new RequestError(
+				-32602,
+				`${EXT_MCP_ADD}: oauth-dcr requires registrationEndpoint (none discovered or provided) — supply clientId+clientSecret to skip DCR`,
+			);
+		}
+		if (!overrideRedirectUri) {
+			throw new RequestError(
+				-32602,
+				`${EXT_MCP_ADD}: oauth-dcr requires redirectUri so the registered client can be used by the runtime`,
+			);
+		}
+		const clientMetadata: OAuthClientMetadata = {
+			redirect_uris: [overrideRedirectUri],
+			grant_types: ["authorization_code", "refresh_token"],
+			response_types: ["code"],
+			client_name: overrideClientName,
+			token_endpoint_auth_method: "client_secret_basic",
+		};
+		if (scopes && scopes.length > 0) clientMetadata.scope = scopes.join(" ");
+		const registered = await registerClient(registrationEndpoint, {
+			metadata: { registration_endpoint: registrationEndpoint } as Parameters<typeof registerClient>[1]["metadata"],
+			clientMetadata,
+			...(clientMetadata.scope !== undefined ? { scope: clientMetadata.scope } : {}),
+		}).catch((err) => {
+			throw new RequestError(
+				-32603,
+				`${EXT_MCP_ADD}: oauth-dcr registration failed: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		});
+		clientId = registered.client_id;
+		clientSecret = registered.client_secret;
+		const ratField = (registered as { registration_access_token?: string }).registration_access_token;
+		if (ratField) registrationAccessToken = ratField;
+		dcrRan = true;
+		if (
+			!tokenAuthMethodResolved &&
+			(registered.token_endpoint_auth_method === "client_secret_post" ||
+				registered.token_endpoint_auth_method === "client_secret_basic")
+		) {
+			tokenAuthMethodResolved = registered.token_endpoint_auth_method === "client_secret_post" ? "post" : "basic";
+		}
+	}
+	if (!clientId) {
+		throw new RequestError(-32603, `${EXT_MCP_ADD}: oauth-dcr produced no clientId`);
+	}
+
+	const cfg: McpAuthOAuthConfig = {
+		mode: "oauth",
+		authorizeUrl,
+		tokenUrl,
+		clientId,
+	};
+	if (clientSecret) cfg.clientSecret = { name: "clientSecret", value: clientSecret, secret: true };
+	if (scopes) cfg.scopes = scopes;
+	if (overrideRedirectUri) cfg.redirectUri = overrideRedirectUri;
+	if (tokenAuthMethodResolved) cfg.tokenAuthMethod = tokenAuthMethodResolved;
+	if (dcrRan && registrationEndpoint) {
+		const dcrInfo: McpDcrInfo = {
+			issuerUrl: issuerUrl ?? authorizeUrl,
+			registrationEndpoint,
+			registeredAt: Date.now(),
+		};
+		if (registrationAccessToken) {
+			dcrInfo.registrationAccessToken = {
+				name: "registrationAccessToken",
+				value: registrationAccessToken,
+				secret: true,
+			};
+		}
+		cfg.dcrInfo = dcrInfo;
+	}
+	return cfg;
 }
 
 function makeStateToken(tenantId: string | undefined): string {
@@ -387,22 +633,44 @@ function parseNamedSecretListParam(value: unknown): McpNamedSecret[] {
  * - headers/queries must be `{ [name]: string }` objects; non-string values → -32602
  * - stdio + auth !== "public" (when present) → -32602
  */
+/**
+ * Synchronous parser for non-DCR auth inputs. DCR routes through `runDcrAddFlow` (async, hits the
+ * network) before parseAuthInput so we keep the validation surface narrow + side-effect-free.
+ */
 function parseAuthInput(params: Record<string, unknown>, transport: "http" | "stdio"): McpAuthConfig {
 	const rawAuth = params.auth;
 	const headersIn = params.headers;
 	const queriesIn = params.queries;
 	const hasHeaders = headersIn !== undefined;
 	const hasQueries = queriesIn !== undefined;
-	const isKnownAuth = rawAuth === "public" || rawAuth === "http-param" || rawAuth === "oauth-preregistered";
+	const isKnownAuth =
+		rawAuth === "public" || rawAuth === "http-param" || rawAuth === "oauth-preregistered" || rawAuth === "oauth-dcr";
 	if (rawAuth !== undefined && !isKnownAuth) {
-		throw new RequestError(-32602, `${EXT_MCP_ADD}: auth must be "public", "http-param", or "oauth-preregistered"`);
+		throw new RequestError(
+			-32602,
+			`${EXT_MCP_ADD}: auth must be "public", "http-param", "oauth-preregistered", or "oauth-dcr"`,
+		);
 	}
-	const authMode = isKnownAuth ? (rawAuth as "public" | "http-param" | "oauth-preregistered") : undefined;
+	const authMode = isKnownAuth
+		? (rawAuth as "public" | "http-param" | "oauth-preregistered" | "oauth-dcr")
+		: undefined;
 	if (transport === "stdio") {
-		if (authMode === "http-param" || authMode === "oauth-preregistered" || hasHeaders || hasQueries) {
+		if (
+			authMode === "http-param" ||
+			authMode === "oauth-preregistered" ||
+			authMode === "oauth-dcr" ||
+			hasHeaders ||
+			hasQueries
+		) {
 			throw new RequestError(-32602, `${EXT_MCP_ADD}: stdio entries do not accept auth/headers/queries`);
 		}
 		return { mode: "public" };
+	}
+	if (authMode === "oauth-dcr") {
+		throw new RequestError(
+			-32603,
+			`${EXT_MCP_ADD}: internal — oauth-dcr must be routed through runDcrAddFlow before parseAuthInput`,
+		);
 	}
 	// http transport
 	const resolvedMode = authMode ?? "public";
@@ -419,7 +687,7 @@ function parseAuthInput(params: Record<string, unknown>, transport: "http" | "st
 		if (hasHeaders || hasQueries) {
 			throw new RequestError(-32602, `${EXT_MCP_ADD}: auth "oauth-preregistered" rejects sibling headers/queries`);
 		}
-		return parseOauthPreregisteredInput(params);
+		return parseOauthCredentialsInput(params);
 	}
 	// http-param
 	const headers = hasHeaders ? parseStringRecord(headersIn, "headers") : undefined;
@@ -435,14 +703,19 @@ function parseAuthInput(params: Record<string, unknown>, transport: "http" | "st
 	return cfg;
 }
 
-function parseOauthPreregisteredInput(params: Record<string, unknown>): McpAuthOAuthPreregisteredConfig {
+/**
+ * Build an `McpAuthOAuthConfig` from pre-registered credentials supplied on `/mcp add`. Used by
+ * both `auth: "oauth-preregistered"` (direct) and `auth: "oauth-dcr"` (after the host has done
+ * discovery + DCR and populated the credential fields).
+ */
+function parseOauthCredentialsInput(params: Record<string, unknown>): McpAuthOAuthConfig {
 	const authorizeUrl = requireNonEmptyString(params.authorizeUrl, "authorizeUrl");
 	const tokenUrl = requireNonEmptyString(params.tokenUrl, "tokenUrl");
 	const clientId = requireNonEmptyString(params.clientId, "clientId");
 	validateOauthUrl(authorizeUrl, "authorizeUrl");
 	validateOauthUrl(tokenUrl, "tokenUrl");
-	const cfg: McpAuthOAuthPreregisteredConfig = {
-		mode: "oauth-preregistered",
+	const cfg: McpAuthOAuthConfig = {
+		mode: "oauth",
 		authorizeUrl,
 		tokenUrl,
 		clientId,

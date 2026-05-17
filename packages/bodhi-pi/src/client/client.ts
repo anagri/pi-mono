@@ -25,7 +25,9 @@ import {
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
 	EXT_MCP_OAUTH_CANCEL,
+	EXT_MCP_OAUTH_DISCOVER,
 	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_REGISTER,
 	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
@@ -77,8 +79,12 @@ import type {
 	McpListItem,
 	McpOauthCancelParams,
 	McpOauthCancelResult,
+	McpOauthDiscoverParams,
+	McpOauthDiscoverResult,
 	McpOauthFinishParams,
 	McpOauthFinishResult,
+	McpOauthRegisterParams,
+	McpOauthRegisterResult,
 	McpOauthStartParams,
 	McpOauthStartResult,
 	McpRemoveResult,
@@ -318,6 +324,17 @@ export class BodhiPiClient {
 				if (params.scopes !== undefined) body.scopes = params.scopes;
 				if (params.redirectUri !== undefined) body.redirectUri = params.redirectUri;
 				if (params.tokenAuthMethod !== undefined) body.tokenAuthMethod = params.tokenAuthMethod;
+			} else if (params.auth === "oauth-dcr") {
+				if (params.issuerUrl !== undefined) body.issuerUrl = params.issuerUrl;
+				if (params.authorizeUrl !== undefined) body.authorizeUrl = params.authorizeUrl;
+				if (params.tokenUrl !== undefined) body.tokenUrl = params.tokenUrl;
+				if (params.registrationEndpoint !== undefined) body.registrationEndpoint = params.registrationEndpoint;
+				if (params.clientId !== undefined) body.clientId = params.clientId;
+				if (params.clientSecret !== undefined) body.clientSecret = params.clientSecret;
+				if (params.scopes !== undefined) body.scopes = params.scopes;
+				if (params.redirectUri !== undefined) body.redirectUri = params.redirectUri;
+				if (params.tokenAuthMethod !== undefined) body.tokenAuthMethod = params.tokenAuthMethod;
+				if (params.clientName !== undefined) body.clientName = params.clientName;
 			}
 		} else {
 			body.command = params.command;
@@ -348,6 +365,21 @@ export class BodhiPiClient {
 			slug: params.slug,
 			state: params.state,
 		});
+	}
+
+	mcpOauthDiscover(params: McpOauthDiscoverParams): Promise<McpOauthDiscoverResult> {
+		return this.ext<McpOauthDiscoverResult>(EXT_MCP_OAUTH_DISCOVER, { url: params.url });
+	}
+
+	mcpOauthRegister(params: McpOauthRegisterParams): Promise<McpOauthRegisterResult> {
+		const body: Record<string, unknown> = {
+			registrationEndpoint: params.registrationEndpoint,
+			redirectUri: params.redirectUri,
+		};
+		if (params.scopes !== undefined) body.scopes = params.scopes;
+		if (params.clientName !== undefined) body.clientName = params.clientName;
+		if (params.clientUri !== undefined) body.clientUri = params.clientUri;
+		return this.ext<McpOauthRegisterResult>(EXT_MCP_OAUTH_REGISTER, body);
 	}
 
 	mcpRemove(params: { slug: string }): Promise<McpRemoveResult> {
