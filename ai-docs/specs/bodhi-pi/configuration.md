@@ -89,7 +89,7 @@ Source: `src/settings/settings.ts:35-42`.
 
 | Key | Type | Effect |
 |---|---|---|
-| `defaultModel` | `string` | Default model id (note: **named `defaultModel` on disk, `defaultModelId` in BodhiPiConfig** — see § Known weaknesses D6) |
+| `defaultModelId` | `string` | Default model id. Canonical name (matches `BodhiPiConfig.defaultModelId`). The legacy `defaultModel` key is still read for back-compat — see § Known weaknesses D6 |
 | `defaultThinkingLevel` | `ModelThinkingLevel` | Default thinking budget |
 | `appendSystemPrompt` | `string` | Appended after the composed system prompt |
 | `compaction` | `Partial<CompactionSettings>` | Compaction thresholds |
@@ -158,13 +158,15 @@ Where each kind of config actually lives:
 
 These are *descriptive* — they document confusion the current model produces. The redesign is **not** in scope for this spec; flagged for a future ADR. Full details in [`ai-docs/plans/2026-05-17-bodhi-pi-design-smell-followup.md`](../../plans/2026-05-17-bodhi-pi-design-smell-followup.md).
 
-### D6 — Settings fragmentation + parallel key namespaces
+### D6 — Settings fragmentation + parallel key namespaces *(partially resolved)*
 
-The same conceptual setting can live in two places with different names:
+**Naming (resolved)**: `BodhiPiProjectSettings.defaultModelId` is now the canonical on-disk name, matching `BodhiPiConfig.defaultModelId` in code. The legacy `defaultModel` key remains readable for back-compat (resolved via `resolveSettingsDefaultModelId()` in `src/settings/settings.ts`); new settings files should write `defaultModelId`. The `affectsPickerKey()` filter in `src/acp/event-wiring.ts` recognises both names.
 
-- `BodhiPiConfig.defaultModelId` (in code) vs. `BodhiPiProjectSettings.defaultModel` (on disk). Same intent, different field name. The merge logic at `src/sessions/session-bootstrap.ts` reconciles them, but a Host author reading either side independently doesn't know about the other.
-- `SessionState.runtime.currentModelId` and `SessionState.runtime.thinkingLevel` live as direct fields on the runtime, NOT in `sessionOverrides`. A Host that wants to serialize "current session config" must read BOTH the merged settings dict AND scattered runtime fields.
-- The same key can be set via either `setSessionConfigOption("model", …)` OR `_bodhi-pi/session/settings/set("defaultModel", …, scope:"session")`. The two paths write to different places and have different precedence semantics.
+**Runtime-field layering (deferred)**: `SessionState.runtime.currentModelId` and `SessionState.runtime.thinkingLevel` remain direct fields on the runtime, NOT in `sessionOverrides`. They are intentionally a fast-path cache for the prompt loop — `pi-agent-core` reads `state.modelId`/`state.thinkingLevel` on every turn, and threading those reads through a `sessionOverrides` lookup adds latency without changing semantics. The authoritative record of session-level model/thinking choice lives in the session log (`model_change` entries); runtime fields mirror that.
+
+**Dual write paths (deferred)**: `setSessionConfigOption("model", …)` and `_bodhi-pi/session/settings/set("defaultModelId", …, scope:"session")` still write to different places (runtime cache vs. sessionOverrides). The model-picker UX flows through `setSessionConfigOption`; manual settings edits flow through `_bodhi-pi/session/settings/*`. Hosts that need a serialized view of "current session config" should read both — this is documented but not yet collapsed.
+
+Full unification onto `sessionOverrides` (option A from the design-smell follow-up) is tracked for a future PR; the current spec captures the partial fix.
 
 ### D7 — `supportsMcpStdio` silent-default risk
 

@@ -35,12 +35,24 @@ export interface RetrySettings {
 export interface BodhiPiProjectSettings {
 	compaction?: Partial<CompactionSettings>;
 	appendSystemPrompt?: string;
+	/**
+	 * Canonical name aligning with `BodhiPiConfig.defaultModelId`. Prefer this in new
+	 * settings files. The legacy `defaultModel` key is still read for back-compat and
+	 * takes effect only when `defaultModelId` is unset; do not write to it in new code.
+	 */
+	defaultModelId?: string;
+	/** @deprecated Legacy name; read for back-compat. Write `defaultModelId` instead. */
 	defaultModel?: string;
 	defaultThinkingLevel?: ModelThinkingLevel;
 	providerOptions?: Record<string, ProviderOptionsEntry>;
 	retry?: RetrySettings;
 	/** Unknown keys are preserved here so /config can surface them for debugging. */
 	[key: string]: unknown;
+}
+
+/** Read the canonical default-model id, honoring the deprecated `defaultModel` alias. */
+export function resolveSettingsDefaultModelId(s: BodhiPiProjectSettings): string | undefined {
+	return s.defaultModelId ?? s.defaultModel;
 }
 
 export interface ProjectSettingsResult {

@@ -7,7 +7,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createInMemoryFilesystem } from "@/index.js";
-import { loadProjectSettings } from "@/settings/settings.js";
+import { loadProjectSettings, resolveSettingsDefaultModelId } from "@/settings/settings.js";
 import { loadGlobalSettings } from "@/settings/settings-global.js";
 import { mergeSettings } from "@/settings/settings-merge.js";
 import { EXT_SESSION_CONFIG, EXT_SESSION_SETTINGS_LIST } from "@/wire/constants.js";
@@ -30,6 +30,21 @@ function newFaux(): Model<Api> {
 	faux.setResponses([() => fauxAssistantMessage("ok")]);
 	return faux.getModel() as Model<Api>;
 }
+
+describe("resolveSettingsDefaultModelId (D6 rename + back-compat)", () => {
+	test("returns canonical defaultModelId when present", () => {
+		expect(resolveSettingsDefaultModelId({ defaultModelId: "gpt-x" })).toBe("gpt-x");
+	});
+	test("falls back to legacy defaultModel when canonical is unset", () => {
+		expect(resolveSettingsDefaultModelId({ defaultModel: "legacy-id" })).toBe("legacy-id");
+	});
+	test("canonical wins when both are present", () => {
+		expect(resolveSettingsDefaultModelId({ defaultModelId: "new", defaultModel: "old" })).toBe("new");
+	});
+	test("undefined when neither is set", () => {
+		expect(resolveSettingsDefaultModelId({})).toBeUndefined();
+	});
+});
 
 describe("loadProjectSettings", () => {
 	test("missing file → empty result, present=false", async () => {

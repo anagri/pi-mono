@@ -68,6 +68,9 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 /** Dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */
 function affectsPickerKey(key: string): boolean {
 	return (
+		key === "defaultModelId" ||
+		key.startsWith("defaultModelId.") ||
+		// Legacy alias — kept for back-compat with settings files written before D6 rename.
 		key === "defaultModel" ||
 		key.startsWith("defaultModel.") ||
 		key === "defaultThinkingLevel" ||
