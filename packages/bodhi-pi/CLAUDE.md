@@ -31,7 +31,20 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 | `packages/bodhi-pi/test-apps/node-adapters` | **Shared infrastructure** — Node-side adapters (`createNodeFilesystem`, `createNodeKvStore`, SQLite session stores, `createNodePackageExtensionLoader`, `createBashTerminal`) consumed by cli + http |
 | `packages/bodhi-pi/test-apps/app-utils` | **Shared infrastructure** — cross-runtime utilities (`pickDefined`, just-bash adapters) consumed by all four Hosts |
 
-See `ai-docs/specs/bodhi-pi/hosts.md` for full per-Host wiring + Host/UI role split per file.
+See `ai-docs/specs/bodhi-pi/hosts.md` for full per-Host wiring + Host/Client role split per file.
+
+### Host/Client seam enforcement
+
+Each Reference Host's source lives under `test-apps/<host>/src/{host,client}/`. The seam between the two folders is enforced by `scripts/check-host-client-seam.mjs` (wired into root `npm run check`). A file under `host/` MAY NOT relative-import from `client/` and vice versa. Cross-package imports (`@bodhiapp/...`) are unrestricted — they cross at a published package boundary on purpose.
+
+**Override mechanism**: when a cross-side import is genuinely necessary, put `// seam-exception: <reason>` on the line immediately above the import (or trailing on the same line). The reason MUST be a one-line human explanation, not just a marker.
+
+```ts
+// seam-exception: shared port-factory shape; Host uses the same Transferable type
+import type { PortBundle } from "../client/acp/port-bundle.ts";
+```
+
+Exceptions are reviewed at PR time; prefer refactoring (move the shared symbol to `app-utils/`) over an exception when the type or function is genuinely runtime-neutral.
 
 > **Deprecated reference**: `packages/bodhi-pi-{cli,web,http,ws-server,ws-frontend,chrome-ext,node,browser}` are the previous generation of test apps. They are **not maintained** — historical reference only. All new work lands under `test-apps/`.
 
