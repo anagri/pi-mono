@@ -6,6 +6,8 @@ import {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
+	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
@@ -305,6 +307,59 @@ async function handleMcpSubcommand(
 				"data-mcp-event": "excluded",
 				"data-mcp-slug": slug,
 			});
+		} else if (sub === "oauth") {
+			// `/mcp oauth start <slug> [--auto]` — kicks the popup-based oauth-preregistered flow.
+			const action = rest[0];
+			const oauthSlug = rest[1];
+			const auto = rest.slice(2).includes("--auto");
+			if (action !== "start" || !oauthSlug) {
+				ctx.pushSystemMessage("usage: /mcp oauth start <slug> [--auto]");
+				return { handled: true };
+			}
+			const redirectUri = `${window.location.origin}/oauth/callback`;
+			const startResp = (await ctx.conn.extMethod(EXT_MCP_OAUTH_START, {
+				slug: oauthSlug,
+				redirectUri,
+			})) as { authorizeUrl?: string; state?: string; status?: string };
+			if (startResp.status === "completed") {
+				ctx.pushSystemMessage(`oauth: already authorized ${oauthSlug}`, {
+					"data-mcp-event": "oauth-completed",
+					"data-mcp-slug": oauthSlug,
+				});
+				return { handled: true };
+			}
+			const completion = new Promise<{ code: string; state: string }>((resolve) => {
+				const onMsg = (e: MessageEvent) => {
+					if (e.origin !== window.location.origin) return;
+					const data = e.data as { kind?: string; code?: string; state?: string };
+					if (data?.kind !== "bodhi-pi-oauth-callback" || !data.code || !data.state) return;
+					if (data.state !== startResp.state) return;
+					window.removeEventListener("message", onMsg);
+					resolve({ code: data.code, state: data.state });
+				};
+				window.addEventListener("message", onMsg);
+			});
+			const urlToOpen = auto ? `${startResp.authorizeUrl}&auto=1` : startResp.authorizeUrl;
+			window.open(urlToOpen, "oauth", "popup=yes,width=500,height=600");
+			ctx.pushSystemMessage(`oauth: opened popup for ${oauthSlug}`, {
+				"data-mcp-event": "oauth-popup-opened",
+				"data-mcp-slug": oauthSlug,
+			});
+			const { code: cbCode, state: cbState } = await completion;
+			const finishResp = (await ctx.conn.extMethod(EXT_MCP_OAUTH_FINISH, {
+				slug: oauthSlug,
+				code: cbCode,
+				state: cbState,
+			})) as { status: string; errorMessage?: string };
+			ctx.pushSystemMessage(
+				finishResp.status === "completed"
+					? `oauth: completed ${oauthSlug}`
+					: `oauth: failed ${oauthSlug}: ${finishResp.errorMessage ?? "unknown"}`,
+				{
+					"data-mcp-event": finishResp.status === "completed" ? "oauth-completed" : "oauth-failed",
+					"data-mcp-slug": oauthSlug,
+				},
+			);
 		} else if (sub === "tools") {
 			const result = (await ctx.conn.extMethod(EXT_MCP_TOOLS, {
 				sessionId: ctx.state.sessionId,
