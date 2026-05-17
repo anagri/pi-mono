@@ -1,23 +1,30 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import type { BodhiPiLogger } from "@/acp/agent.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { ModelRegistry } from "@/models/registry.js";
 import type { SessionState } from "@/sessions/session-state.js";
+import { LIFECYCLE_EVENT_METHOD } from "@/wire/constants.js";
 
 export interface EventWiringDeps {
 	events: EventDispatcher;
 	conn: AgentSideConnection;
 	sessions: Map<string, SessionState>;
 	modelRegistry: ModelRegistry;
+	logger: BodhiPiLogger;
 }
 
 /**
- * Wire internal subscribers that translate state-change events into the
- * spec-stable ACP `config_option_update` sessionUpdate. Picker state on the
- * client refreshes without polling. Demonstrates the same hook surface
- * extensions consume — the bodhi-pi picker-refresh ships through the same bus.
+ * Single translation surface from internal `EventDispatcher` events to ACP wire notifications.
+ * Services that need to push wire-level signals emit a domain event; this module translates
+ * them. No service should call `conn.sessionUpdate` / `conn.notification` directly for events
+ * that have a domain shape — keep the translation here so SDK extraction can stub one module.
+ *
+ * Two translation families today:
+ *   1. State-change events → `config_option_update` (model picker refresh).
+ *   2. MCP lifecycle events → `LIFECYCLE_EVENT_METHOD` notification (Client status panel).
  */
 export function wireInternalEventHandlers(deps: EventWiringDeps): void {
-	const { events, conn, sessions, modelRegistry } = deps;
+	const { events, conn, sessions, modelRegistry, logger } = deps;
 	const emitUpdate = async (sessionId: string) => {
 		if (!sessions.has(sessionId)) return;
 		const configOptions = await modelRegistry.buildAllConfigOptions(sessionId);
@@ -42,6 +49,20 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 			await emitUpdate(e.sessionId);
 		},
 	]);
+
+	const notifyLifecycle = async (params: Record<string, unknown>): Promise<void> => {
+		try {
+			await (
+				conn as unknown as {
+					notification?(params: { method: string; params: Record<string, unknown> }): Promise<void>;
+				}
+			).notification?.({ method: LIFECYCLE_EVENT_METHOD, params });
+		} catch (err) {
+			logger.error("[bodhi-pi] lifecycle notify failed:", err);
+		}
+	};
+	events.appendHandlers("mcp_status_change", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
+	events.appendHandlers("mcp_tools_change", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 }
 
 /** Dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */

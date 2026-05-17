@@ -1,4 +1,3 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
@@ -36,7 +35,6 @@ type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, un
 export interface McpServiceDeps {
 	kvStore?: KvStore;
 	events: EventDispatcher;
-	conn: AgentSideConnection;
 	sessions: Map<string, SessionState>;
 	logger: BodhiPiLogger;
 	supportsStdio?: boolean;
@@ -62,7 +60,6 @@ export class McpService {
 		this.registry = new McpRegistry(deps.sessions, deps.provider);
 		this.lifecycle = new McpConnectionLifecycle({
 			events: deps.events,
-			conn: deps.conn,
 			sessions: deps.sessions,
 			provider: deps.provider,
 			logger: deps.logger,

@@ -111,7 +111,7 @@ Non-`sessionUpdate` notifications under a single method name `LIFECYCLE_EVENT_ME
 - `{type:"mcp_status_change", sessionId, slug, status, errorMessage?}`
 - `{type:"mcp_tools_change", sessionId, slug, toolNames}`
 
-Sent in addition to `EventDispatcher` emission so Clients that aren't watching the event bus still see status changes.
+**Mapping policy**: every wire-bound event flows through `src/acp/event-wiring.ts`. Services emit domain events on `EventDispatcher`; `event-wiring.ts` is the sole translation surface that calls `conn.sessionUpdate(...)` / `conn.notification(...)`. `McpConnectionLifecycle` emits `mcp_status_change` / `mcp_tools_change` to the dispatcher only — event-wiring registers handlers that forward them as `LIFECYCLE_EVENT_METHOD` notifications. This keeps SDK extraction tractable (one module owns wire translation) and lets extensions observe the same domain events without subscribing to a wire-shape.
 
 ## Error code conventions
 
@@ -208,15 +208,17 @@ sequenceDiagram
     M->>L: tryProviderConnect(slug, entry)
     L->>P: connect(slug, entry)
     alt connect throws
-      L->>ED: emit + LIFECYCLE_EVENT_METHOD (mcp_status_change error)
+      L->>ED: emit mcp_status_change (error)
+      Note over ED: event-wiring.ts handler forwards<br/>as LIFECYCLE_EVENT_METHOD notification
       L-->>M: throw -32603
     else success
       L-->>M: {toolNames}
       M->>S: persistStatus(slug, entry, "connected")
       M->>L: emitStatusBroadcast(slug, "connected")
-      L->>ED: emit + LIFECYCLE_EVENT_METHOD (mcp_status_change connected)
+      L->>ED: emit mcp_status_change (connected)
       M->>L: emitToolsBroadcast(slug, toolNames)
-      L->>ED: emit + LIFECYCLE_EVENT_METHOD (mcp_tools_change)
+      L->>ED: emit mcp_tools_change
+      Note over ED: event-wiring.ts handlers forward both<br/>as LIFECYCLE_EVENT_METHOD notifications
       Note over P,R: provider.onChange → registry.applyToAllSessions<br/>(rebuilds piAgent.state.tools for sessions that include slug)
       M-->>C: {tools}
     end

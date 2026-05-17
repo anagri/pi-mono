@@ -1,9 +1,8 @@
-import type { AgentSideConnection, McpServer } from "@agentclientprotocol/sdk";
+import type { McpServer } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
 import type { SessionState } from "../sessions/session-state.js";
-import { LIFECYCLE_EVENT_METHOD } from "../wire/constants.js";
 import type { McpConnectionProvider } from "./mcp-connection-provider.js";
 import type { McpRegistry } from "./mcp-registry.js";
 import { sanitizeSlug } from "./mcp-slug.js";
@@ -12,7 +11,6 @@ import type { McpServerEntry } from "./mcp-types.js";
 
 export interface McpConnectionLifecycleDeps {
 	events: EventDispatcher;
-	conn: AgentSideConnection;
 	sessions: Map<string, SessionState>;
 	provider: McpConnectionProvider;
 	logger: BodhiPiLogger;
@@ -20,10 +18,15 @@ export interface McpConnectionLifecycleDeps {
 	registry: McpRegistry;
 }
 
-/** Connection lifecycle (hydrate, connect/disconnect/reconnect retries) + status broadcasts. */
+/**
+ * Connection lifecycle (hydrate, connect/disconnect/reconnect retries) + status broadcasts.
+ *
+ * Status events are emitted to the `EventDispatcher` only — `src/acp/event-wiring.ts`
+ * translates them into `LIFECYCLE_EVENT_METHOD` wire notifications. Do NOT add a direct
+ * `conn.notification` call here; the single-mapping policy keeps SDK extraction tractable.
+ */
 export class McpConnectionLifecycle {
 	private readonly events: EventDispatcher;
-	private readonly conn: AgentSideConnection;
 	private readonly sessions: Map<string, SessionState>;
 	private readonly provider: McpConnectionProvider;
 	private readonly logger: BodhiPiLogger;
@@ -32,7 +35,6 @@ export class McpConnectionLifecycle {
 
 	constructor(deps: McpConnectionLifecycleDeps) {
 		this.events = deps.events;
-		this.conn = deps.conn;
 		this.sessions = deps.sessions;
 		this.provider = deps.provider;
 		this.logger = deps.logger;
@@ -103,7 +105,6 @@ export class McpConnectionLifecycle {
 		const payload: Record<string, unknown> = { type: "mcp_status_change", sessionId, slug, status };
 		if (errorMessage !== undefined) payload.errorMessage = errorMessage;
 		await this.events.emit(payload as never);
-		await this.notifyLifecycle(payload);
 	}
 
 	closeSession(sessionId: string): void {
@@ -142,7 +143,6 @@ export class McpConnectionLifecycle {
 			const payload: Record<string, unknown> = { type: "mcp_status_change", sessionId, slug, status };
 			if (errorMessage !== undefined) payload.errorMessage = errorMessage;
 			await this.events.emit(payload as never);
-			await this.notifyLifecycle(payload);
 		}
 	}
 
@@ -151,19 +151,6 @@ export class McpConnectionLifecycle {
 		for (const sessionId of this.sessions.keys()) {
 			const payload = { type: "mcp_tools_change" as const, sessionId, slug, toolNames };
 			await this.events.emit(payload);
-			await this.notifyLifecycle(payload);
-		}
-	}
-
-	private async notifyLifecycle(params: Record<string, unknown>): Promise<void> {
-		try {
-			await (
-				this.conn as unknown as {
-					notification(params: { method: string; params: Record<string, unknown> }): Promise<void>;
-				}
-			).notification?.({ method: LIFECYCLE_EVENT_METHOD, params });
-		} catch (err) {
-			this.logger.error("[bodhi-pi mcp] lifecycle notify failed:", err);
 		}
 	}
 }

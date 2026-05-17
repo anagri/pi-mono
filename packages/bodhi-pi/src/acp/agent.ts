@@ -209,6 +209,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			conn: this.conn,
 			sessions: this.sessions,
 			modelRegistry: this.modelRegistry,
+			logger,
 		});
 
 		this.kvService = new KvService({
@@ -218,7 +219,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 		this.mcpService = new McpService({
 			...pickDefined({ kvStore: config.kvStore }),
 			events: this.events,
-			conn: this.conn,
 			sessions: this.sessions,
 			logger,
 			supportsStdio: config.supportsMcpStdio ?? true,
