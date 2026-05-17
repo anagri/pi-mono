@@ -255,6 +255,14 @@ export interface McpToolsChangeEvent {
 	toolNames: string[];
 }
 
+export interface McpOAuthStatusChangeEvent {
+	type: "mcp_oauth_status_change";
+	sessionId: string;
+	slug: string;
+	status: "started" | "completed" | "failed" | "cancelled";
+	errorMessage?: string;
+}
+
 // === Session navigate ===
 
 export interface SessionNavigateEvent {
@@ -315,7 +323,8 @@ export type BodhiPiEvent =
 	| SessionForkEvent
 	| SessionCloneEvent
 	| McpStatusChangeEvent
-	| McpToolsChangeEvent;
+	| McpToolsChangeEvent
+	| McpOAuthStatusChangeEvent;
 
 export type BodhiPiEventType = BodhiPiEvent["type"];
 
@@ -363,4 +372,5 @@ export interface BodhiPiEventHandlers {
 	session_clone?: ((event: SessionCloneEvent) => Awaitable<void>)[];
 	mcp_status_change?: ((event: McpStatusChangeEvent) => Awaitable<void>)[];
 	mcp_tools_change?: ((event: McpToolsChangeEvent) => Awaitable<void>)[];
+	mcp_oauth_status_change?: ((event: McpOAuthStatusChangeEvent) => Awaitable<void>)[];
 }

@@ -52,17 +52,14 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 
 	const notifyLifecycle = async (params: Record<string, unknown>): Promise<void> => {
 		try {
-			await (
-				conn as unknown as {
-					notification?(params: { method: string; params: Record<string, unknown> }): Promise<void>;
-				}
-			).notification?.({ method: LIFECYCLE_EVENT_METHOD, params });
+			await conn.extNotification(LIFECYCLE_EVENT_METHOD, params);
 		} catch (err) {
 			logger.error("[bodhi-pi] lifecycle notify failed:", err);
 		}
 	};
 	events.appendHandlers("mcp_status_change", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 	events.appendHandlers("mcp_tools_change", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
+	events.appendHandlers("mcp_oauth_status_change", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 }
 
 /** Dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */

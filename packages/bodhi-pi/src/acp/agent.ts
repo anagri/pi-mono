@@ -231,7 +231,9 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessions: this.sessions,
 			logger,
 			supportsStdio: config.supportsMcpStdio ?? true,
-			provider: config.mcpConnectionProvider ?? createInProcessMcpConnectionProvider(),
+			provider:
+				config.mcpConnectionProvider ??
+				createInProcessMcpConnectionProvider(config.kvStore ? { kvStore: config.kvStore } : {}),
 			appendEntry: this.appendEntry.bind(this),
 		});
 		this.settingsService = new SettingsService({

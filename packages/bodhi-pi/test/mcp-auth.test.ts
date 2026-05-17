@@ -172,7 +172,7 @@ test("/mcp add rejects unknown auth mode", async () => {
 			url: "https://mcp.example.com/mcp",
 			auth: "oauth-dcr",
 		} as never),
-	).rejects.toThrow(/auth must be "public" or "http-param"/);
+	).rejects.toThrow(/auth must be "public", "http-param", or "oauth-preregistered"/);
 });
 
 test("/mcp add rejects non-string header values", async () => {

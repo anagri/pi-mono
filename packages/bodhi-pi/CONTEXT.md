@@ -81,7 +81,7 @@ A markdown document in `<cwd>/.bodhi-pi/skills/<name>/SKILL.md` with frontmatter
 A markdown prompt template in `<cwd>/.bodhi-pi/commands/<name>.md` (optionally nested). Frontmatter declares `description` and `argument-hint`; the body is expanded on slash-command invocation with `$1`/`$@`/`$ARGUMENTS`.
 
 **MCP server**:
-An external tool provider speaking the **Model Context Protocol**. Persisted under KV key `mcp/<slug>`. Transports: `http` (Streamable HTTP, all runtimes) and `stdio` (Node-spawnable Hosts only). HTTP auth is a top-level discriminator `auth: "public" | "http-param"`; `"http-param"` carries sibling `headers` and/or `queries` whose values are stored as `McpNamedSecret` and masked on ACP reads.
+An external tool provider speaking the **Model Context Protocol**. Persisted under KV key `mcp/<slug>`. Transports: `http` (Streamable HTTP, all runtimes) and `stdio` (Node-spawnable Hosts only). HTTP auth is a top-level discriminator `auth: "public" | "http-param" | "oauth-preregistered"`; `"http-param"` carries sibling `headers`/`queries`; `"oauth-preregistered"` carries pre-issued `clientId`/`clientSecret` plus explicit `authorizeUrl`/`tokenUrl` and runs an OAuth 2.1 authorization-code-with-PKCE flow. All secret values are stored as `McpNamedSecret` and masked on ACP reads.
 _Avoid_: "MCP" alone for the server (use "MCP server"); "MCP" alone for the connection (use "MCP connection").
 
 **Slug**:
@@ -89,6 +89,12 @@ The stable per-host identifier for an MCP server, derived from URL host or comma
 
 **Inclusion set**:
 The per-session set of MCP slugs whose tools are exposed to the Agent. Connections are global (one per `<host, slug>`); visibility is per-session. Persisted as the latest `mcp_inclusion_set` entry on the active branch.
+
+**OAuth flow (oauth-preregistered)**:
+OAuth 2.1 authorization-code-with-PKCE driven by the SDK's `auth()` orchestrator. bodhi-pi pre-populates `OAuthClientProvider.discoveryState()` with the user-supplied URLs to short-circuit RFC 8414 metadata discovery. The flow runs over three ACP extension methods: `_bodhi-pi/mcp/oauth/start` (build provider, capture authorize URL, persist PKCE codeVerifier under a CSRF state token in `OAuthStateKv`), `oauth/finish` (validate state, exchange code for tokens, persist), `oauth/cancel` (drop state entry). DCR and RFC 8707 resource indicators are out of scope.
+
+**OAuthStateKv**:
+A short-TTL kv wrapper under `mcp/oauth-state/<state>` storing the in-flight `codeVerifier`, `redirectUri`, and `slug` for a single OAuth flow. The state token doubles as a CSRF guard and as the routing key for multi-tenant `GET /oauth/callback` handlers (HTTP runtime). Default TTL 5 minutes; opportunistically pruned on every write.
 
 ### Built-ins & tools
 

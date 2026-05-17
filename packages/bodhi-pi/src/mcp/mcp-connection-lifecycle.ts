@@ -153,4 +153,19 @@ export class McpConnectionLifecycle {
 			await this.events.emit(payload);
 		}
 	}
+
+	async emitOauthStatusBroadcast(
+		slug: string,
+		status: "started" | "completed" | "failed" | "cancelled",
+		errorMessage?: string,
+	): Promise<void> {
+		// OAuth status fires even when no session is loaded — long-flow callbacks may land between
+		// session closes. Emit a sentinel sessionId "" so UI panels with no active session still see it.
+		const targets = this.sessions.size === 0 ? [""] : Array.from(this.sessions.keys());
+		for (const sessionId of targets) {
+			const payload: Record<string, unknown> = { type: "mcp_oauth_status_change", sessionId, slug, status };
+			if (errorMessage !== undefined) payload.errorMessage = errorMessage;
+			await this.events.emit(payload as never);
+		}
+	}
 }

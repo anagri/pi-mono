@@ -98,3 +98,24 @@ export const EXT_MCP_TOOLS = "_bodhi-pi/mcp/tools";
 export const EXT_MCP_INCLUDE = "_bodhi-pi/mcp/include";
 /** Remove `slug` from a session's inclusion set. No-op if absent. Does NOT close the global connection. */
 export const EXT_MCP_EXCLUDE = "_bodhi-pi/mcp/exclude";
+
+/**
+ * Start an oauth-preregistered authorization flow for `slug`. Params: `{slug, redirectUri?}`.
+ * Returns `{authorizeUrl, state}` for the caller to open in a browser, OR `{status: "completed"}`
+ * when the persisted tokens were still valid. Runtimes are responsible for capturing the redirect
+ * — CLI uses an ephemeral local http server, HTTP exposes `/oauth/callback`, browser uses a
+ * popup React route, chrome-ext uses `chrome.identity.launchWebAuthFlow`.
+ */
+export const EXT_MCP_OAUTH_START = "_bodhi-pi/mcp/oauth/start";
+/**
+ * Complete the flow with the authorization code captured by the runtime's redirect handler.
+ * Params: `{slug, code, state}`. Exchanges the code for tokens via the SDK's `auth()` driver,
+ * persists the tokens under `auth.tokens`, emits `mcp_oauth_status_change{status:"completed"}`.
+ */
+export const EXT_MCP_OAUTH_FINISH = "_bodhi-pi/mcp/oauth/finish";
+/**
+ * Abandon an in-flight oauth-preregistered flow. Params: `{slug, state}`. Deletes the
+ * `OAuthStateKv` entry; emits `mcp_oauth_status_change{status:"cancelled"}`. A later
+ * `oauth/finish{state}` errors with `-32602`.
+ */
+export const EXT_MCP_OAUTH_CANCEL = "_bodhi-pi/mcp/oauth/cancel";

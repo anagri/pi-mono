@@ -1,28 +1,67 @@
-# bodhi-pi MCP — `auth = oauth-preregistered` implementation plan
+# bodhi-pi MCP — `auth = "oauth-preregistered"` implementation plan
 
 ## Context
 
-The prompt at `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-preregistered.md` asks to re-introduce a third `McpAuthConfig` discriminator — `oauth-preregistered` — alongside the just-landed `"public"` and `"http-param"` modes. A previous OAuth implementation existed (deleted in `6a3966f4`) but shipped without flow code, validation, or e2e coverage, and was flagged by `ai-docs/reviews/2026-05-16-bodhi-pi-mcp-cleanup.md` findings A.5 (missing `clientId` validation) and A.6 (unstructured auth attachment).
+The prompt at `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-preregistered.md` asks to re-introduce OAuth 2.1 authorization-code-with-PKCE as a third `McpAuthConfig` discriminator, alongside the just-landed `"public"` and `"http-param"` modes. A previous attempt (deleted in commit `6a3966f4`) shipped the persisted shape and a `KvOAuthProvider` skeleton but had no flow code, no validation, and no e2e coverage; review `ai-docs/reviews/2026-05-16-bodhi-pi-mcp-cleanup.md` findings A.5/A.6 flag the missing `clientId` validation and the unstructured per-mode auth attachment.
 
-The contract is **OAuth 2.1 authorization-code-with-PKCE only**, with **no** DCR, **no** RFC 8414 metadata discovery, **no** RFC 8707 resource indicators, **no** stdio support. The user provides `authorize_url`, `token_url`, `client_id`, optional `client_secret`, optional `scopes`, optional `redirect_uri` override at `/mcp add` time; the host runs the interactive flow and persists `{access, refresh?, expiresAt}` under `auth.tokens`.
+**Contract.** OAuth 2.1 authorization-code-with-PKCE only. **No** DCR, **no** RFC 8414 metadata discovery, **no** RFC 8707 resource indicators, **no** stdio support. The user passes `authorize_url`, `token_url`, `client_id`, optional `client_secret`, optional `scopes`, optional `redirect_uri` override at `/mcp add`; the host runs the flow and persists `{access, refresh?, expiresAt}` under `auth.tokens`. Trunk-based per `packages/bodhi-pi/CLAUDE.md` § Trunk-based development — each commit lands green on `main`.
 
-Locked decisions resolved before planning:
-1. **Chrome-ext runtime gets a new MV3 background service worker** with `"identity"` permission, using `chrome.identity.launchWebAuthFlow`. Today's chrome-ext has no SW (only `worker.ts` re-exporting from browser bootstrap); this is net-new architecture.
-2. **OAuth flow code wraps `@modelcontextprotocol/sdk/client/auth.OAuthClientProvider`** rather than hand-rolling PKCE / token exchange. The SDK normally discovers server metadata; we short-circuit by pre-populating `provider.discoveryState()` with the user-provided URLs so it never hits `/.well-known/oauth-authorization-server`.
-3. **6 commits, depth-first per runtime**, each independently green on `main` per `packages/bodhi-pi/CLAUDE.md` § Trunk-based development.
-
-Recommendations adopted from the prompt's "Open questions":
-- **#1 Refresh trigger**: both eager (60s slack on connect) + lazy (401 retry).
-- **#5 Flow timeout**: 5 minutes for state TTL.
-- **#6 HTTP base URL**: `--public-base-url` startup flag with `Host` header fallback.
-- **#10 Bearer attachment**: read kv per request via a `requestInit` builder closure.
-- **#12 Token endpoint auth method**: `tokenAuthMethod?: "basic" | "post"`, default `"basic"`.
+**Open-question resolutions adopted** (from the prompt's "Open questions" section):
+- **#1 Refresh trigger** — eager (60s slack on connect) **and** lazy (401 retry).
+- **#5 Flow timeout** — 5 minutes for state TTL.
+- **#6 HTTP base URL** — `--public-base-url` startup flag with `Host`-header fallback.
+- **#8 Chrome-ext** — new MV3 background service worker (net-new architecture, see below).
+- **#10 Bearer attachment** — per-request kv read via a `requestInit` builder closure.
+- **#12 Token endpoint auth method** — `tokenAuthMethod?: "basic" | "post"`, default `"basic"`.
 
 ## Architecture
 
-### Persisted shape — `McpAuthOAuthPreregisteredConfig`
+```mermaid
+flowchart TB
+  subgraph Persisted["McpAuthConfig persisted shape (mcp-types.ts)"]
+    A["{ mode: 'oauth-preregistered',<br/>authorizeUrl, tokenUrl, clientId,<br/>clientSecret?, scopes?, redirectUri?,<br/>tokenAuthMethod?, tokens? }"]
+  end
 
-Add a fourth variant to the discriminated union in `packages/bodhi-pi/src/mcp/mcp-types.ts`:
+  subgraph Core["src/mcp/ — runtime-agnostic"]
+    P[KvOAuthProvider<br/>OAuthClientProvider impl<br/>+ pending URL capture]
+    S[McpService<br/>oauth/{start,finish,cancel} handlers]
+    L[McpConnectionLifecycle<br/>mcp_oauth_status_change emitter]
+    SK[OAuthStateKv<br/>5-min TTL: codeVerifier per slug]
+    C[mcp-client.ts buildHttpTransport<br/>attacher strategy table:<br/>public / http-param / oauth-preregistered]
+  end
+
+  subgraph Wire["ACP wire surface"]
+    W1[_bodhi-pi/mcp/oauth/start]
+    W2[_bodhi-pi/mcp/oauth/finish]
+    W3[_bodhi-pi/mcp/oauth/cancel]
+    W4[lifecycle: mcp_oauth_status_change]
+  end
+
+  subgraph Runtimes["Per-runtime: code capture + URL opening"]
+    R1[CLI host<br/>ephemeral http://127.0.0.1:7777<br/>spawn open/xdg-open/start]
+    R2[HTTP+WS host<br/>GET /oauth/callback route<br/>client window.open popup]
+    R3[Browser host<br/>worker → main thread → window.open<br/>popup React route → postMessage]
+    R4[Chrome-ext host<br/>NEW MV3 background SW<br/>chrome.identity.launchWebAuthFlow]
+  end
+
+  subgraph Fixture["e2e/helpers/oauth-mcp-server.ts (new)"]
+    F[/authorize + /token + /mcp<br/>PKCE-validating + Bearer-gated]
+  end
+
+  Persisted --> Core
+  S --> P
+  S --> L
+  S --> SK
+  C --> P
+  S --> Wire
+  L --> W4
+  Wire --> Runtimes
+  Runtimes -.flow.-> F
+```
+
+### Persisted shape — extend `McpAuthConfig` union
+
+In `packages/bodhi-pi/src/mcp/mcp-types.ts`:
 
 ```ts
 export type McpAuthMode = "public" | "http-param" | "oauth-preregistered";
@@ -32,7 +71,7 @@ export interface McpAuthOAuthPreregisteredConfig {
   authorizeUrl: string;
   tokenUrl: string;
   clientId: string;
-  clientSecret?: McpNamedSecret;          // tagged secret:true, masked on ACP reads
+  clientSecret?: McpNamedSecret;          // tagged secret:true, auto-masked
   scopes?: string[];
   redirectUri?: string;                   // optional per-runtime override
   tokenAuthMethod?: "basic" | "post";     // default "basic"
@@ -50,257 +89,254 @@ export type McpAuthConfig =
   | McpAuthOAuthPreregisteredConfig;
 ```
 
-`McpNamedSecret` auto-masking via `packages/bodhi-pi/src/kv/kv-store.ts:20-36` (`maskSecrets`) already handles `clientSecret` and `tokens.access` / `tokens.refresh`.
+Extend `parseAuthConfigStored` and `serializeAuthConfig` symmetrically. `McpNamedSecret` masking via `maskSecrets` (`packages/bodhi-pi/src/kv/kv-store.ts:20-36`) already handles any `{value, secret:true}` node — `clientSecret`, `tokens.access`, `tokens.refresh` will mask automatically.
 
-### Validation in `parseAuthInput`
+In `src/client/types.ts` (line 102 comment is already a TODO marker), extend `McpAuthMode` and `McpAddHttpParams` to include the new variant, and extend the body builder in `src/client/client.ts:296-313` (`mcpAdd`) to forward the new fields.
 
-Extend `packages/bodhi-pi/src/mcp/mcp-service.ts:274-310` to:
-- Accept `"oauth-preregistered"` as a third `auth` value.
-- Reject the variant when `transport === "stdio"` → `-32602`.
-- Require `authorizeUrl`, `tokenUrl`, `clientId` strings → `-32602` if missing or empty (closes A.5).
-- Validate `authorizeUrl` and `tokenUrl` are HTTPS URLs (allow `http://localhost*` for fixture) → `-32602`.
-- Wrap `clientSecret` (if present) into `McpNamedSecret` via `recordToNamedSecrets` pattern.
-- Reject sibling fields not part of this variant (`headers`, `queries`) → `-32602`.
+### Validation — extend `parseAuthInput` (closes A.5)
 
-### Auth attachment via strategy table
+Extend `packages/bodhi-pi/src/mcp/mcp-service.ts:269-309` (`parseAuthInput`):
+- Accept `"oauth-preregistered"` as the third valid `auth` value.
+- Reject when `transport === "stdio"` → `-32602`.
+- Require non-empty `authorize_url`, `token_url`, `client_id` strings → `-32602` if any missing.
+- Validate both URLs parse and use `https:` (allow `http://localhost*` / `http://127.0.0.1*` for fixture) → `-32602` otherwise.
+- Validate `scopes` is `string[]` if present.
+- Validate `redirect_uri` is a valid URL if present.
+- Validate `token_auth_method` is `"basic"` or `"post"` if present.
+- Reject sibling `headers` / `queries` → `-32602` (oauth-preregistered does not accept them).
+- Wrap `client_secret` (if present) as `{ name: "clientSecret", value, secret: true }`.
+- Reject persisted `tokens` field at add time — only the OAuth handler may write it.
 
-Refactor `packages/bodhi-pi/src/mcp/mcp-client.ts:72-86` (`buildHttpTransport`) from the current inline `if (auth.mode === "http-param")` to a `Record<McpAuthMode, AuthAttacher>` strategy table (closes A.6). Each attacher:
+### Auth attachment — refactor `buildHttpTransport` to strategy table (closes A.6)
 
-- `public` → no-op.
-- `http-param` → append queries to `URL.searchParams`, set `requestInit.headers`.
-- `oauth-preregistered` → set `requestInit` to a **function-style headers builder** that reads `auth.tokens.access.value` from the in-process `kvStore` on every request and returns `{ Authorization: "Bearer <access>" }`. This is the per-request kv read recommended in #10.
-
-The transport keeps a reference to its `slug` so the builder can re-read kv after a refresh writes new tokens back.
-
-### Flow code — `OAuthClientProvider` wrapper
-
-New file `packages/bodhi-pi/src/mcp/mcp-oauth-provider.ts`:
+Refactor `packages/bodhi-pi/src/mcp/mcp-client.ts:72-86` from the inline `if (auth.mode === "http-param")` to a per-mode attacher table:
 
 ```ts
-export class KvOAuthProvider implements OAuthClientProvider {
-  constructor(
-    private readonly kv: KvStore,
-    private readonly slug: string,
-    private readonly cfg: McpAuthOAuthPreregisteredConfig,
-    private readonly redirectUriResolver: () => string,
-    private readonly stateKv: OAuthStateKv,           // short-TTL kv, ~5 min
-  ) {}
-
-  get redirectUrl() { return this.redirectUriResolver(); }
-  get clientMetadata(): OAuthClientMetadata {
-    return {
-      redirect_uris: [this.redirectUrl],
-      grant_types: ["authorization_code", "refresh_token"],
-      response_types: ["code"],
-      token_endpoint_auth_method: this.cfg.tokenAuthMethod ?? "client_secret_basic",
-      scope: this.cfg.scopes?.join(" "),
-    };
-  }
-  clientInformation() { return { client_id: this.cfg.clientId, client_secret: this.cfg.clientSecret?.value }; }
-  // saveClientInformation deliberately undefined → SDK skips DCR
-
-  // Pre-populate discovery to bypass RFC 8414:
-  discoveryState() { return {
-    authorizationServerUrl: this.cfg.authorizeUrl,
-    authorizationServerMetadata: {
-      authorization_endpoint: this.cfg.authorizeUrl,
-      token_endpoint: this.cfg.tokenUrl,
-      response_types_supported: ["code"],
-      code_challenge_methods_supported: ["S256"],
-    },
-    resourceMetadata: undefined,                      // skip RFC 8707
-  }; }
-  saveDiscoveryState() { /* no-op, ours is static */ }
-
-  tokens() { return this.cfg.tokens && {
-    access_token: this.cfg.tokens.access.value,
-    refresh_token: this.cfg.tokens.refresh?.value,
-    token_type: this.cfg.tokens.tokenType ?? "Bearer",
-    expires_in: this.cfg.tokens.expiresAt ? Math.max(0, Math.floor((this.cfg.tokens.expiresAt - Date.now()) / 1000)) : undefined,
-  }; }
-  async saveTokens(tokens) {
-    // write back to kvStore as McpServerEntry.auth.tokens, secret:true on access/refresh
-    const entry = await readEntry(this.kv, this.slug);
-    entry.auth.tokens = {
-      access: { name: "access", value: tokens.access_token, secret: true },
-      refresh: tokens.refresh_token ? { name: "refresh", value: tokens.refresh_token, secret: true } : undefined,
-      expiresAt: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined,
-      tokenType: tokens.token_type,
-    };
-    await this.kv.set(`mcp/${this.slug}`, serializeMcpServerEntry(entry));
-  }
-
-  redirectToAuthorization(url) { /* delegated to runtime — see per-runtime table */ }
-
-  async saveCodeVerifier(v) { await this.stateKv.set(slug, { codeVerifier: v, expiresAt: Date.now() + 5*60*1000 }); }
-  async codeVerifier() { return (await this.stateKv.get(slug)).codeVerifier; }
-}
+type AuthAttacher = (url: URL, opts: TransportOpts, ctx: AttachContext) => void;
+const ATTACHERS: Record<McpAuthMode, AuthAttacher> = {
+  "public": () => {},
+  "http-param": attachHttpParam,
+  "oauth-preregistered": attachOAuthBearer,
+};
 ```
 
-The `redirectToAuthorization` mechanics differ per runtime (see below); the provider exposes a hook the runtime overrides.
+`attachOAuthBearer` sets `opts.requestInit` to a closure that reads the latest `auth.tokens.access.value` from the in-process kv per call. The transport keeps a `(kvStore, slug)` reference so the builder re-reads after refresh writes back. Signature change: `buildHttpTransport` must accept the kv handle for the oauth path — pass it through `connectMcp` via `ConnectOptions` in `mcp-client.ts:18-23`. Refresh on 401 (lazy) and eager 60s-slack check go here too (commit 6).
 
-### Wire surface — ACP methods + lifecycle event
+### Flow code — port `KvOAuthProvider` from commit `6a3966f4^`
 
-Three new ACP methods registered in `mcp-service.ts:76-88`:
+New file `packages/bodhi-pi/src/mcp/mcp-oauth-provider.ts`. The deleted shape (`6a3966f4^:packages/bodhi-pi/src/mcp/mcp-oauth-host-api.ts`) is the right template — implements `OAuthClientProvider` from `@modelcontextprotocol/sdk/client/auth.js`, captures the authorize URL into `this.pending` rather than injecting a callback, then a top-level `runAuthFlow(provider, serverUrl, code?)` driver calls SDK's `auth()`.
 
-```text
-_bodhi-pi/mcp/oauth/start    {slug} → {authorize_url, state} | {status: "completed"}
-_bodhi-pi/mcp/oauth/finish   {slug, code, state} → {status: "completed" | "failed", errorMessage?}
-_bodhi-pi/mcp/oauth/cancel   {slug, state} → {ok: true}
+**Port, don't undelete.** Differences from the deleted version:
+- Constructor takes `{ kvStore, slug, redirectUriResolver: () => string, stateKv: OAuthStateKv }` instead of `redirectUrl` directly — runtimes inject the redirect resolver because the URL varies (e.g., HTTP `Host`-header fallback) and the resolver runs after the runtime is established.
+- `saveCodeVerifier` / `codeVerifier` write to the **short-TTL kv** (`OAuthStateKv`), not in-memory `this.pending`. This matters because HTTP `/oauth/callback` may run in a different agent rebuild than `oauth/start`.
+- `clientMetadata.token_endpoint_auth_method` reads from `cfg.tokenAuthMethod ?? "client_secret_basic"` instead of hardcoded `"none"`.
+- `clientInformation()` returns `{ client_id, client_secret? }` directly from the cfg (no kv re-read needed — the values live on the in-memory cfg the service passes in).
+- `saveClientInformation` deliberately throws (we skip DCR; if SDK ever calls it, that's a bug we want to see).
+
+**Discovery short-circuit.** SDK's `auth()` normally hits `/.well-known/oauth-authorization-server`. Two viable paths to skip it — the implementation commit (commit 1) must verify which the installed SDK version supports against `node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js` and pick one:
+- **(preferred)** SDK exposes `saveAuthorizationServerMetadata` on the provider interface; implement `discoveryMetadata()` (or whatever the SDK version names it) to return a static `{ authorization_endpoint, token_endpoint, response_types_supported: ["code"], code_challenge_methods_supported: ["S256"] }`.
+- **(fallback)** Wrap `auth()` with a pre-call that primes any module-level cache, or hand-roll the PKCE + token POST without `auth()` if no hook exists. The deleted code shipped without proving this end-to-end — that's the gap commit 1 must close.
+
+### `OAuthStateKv` — short-TTL state store
+
+New file `packages/bodhi-pi/src/mcp/mcp-oauth-state-kv.ts`. Wraps the host's `KvStore` under a `mcp/oauth-state/<slug>` prefix. Stores `{ codeVerifier, redirectUri, expiresAt }`; `get(slug)` returns `undefined` if `Date.now() > expiresAt`. TTL 5 minutes. `set(slug, …)` also opportunistically prunes expired sibling entries (bounded scan over `mcp/oauth-state/`).
+
+### Wire surface — new ACP methods + lifecycle event
+
+Three new method names in `src/wire/constants.ts`:
+
+```ts
+export const EXT_MCP_OAUTH_START  = "_bodhi-pi/mcp/oauth/start";
+export const EXT_MCP_OAUTH_FINISH = "_bodhi-pi/mcp/oauth/finish";
+export const EXT_MCP_OAUTH_CANCEL = "_bodhi-pi/mcp/oauth/cancel";
 ```
 
-`oauth/start` calls `auth(provider, { serverUrl: cfg.tokenUrl })`:
-- If SDK returns `"AUTHORIZED"` (tokens cached + refreshable) → return `{status: "completed"}`.
-- If SDK returns `"REDIRECT"` → provider captured the authorize URL; runtime returns it.
+Register in `mcp-service.ts:76-88`:
 
-`oauth/finish` calls `auth(provider, { serverUrl, authorizationCode: code })` after validating `state`.
+| Method | Params | Result | Behavior |
+|---|---|---|---|
+| `oauth/start` | `{slug, redirectUri?}` | `{authorizeUrl, state} \| {status:"completed"}` | reads entry → builds `KvOAuthProvider` → `runAuthFlow(serverUrl=tokenUrl)`. If SDK returns `AUTHORIZED` (cached tokens, no flow needed) returns `{status:"completed"}`; otherwise returns `{authorizeUrl, state}` and persists `codeVerifier` to `OAuthStateKv`. |
+| `oauth/finish` | `{slug, code, state}` | `{status:"completed" \| "failed", errorMessage?}` | validates `state`, loads `codeVerifier`, runs `auth(provider, {serverUrl, authorizationCode: code})`, emits `mcp_oauth_status_change{status:"completed"}` on success or `failed` with `errorMessage`. |
+| `oauth/cancel` | `{slug, state}` | `{ok: true}` | deletes the `OAuthStateKv` entry, emits `mcp_oauth_status_change{status:"cancelled"}`. Subsequent `oauth/finish{state}` returns `-32602`. |
 
-New lifecycle event piggybacks the existing `LIFECYCLE_EVENT_METHOD` notification path in `mcp-connection-lifecycle.ts:111-123`:
-
-```text
-mcp_oauth_status_change      {slug, status: "started" | "completed" | "failed" | "cancelled", errorMessage?}
-```
-
-`mcp_status_change` keeps owning connect/disconnect; oauth gets its own channel so UIs can render the "click to authenticate" affordance independently.
+Add `mcp_oauth_status_change` emitter to `src/mcp/mcp-connection-lifecycle.ts:136-147` mirroring `emitStatusBroadcast`. Use the same `EventDispatcher` path (`src/acp/event-wiring.ts` already translates events into `LIFECYCLE_EVENT_METHOD` wire notifications — no direct `conn.notification` per the comment at `mcp-connection-lifecycle.ts:21-27`).
 
 ### Per-runtime architecture
 
-| Runtime | `redirectToAuthorization` | Code capture | Code → token exchange |
+| Runtime | URL opening | Code capture | Token POST |
 |---|---|---|---|
-| **CLI** | print URL + `child_process.spawn("open"/"xdg-open"/"start", [url])` | host: ephemeral `http.createServer` bound `127.0.0.1:7777`, `/callback` handler, released after flow | host (SDK `auth()`) |
-| **HTTP+WS** | client (React) `window.open(url, "oauth")` | host: new `GET /oauth/callback` route on existing native http server; `state` carries `{userId, slug}` | host (SDK `auth()`) |
-| **Browser** | client (React) `window.open(url, "oauth", "popup")` | client: dedicated `/oauth/callback` React route in popup, `window.opener.postMessage({code, state})`, then close; main thread relays to Worker via the existing MessagePort | host (Worker, SDK `auth()`) |
-| **Chrome-ext** | host (SW) `chrome.identity.launchWebAuthFlow({url, interactive: true})` returns full redirect URL | host (SW) parses returned URL | host (SW, SDK `auth()`) |
+| **CLI** | host: spawn `open` / `xdg-open` / `start` | host: ephemeral `http.createServer` bound `127.0.0.1:7777` (or `cfg.redirectUri`'s port), `/callback` handler, released after flow | host |
+| **HTTP+WS** | client (React) `window.open(url, "oauth")` | host: new `GET /oauth/callback` route; `state` carries `{userId, slug}`; dispatches into per-user `McpService` | host |
+| **Browser** | main thread `window.open(url, "oauth", "popup")` (forwarded from Worker via existing event channel) | client: `/oauth/callback` React route in popup, `window.opener.postMessage({code,state})`, then `window.close()`; main thread relays to Worker via existing ACP MessagePort as `_bodhi-pi/mcp/oauth/finish` | host (Worker) |
+| **Chrome-ext** | host (new background SW) `chrome.identity.launchWebAuthFlow({url, interactive: true})` returns full redirect URL synchronously | host (SW) parses returned URL | host (SW) |
 
-**CLI redirect_uri** defaults to `http://localhost:7777/callback`, user-overridable per `/mcp add`. Port collision → `oauth/start` returns `error: port 7777 in use; pass redirect_uri=… on /mcp add to override`.
+**CLI redirect_uri** defaults to `http://localhost:7777/callback`. Port collision → `oauth/start` returns `-32603` with `port 7777 in use; pass redirect_uri=… on /mcp add to override`.
 
-**HTTP+WS redirect_uri** = `${publicBaseUrl}/oauth/callback`. `publicBaseUrl` resolution order:
-1. `--public-base-url` startup flag on `test-apps/http/src/host/server.ts`.
-2. `Host` header on the inbound `/acp` request that triggered `oauth/start`.
+**HTTP+WS redirect_uri** = `${publicBaseUrl}/oauth/callback`. `publicBaseUrl` resolved in `test-apps/http/src/host/cli-args.ts` + `server.ts:35-50` with this precedence:
+1. `--public-base-url` startup flag (parsed in `cli-args.ts`).
+2. `Host` header of the inbound `/acp` request that triggered `oauth/start`.
 
-**Browser redirect_uri** = `${window.location.origin}/oauth/callback`. The main thread passes `origin` to the Worker via the existing `InitMessage` in `bootstrap-worker.ts:44-72` (new field; net-new wiring).
+The route handler in `server.ts:182-213` (`handleRequest`) gets a new branch above the `/acp` branch that decodes `state`, looks up `{userId, slug}`, and calls `_bodhi-pi/mcp/oauth/finish` against the per-user `McpService`. Returns minimal HTML "you can close this window."
 
-**Chrome-ext redirect_uri** = `chrome.identity.getRedirectURL()` → `https://<ext-id>.chromiumapp.org/`. Document the constraint that some OAuth providers reject the `chromiumapp.org` scheme.
+**Browser redirect_uri** = `${window.location.origin}/oauth/callback`. The main thread already passes adapter config to the Worker via `InitMessage` (`bootstrap-worker.ts:166-184`); add `clientOrigin: string` to the `InitMessage` type (defined in `@bodhiapp/bodhi-pi-test-app-utils/worker-message-types`) and pass `window.location.origin` from `adapter.ts:74-91`. Add a `/oauth/callback` route to the React app entry (`test-apps/browser/src/client/react/main.tsx` and `App.tsx`).
 
-## Fixture OAuth server
+**Chrome-ext redirect_uri** = `chrome.identity.getRedirectURL()`. Document the constraint that some OAuth providers reject the `chromiumapp.org` scheme.
 
-New file `packages/bodhi-pi/e2e/helpers/oauth-mcp-server.ts`, modeled on `e2e/helpers/auth-mcp-server.ts`:
+### Chrome-ext: new MV3 background service worker (net-new architecture)
 
-- `/authorize` — validates `code_challenge`, `client_id`, `state`; redirects to `redirect_uri?code=<random>&state=<state>`. For Playwright drives, returns a 1-button HTML "Approve" page; for CLI test harness, auto-approves with `?auto=1` query.
-- `/token` — accepts both `client_secret_basic` (header) and `client_secret_post` (body), validates `code_verifier` against the original challenge, returns `{access_token, refresh_token, token_type, expires_in: 3600}`.
-- `/mcp` — same as `auth-mcp-server.ts` but requires `Authorization: Bearer <access>`.
-- Spawned by `e2e/global-setup.ts` alongside the existing fixtures (next free port).
+Today's chrome-ext has no SW — only a Web Worker (`test-apps/chrome-ext/src/host/worker.ts`). For `chrome.identity.launchWebAuthFlow`, add:
 
-CORS headers identical to `auth-mcp-server.ts` (already includes `Authorization`, `Access-Control-Allow-Origin: *`).
+1. `test-apps/chrome-ext/manifest.json`: add `"identity"` to a new top-level `"permissions": ["identity"]` array, and register `"background": { "service_worker": "background-sw.js", "type": "module" }`. Update `content_security_policy.extension_pages` if needed.
+2. `test-apps/chrome-ext/src/host/background-sw.ts` — new file. Minimal RPC bridge: `chrome.runtime.onMessage` listens for `{kind: "oauth-launch", url}` from the Web Worker, calls `chrome.identity.launchWebAuthFlow({url, interactive: true})`, replies with `{redirectUrl}` or `{error}`.
+3. Wire the SW into the build in `test-apps/chrome-ext/vite.config.ts` as a separate rollup input so it lands at `dist/background-sw.js`.
+4. Worker-side: in the chrome-ext-specific path inside `bootstrap-worker.ts` (or a chrome-ext-specific resolver injected via Init), the `KvOAuthProvider`'s redirect resolver returns `chrome.identity.getRedirectURL()`; the `oauth/start` handler, after `runAuthFlow` returns the authorize URL, sends `chrome.runtime.sendMessage({kind: "oauth-launch", url})` to the SW, awaits the reply, parses `?code=&state=` from `redirectUrl`, and calls `oauth/finish` in-process.
+
+The Web Worker can call `chrome.runtime.sendMessage` even though it's not an SW context — that's the bridge.
+
+## Fixture OAuth + MCP server
+
+New file `packages/bodhi-pi/e2e/helpers/oauth-mcp-server.ts`, modeled on `e2e/helpers/auth-mcp-server.ts` (same CORS headers, same `/mcp` shape, same `whoami` tool):
+
+- `GET /authorize` — validates `code_challenge`, `client_id`, `state`. For Playwright drives, renders a 1-button HTML "Approve" page that POSTs to `/authorize/approve`. For test harness auto-approval (cli e2e), accepts `?auto=1` query and redirects immediately to `redirect_uri?code=…&state=…`.
+- `POST /token` — accepts both `client_secret_basic` (Authorization header) and `client_secret_post` (body). Validates `code_verifier` against the stored challenge. Returns `{access_token, refresh_token, token_type: "Bearer", expires_in}`. Supports a special `?expires_in=1` to issue 1-second tokens (refresh-test fixture, commit 6).
+- `POST /mcp` — same as `auth-mcp-server.ts` but rejects without `Authorization: Bearer <access>`. The `whoami` tool returns `"authenticated via bearer"`.
+
+Spawned alongside the existing fixtures in `e2e/global-setup.ts` and `e2e-ui/global-setup.ts` (next free port: e2e uses 33347, e2e-ui uses 33348 — sibling to `auth-mcp-server`'s 33346/33347).
 
 ## 6-commit slice plan
 
-Each commit lands green on `main`. Spec updates land in the same commit that touches the ACP surface (per `packages/bodhi-pi/CLAUDE.md` § Trunk-based development).
+Each commit lands green on `main` (`npm run check`, `npm test`). Spec updates land in the same commit that touches the ACP surface, per `packages/bodhi-pi/CLAUDE.md`.
 
-### Commit 1 — types + fixture server + state machine integration tests
+### Commit 1 — types + validation + flow code + fixture server + integration tests
 
-- Extend `McpAuthConfig` union and `parseAuthInput` (closes A.5).
-- Refactor `buildHttpTransport` to strategy table keyed by `mode` (closes A.6); `oauth-preregistered` attacher reads kv per request.
-- Implement `KvOAuthProvider` in `src/mcp/mcp-oauth-provider.ts`; pre-populated `discoveryState()` short-circuits SDK discovery.
-- Write `e2e/helpers/oauth-mcp-server.ts`; integrate into `e2e/global-setup.ts` and `e2e-ui/global-setup.ts`.
-- Integration tests in `test/mcp-oauth.test.ts`: `parseAuthInput` happy/error paths, `KvOAuthProvider` state machine round-trip using fixture server, kv masking of `clientSecret` + `tokens.access`/`tokens.refresh`.
-- Update `packages/bodhi-pi/CONTEXT.md` glossary with: OAuth tokens, PKCE, redirect URI, state parameter.
-- Update `ai-docs/specs/bodhi-pi/mcp.md` § Auth table with `oauth-preregistered` row.
+- Extend `McpAuthConfig` union in `mcp-types.ts`; extend parsers/serializers.
+- Extend `parseAuthInput` in `mcp-service.ts` (closes A.5).
+- Refactor `buildHttpTransport` in `mcp-client.ts` to strategy table (closes A.6); thread `kvStore` through `ConnectOptions`; `oauth-preregistered` attacher reads kv per request.
+- Implement `KvOAuthProvider` in `src/mcp/mcp-oauth-provider.ts` (port from `6a3966f4^`, adapt per § Flow code).
+- Implement `OAuthStateKv` in `src/mcp/mcp-oauth-state-kv.ts`.
+- Implement `runAuthFlow(provider, serverUrl, code?)` driver in same file as provider. **Verify SDK discovery short-circuit path against installed `@modelcontextprotocol/sdk` v1.29+** during this commit.
+- New `e2e/helpers/oauth-mcp-server.ts` fixture; wire into `e2e/global-setup.ts` and `e2e-ui/global-setup.ts`.
+- Extend `src/client/types.ts` `McpAuthMode` union + `McpAddHttpParams`; extend `src/client/client.ts:296-313` body builder.
+- Tests: `packages/bodhi-pi/test/mcp-oauth.test.ts` — `parseAuthInput` happy + every error path, masking (`clientSecret` masked on `/mcp/list`), `KvOAuthProvider` state machine round-trip against fixture server (start → finish → tokens persisted → masked on read → bearer attached on next `connect`), `OAuthStateKv` TTL.
+- Spec: update `ai-docs/specs/bodhi-pi/mcp.md` § Auth table with the `oauth-preregistered` row (lines 100-121); add the new persisted shape under line 34.
 
 ### Commit 2 — core ACP handlers + lifecycle event
 
-- Register `_bodhi-pi/mcp/oauth/start`, `_bodhi-pi/mcp/oauth/finish`, `_bodhi-pi/mcp/oauth/cancel` in `mcp-service.ts`.
-- Implement runtime-pluggable `RedirectAuthorizer` interface (default impl throws "no runtime registered").
-- Add `mcp_oauth_status_change` to lifecycle event broadcaster in `mcp-connection-lifecycle.ts`.
-- Add `OAuthStateKv` with 5-min TTL for `codeVerifier` + `expiresAt` per slug; mounted under `mcp/oauth-state/<slug>` kv prefix.
-- Integration tests in `test/mcp-oauth-handlers.test.ts`: `oauth/start` returns URL, `oauth/finish` exchanges code, `oauth/cancel` clears state, `state` expiry honored, concurrent flows per user.
-- Update `ai-docs/specs/bodhi-pi/acp.md` with the three new EXT rows and the lifecycle notification row.
+- Add `EXT_MCP_OAUTH_{START,FINISH,CANCEL}` to `src/wire/constants.ts:84-100`.
+- Register the three handlers in `mcp-service.ts:76-88` (`McpService.register`).
+- Add `mcp_oauth_status_change` emitter to `mcp-connection-lifecycle.ts:136-147` mirroring `emitStatusBroadcast`. Wire it through `src/acp/event-wiring.ts` so it lands as a `LIFECYCLE_EVENT_METHOD` notification.
+- Mount `OAuthStateKv` under `mcp/oauth-state/<slug>` kv prefix.
+- Tests: `packages/bodhi-pi/test/mcp-oauth-handlers.test.ts` — `oauth/start` returns URL + state, `oauth/finish` exchanges code + emits completed, `oauth/cancel` deletes state + emits cancelled, expired state → `-32602`, `oauth/finish` with mismatched state → `-32602`, concurrent flows per user don't interfere.
+- Spec: update `ai-docs/specs/bodhi-pi/acp.md` § MCP table (line 81+) with the three new EXT rows + the `mcp_oauth_status_change` lifecycle notification row.
 
 ### Commit 3 — CLI runtime + cli-headless e2e
 
-- Wire `RedirectAuthorizer` in `test-apps/cli/src/host/cli.ts` to: spawn ephemeral `http.createServer` on `127.0.0.1:7777` (port from `cfg.redirectUri`), bind for the flow duration, handle `GET /callback?code=&state=` → call `oauth/finish` internally, release.
-- Add `/mcp oauth start <slug>` slash in `test-apps/cli/src/client/acp/headless.ts:65`, blocks until `mcp_oauth_status_change{completed|failed}` or 5-min timeout.
-- New `packages/bodhi-pi/e2e/cli-headless/mcp-oauth.e2e.ts` drives the full flow against `oauth-mcp-server.ts` with auto-approve.
+- Wire the redirect-server lifecycle in `test-apps/cli/src/host/cli.ts` — when `oauth/start` is invoked through the agent's handler, spawn an ephemeral `http.createServer` on `127.0.0.1:7777` (or `cfg.redirectUri`'s port), register a `GET /callback` handler that calls `oauth/finish` in-process and closes the server. Implement as a helper module `test-apps/cli/src/host/oauth-callback-server.ts`.
+- Add `/mcp oauth start <slug>` slash branch in `test-apps/cli/src/client/acp/headless.ts:65+` and the parallel REPL handler in `repl.ts`. Slash blocks until `mcp_oauth_status_change{completed|failed}` lifecycle notification arrives, or 5-min timeout.
+- Add a `BodhiPiClient.mcpOauthStart` / `mcpOauthFinish` / `mcpOauthCancel` to `src/client/client.ts` mirroring the existing mcp* methods.
+- New `packages/bodhi-pi/e2e/cli-headless/mcp-oauth.e2e.ts` drives the full flow against `oauth-mcp-server.ts` with auto-approve (`?auto=1` query on /authorize), modeled on `mcp-auth.e2e.ts:25-58`.
 
 ### Commit 4 — HTTP + WS runtime + multi-tenant Playwright
 
-- Add `GET /oauth/callback` route in `test-apps/http/src/host/server.ts:193`; decodes `state` → `{userId, slug}`, dispatches into per-user `McpService`, returns minimal HTML "you can close this window".
-- Add `--public-base-url` startup flag with `Host` header fallback in `server.ts` startup.
-- New `test/integration/oauth-multi-tenant.test.ts` proves user A's OAuth state invisible to user B.
-- New `e2e-ui/shared/mcp-oauth.spec.ts` Playwright: `/mcp add` with oauth-preregistered config → `oauth start` opens popup → fixture server's `/authorize` "Approve" button → callback lands → `mcp_oauth_status_change{completed}` → `/mcp connect <slug>` succeeds → `whoami` tool returns "authenticated via bearer".
+- Add `--public-base-url` flag parsing to `test-apps/http/src/host/cli-args.ts`; thread through `BuildServerOptions` in `server.ts:35-50`.
+- New `GET /oauth/callback` branch in `test-apps/http/src/host/server.ts:182-213` (`handleRequest`). Decodes `state` → `{userId, slug}`, dispatches via the per-user `McpService` (which already lives behind `ServerMcpStore` and per-request `wireAgentForRequest`). Returns minimal HTML.
+- New `test-apps/http/src/test/integration/oauth-multi-tenant.test.ts` — adds an oauth-preregistered server for user A, runs the flow, verifies user B's `/mcp/list` doesn't see it and user B's `mcp/<slug>` kv read returns `undefined`.
+- New `e2e-ui/shared/mcp-oauth.spec.ts` Playwright spec (modeled on `mcp-auth.spec.ts`): `/mcp add` with oauth-preregistered config → `/mcp oauth start <slug>` opens popup → fixture's `/authorize` Approve button → callback lands → `mcp_oauth_status_change{completed}` lifecycle event observed → `/mcp connect <slug>` → `whoami` returns "authenticated via bearer".
+- Same Playwright test runs under both http and ws runtimes via the existing fixtures (`e2e-ui/fixtures.ts`).
 
 ### Commit 5 — Browser runtime + Playwright
 
-- Extend `InitMessage` in `test-apps/browser/src/host/runtime/bootstrap-worker.ts:44-72` with `clientOrigin: string`; main thread passes `window.location.origin`.
-- Add `/oauth/callback` React route under `test-apps/browser/src/client/react/` that parses `?code=&state=`, calls `window.opener.postMessage({code, state, kind: "oauth-callback"}, origin)`, then `window.close()`.
-- Main thread handler in `adapter.ts:54-71` forwards `oauth-callback` messages over the existing ACP MessagePort as `_bodhi-pi/mcp/oauth/finish` calls.
-- Worker-side `RedirectAuthorizer` simply forwards `redirectToAuthorization(url)` back to main thread via the existing event channel; main thread does `window.open(url, "oauth", "popup")`.
-- New `e2e-ui/shared/mcp-oauth-browser.spec.ts` Playwright runs the popup flow against fixture server.
+- Extend `InitMessage` type in `@bodhiapp/bodhi-pi-test-app-utils/worker-message-types` with `clientOrigin: string`.
+- Pass `window.location.origin` from `test-apps/browser/src/client/runtime/adapter.ts:74-91` (`initPayload`).
+- Read `clientOrigin` in `test-apps/browser/src/host/runtime/bootstrap-worker.ts:171-184`; use it when constructing `KvOAuthProvider`'s redirect resolver for this Host.
+- Add `/oauth/callback` React route under `test-apps/browser/src/client/react/` (likely a new `OAuthCallback.tsx` component, wired into `App.tsx`). Parses `?code=&state=`, calls `window.opener.postMessage({code, state, kind: "bodhi-pi-oauth-callback"}, window.location.origin)`, then `window.close()`.
+- Main-thread handler in `client/runtime/adapter.ts` listens for `"bodhi-pi-oauth-callback"` postMessage; forwards over the existing ACP `ClientSideConnection` as a `_bodhi-pi/mcp/oauth/finish` ext call.
+- Worker-side: the SDK provider's `redirectToAuthorization(url)` captures into `pending` (as in the deleted code); when `oauth/start`'s handler returns the URL to the client, the client (main thread) does `window.open(url, "oauth", "popup")` on the user's gesture (the `/mcp oauth start` slash send is a user gesture, satisfying popup-blocker).
+- New `e2e-ui/shared/mcp-oauth-browser.spec.ts` Playwright: same flow but driven through the Worker.
 
-### Commit 6 — Chrome-ext runtime + refresh/401 retry + spec finalization
+### Commit 6 — Chrome-ext runtime + refresh/401 + final spec sweep
 
-- Add `"identity"` to `test-apps/chrome-ext/manifest.json` permissions.
-- Register `"background": { "service_worker": "background-sw.js" }` in manifest.
-- New `test-apps/chrome-ext/src/host/background-sw.ts`: minimal RPC bridge — `chrome.runtime.onMessage` listens for `{kind: "oauth-launch", url}` from the Worker, calls `chrome.identity.launchWebAuthFlow({url, interactive: true})`, posts result `{redirectUrl}` back.
-- Worker-side `RedirectAuthorizer` for chrome-ext uses `chrome.runtime.sendMessage` to talk to the SW; on response, parses `?code=&state=` from `redirectUrl` and calls `oauth/finish` in-process.
-- Token refresh: in the `oauth-preregistered` attacher in `buildHttpTransport`, check `expiresAt - 60_000 < Date.now()` on each request → call `auth(provider, { serverUrl })` to refresh before sending; on 401 from MCP server, call `auth()` once more then retry.
-- Refresh-failure path: `mcp_oauth_status_change{status: "failed"}`, drop tokens, require manual `/mcp oauth start` to re-auth.
-- `e2e-ui/shared/mcp-oauth-chromeext.spec.ts` Playwright stubs `chrome.identity.launchWebAuthFlow` (via `chrome.debugger` or test fixture injection) to return fixture's callback URL directly.
-- Final spec sweep: update `mcp.md` § Auth row examples, `acp.md` Mode-Of-Operation matrix, `CONTEXT.md` glossary final entries.
+- Add `"identity"` permission + `"background": { "service_worker": "background-sw.js", "type": "module" }` to `test-apps/chrome-ext/manifest.json`.
+- New `test-apps/chrome-ext/src/host/background-sw.ts`: minimal RPC bridge — listens for `{kind: "bodhi-pi-oauth-launch", url}`, calls `chrome.identity.launchWebAuthFlow({url, interactive: true})`, replies `{redirectUrl}` or `{error}`.
+- Update `test-apps/chrome-ext/vite.config.ts` to emit `dist/background-sw.js`.
+- Chrome-ext-specific path: in the Web Worker (`test-apps/chrome-ext/src/host/worker.ts` or a chrome-ext-specific Init hook), the OAuth handler sends `chrome.runtime.sendMessage` to the SW, awaits the reply, parses code+state, calls `oauth/finish` locally.
+- Refresh: in the `oauth-preregistered` attacher (commit 1's `mcp-client.ts`), check `tokens.expiresAt - 60_000 < Date.now()` on each request → call `runAuthFlow(provider, serverUrl)` to refresh before sending. On 401 from MCP server: call `runAuthFlow` once more, retry; on second 401 emit `mcp_oauth_status_change{status:"failed"}` and require manual `/mcp oauth start` to re-auth.
+- Fixture support: `oauth-mcp-server.ts` already supports `?expires_in=1` per commit 1; integration test in `test/mcp-oauth-refresh.test.ts` issues a 1-second token, sleeps 2s, makes a tool call, asserts the fixture saw a new Bearer (via the fixture's request log helper).
+- New `e2e-ui/shared/mcp-oauth-chromeext.spec.ts` Playwright. Stub `chrome.identity.launchWebAuthFlow` via a test fixture injection (the e2e-ui chrome-ext context can `evaluate` against the SW to monkey-patch) so the test resolves to the fixture's callback URL directly.
+- Final spec sweep:
+  - `ai-docs/specs/bodhi-pi/mcp.md` — Auth section gets a worked example for oauth-preregistered.
+  - `ai-docs/specs/bodhi-pi/acp.md` — Mode-Of-Operation matrix mentions the lifecycle notification path for OAuth.
+  - `packages/bodhi-pi/CONTEXT.md` — glossary entries for: OAuth tokens, PKCE, redirect URI, state parameter, refresh token.
 
 ## Critical files
 
 **New**:
-- `packages/bodhi-pi/src/mcp/mcp-oauth-provider.ts` — `KvOAuthProvider` (~120 LOC)
-- `packages/bodhi-pi/src/mcp/mcp-oauth-state-kv.ts` — short-TTL state kv wrapper (~40 LOC)
-- `packages/bodhi-pi/test/mcp-oauth.test.ts` — provider + state machine integration tests
-- `packages/bodhi-pi/test/mcp-oauth-handlers.test.ts` — ACP handlers integration tests
-- `packages/bodhi-pi/e2e/helpers/oauth-mcp-server.ts` — fixture OAuth + MCP server
+- `packages/bodhi-pi/src/mcp/mcp-oauth-provider.ts`
+- `packages/bodhi-pi/src/mcp/mcp-oauth-state-kv.ts`
+- `packages/bodhi-pi/test/mcp-oauth.test.ts`
+- `packages/bodhi-pi/test/mcp-oauth-handlers.test.ts`
+- `packages/bodhi-pi/test/mcp-oauth-refresh.test.ts`
+- `packages/bodhi-pi/e2e/helpers/oauth-mcp-server.ts`
 - `packages/bodhi-pi/e2e/cli-headless/mcp-oauth.e2e.ts`
 - `packages/bodhi-pi/e2e-ui/shared/mcp-oauth.spec.ts`
 - `packages/bodhi-pi/e2e-ui/shared/mcp-oauth-browser.spec.ts`
 - `packages/bodhi-pi/e2e-ui/shared/mcp-oauth-chromeext.spec.ts`
+- `packages/bodhi-pi/test-apps/cli/src/host/oauth-callback-server.ts`
 - `packages/bodhi-pi/test-apps/chrome-ext/src/host/background-sw.ts`
-- `packages/bodhi-pi/test-apps/browser/src/client/react/oauth-callback.tsx`
+- `packages/bodhi-pi/test-apps/browser/src/client/react/OAuthCallback.tsx`
 - `packages/bodhi-pi/test-apps/http/src/test/integration/oauth-multi-tenant.test.ts`
 
 **Modified**:
-- `packages/bodhi-pi/src/mcp/mcp-types.ts` — extend union, add OAuth-preregistered types
-- `packages/bodhi-pi/src/mcp/mcp-service.ts` — `parseAuthInput`, register oauth/{start,finish,cancel}
-- `packages/bodhi-pi/src/mcp/mcp-client.ts` — strategy-table refactor of `buildHttpTransport`
-- `packages/bodhi-pi/src/mcp/mcp-connection-lifecycle.ts` — add `mcp_oauth_status_change` emitter
-- `packages/bodhi-pi/test-apps/cli/src/host/cli.ts` — redirect server lifecycle
-- `packages/bodhi-pi/test-apps/cli/src/client/acp/headless.ts` — `/mcp oauth start` slash
-- `packages/bodhi-pi/test-apps/http/src/host/server.ts` — `/oauth/callback` route, `--public-base-url` flag
-- `packages/bodhi-pi/test-apps/browser/src/host/runtime/bootstrap-worker.ts` — `clientOrigin` field in InitMessage
-- `packages/bodhi-pi/test-apps/browser/src/client/runtime/adapter.ts` — `oauth-callback` postMessage relay
+- `packages/bodhi-pi/src/mcp/mcp-types.ts` — union extension, parsers/serializers
+- `packages/bodhi-pi/src/mcp/mcp-service.ts` — `parseAuthInput`, register 3 oauth handlers
+- `packages/bodhi-pi/src/mcp/mcp-client.ts` — strategy-table refactor; thread kvStore through `ConnectOptions`
+- `packages/bodhi-pi/src/mcp/mcp-connection-lifecycle.ts` — `mcp_oauth_status_change` emitter
+- `packages/bodhi-pi/src/wire/constants.ts` — `EXT_MCP_OAUTH_*`
+- `packages/bodhi-pi/src/client/types.ts` — extend `McpAuthMode`, `McpAddHttpParams`
+- `packages/bodhi-pi/src/client/client.ts` — `mcpAdd` body builder; new `mcpOauthStart/Finish/Cancel`
+- `packages/bodhi-pi/src/index.ts` — export new types
+- `packages/bodhi-pi/test-apps/cli/src/host/cli.ts` — wire callback-server lifecycle
+- `packages/bodhi-pi/test-apps/cli/src/client/acp/{headless,repl}.ts` — `/mcp oauth start` slash
+- `packages/bodhi-pi/test-apps/http/src/host/server.ts` — `/oauth/callback` route
+- `packages/bodhi-pi/test-apps/http/src/host/cli-args.ts` — `--public-base-url`
+- `packages/bodhi-pi/test-apps/browser/src/host/runtime/bootstrap-worker.ts` — read `clientOrigin`
+- `packages/bodhi-pi/test-apps/browser/src/client/runtime/adapter.ts` — pass `clientOrigin`; oauth-callback postMessage relay
+- `packages/bodhi-pi/test-apps/browser/src/client/react/App.tsx` (+ `main.tsx`) — `/oauth/callback` route
 - `packages/bodhi-pi/test-apps/chrome-ext/manifest.json` — `"identity"` perm, `"background"` SW
+- `packages/bodhi-pi/test-apps/chrome-ext/vite.config.ts` — SW build target
+- `packages/bodhi-pi/test-apps/chrome-ext/src/host/worker.ts` — OAuth-launch RPC to SW
 - `packages/bodhi-pi/e2e/global-setup.ts` + `packages/bodhi-pi/e2e-ui/global-setup.ts` — spawn oauth fixture
-- `packages/bodhi-pi/CONTEXT.md` — glossary entries
-- `ai-docs/specs/bodhi-pi/mcp.md` — Auth table
-- `ai-docs/specs/bodhi-pi/acp.md` — EXT methods + lifecycle notification rows
+- `packages/bodhi-pi/CONTEXT.md` — glossary
+- `ai-docs/specs/bodhi-pi/mcp.md` — Auth table + worked example
+- `ai-docs/specs/bodhi-pi/acp.md` — EXT methods + lifecycle notification
 
 ## Functions to reuse
 
-- `packages/bodhi-pi/src/mcp/mcp-types.ts` — `McpNamedSecret`, `serializeMcpServerEntry`, `parseAuthConfigStored`
-- `packages/bodhi-pi/src/mcp/mcp-service.ts:325-329` — `recordToNamedSecrets`
-- `packages/bodhi-pi/src/kv/kv-store.ts:20-36` — `maskSecrets` (auto-handles new `secret:true` fields)
-- `packages/bodhi-pi/src/mcp/mcp-connection-lifecycle.ts:111-123` — `emitStatusBroadcast` (mirror for OAuth)
-- `packages/bodhi-pi/e2e/helpers/auth-mcp-server.ts` — copy structure (HTTP server + CORS + MCP `/mcp` route)
-- `@modelcontextprotocol/sdk/client/auth` — `OAuthClientProvider` interface + `auth()` driver (wrap, don't re-implement)
-- `@modelcontextprotocol/sdk/client/streamableHttp` — `StreamableHTTPClientTransport` (already used; OAuth piggybacks via `requestInit` builder)
+- `packages/bodhi-pi/src/mcp/mcp-types.ts` — `McpNamedSecret`, `serializeMcpServerEntry`, `parseMcpServerEntry`, the parser/serializer pattern for the new variant
+- `packages/bodhi-pi/src/mcp/mcp-service.ts:325-329` — `recordToNamedSecrets` (port for `clientSecret`)
+- `packages/bodhi-pi/src/kv/kv-store.ts:20-36` — `maskSecrets` (auto-handles new `secret:true` fields, including nested `tokens.access/refresh`)
+- `packages/bodhi-pi/src/mcp/mcp-connection-lifecycle.ts:136-147` — `emitStatusBroadcast` (mirror for `emitOauthStatusBroadcast`)
+- `packages/bodhi-pi/e2e/helpers/auth-mcp-server.ts` — copy structure (HTTP server with CORS, MCP `/mcp` route, port wait, close helper)
+- `packages/bodhi-pi/src/mcp/in-process-provider.ts` — `connectMcp` integration point for the new attacher
+- `@modelcontextprotocol/sdk/client/auth.js` — `OAuthClientProvider` interface + `auth()` driver (wrap, don't re-implement)
+- `@modelcontextprotocol/sdk/client/streamableHttp.js` — `StreamableHTTPClientTransport` (already used; OAuth piggybacks via `requestInit` builder)
+- Prior shape reference (do not copy verbatim — port): `git show 6a3966f4^:packages/bodhi-pi/src/mcp/mcp-oauth-host-api.ts`
 
 ## Verification
 
-End-to-end verification per commit:
+Per-commit gate: `npm run check` + `npm test` green. Cross-runtime gate after commits 3-6: `just test-e2e` and `just test-e2e-ui` green.
 
-1. **`npm run check` + `npm test`** — both must pass before the commit lands.
-2. **Matrix gates** (after commits 3-6): `just test-e2e` and `just test-e2e-ui` cover cli-headless / http / browser / chrome-ext respectively.
-3. **Per-feature e2e** uses gpt-4o-mini per memory `feedback_bodhi_pi_e2e_strategy.md`.
-4. **Multi-tenant proof** (commit 4): `oauth-multi-tenant.test.ts` adds an oauth-preregistered server for user A, runs the flow, then verifies user B's `_bodhi-pi/mcp/list` returns no entry and user B's kv read for `mcp/<slug>` returns `undefined`.
-5. **Secret masking proof** (commit 1): test asserts `client.kv.get({key: "mcp/<slug>"})` returns `clientSecret.value === "***"` and `tokens.access.value === "***"` while in-process `harness.kvStore.get(...)` returns plaintext.
-6. **Refresh proof** (commit 6): fixture server issues a 1-second-expiry token; test sleeps 2s, makes a tool call, asserts the request carries a *new* Bearer (via fixture server log) without manual re-auth.
-7. **Cancel path** (commit 2): start a flow, call `oauth/cancel` before code returns, assert state kv entry deleted and a later `oauth/finish{code, state}` returns `-32602`.
-8. **chrome-ext stubbed flow** (commit 6): Playwright injects a fake `chrome.identity.launchWebAuthFlow` via test fixture; the SW path runs end-to-end against the fixture's callback URL.
+End-to-end proofs:
 
-After commit 6: full `just test-e2e && just test-e2e-ui` green on `main`, plus a manual smoke against a real MCP server with pre-registered credentials (e.g., GitHub MCP if it ships an OAuth endpoint, or any test provider — note the requirement at the prompt's open question #11).
+1. **Secret masking** (commit 1): `client.mcpList()` returns `auth.clientSecret.value === "***"`, `auth.tokens.access.value === "***"`, `auth.tokens.refresh.value === "***"`; same entry read in-process via `harness.kvStore.get("mcp/<slug>")` returns plaintext.
+2. **Validation** (commit 1): `client.mcpAdd({auth: "oauth-preregistered"})` without `authorizeUrl`/`tokenUrl`/`clientId` rejects with `-32602`; with sibling `headers` rejects; with `transport: "stdio"` rejects.
+3. **State machine round-trip** (commit 1): integration test against `oauth-mcp-server.ts` with `?auto=1` — `KvOAuthProvider` → `runAuthFlow` returns authorize URL → simulate code arrival → tokens persisted under `auth.tokens` of `McpServerEntry` → next `connect()` attaches `Authorization: Bearer <access>` (asserted via fixture's `whoami` response "authenticated via bearer").
+4. **Cancel** (commit 2): start a flow, call `oauth/cancel`, assert state entry deleted, subsequent `oauth/finish{state, code}` returns `-32602`.
+5. **Multi-tenant isolation** (commit 4): two users, user A adds + completes OAuth, user B's `/mcp/list` returns no entries and `oauth/finish` with user A's state errors.
+6. **CLI flow** (commit 3): cli-headless e2e drives `/mcp add` + `/mcp oauth start <slug>` (with `?auto=1` redirect_uri pointing at the host's ephemeral server) → fixture auto-approves → completed lifecycle event → `/mcp connect` succeeds.
+7. **HTTP+WS Playwright** (commit 4): Playwright clicks Approve in the popup, asserts the `mcp_oauth_status_change{completed}` event appears in the events panel, asserts `whoami` returns "authenticated via bearer."
+8. **Browser Playwright** (commit 5): same as #7 but the popup is the React route and the postMessage path runs end-to-end.
+9. **Chrome-ext Playwright** (commit 6): test injects a `chrome.identity.launchWebAuthFlow` stub via the persistent chromium context, asserts the SW receives the launch message and the flow completes.
+10. **Refresh** (commit 6): fixture issues 1-second token; test sleeps 2s, makes a tool call; fixture's request log records a different Bearer than the first call.
+11. **401 retry** (commit 6): fixture returns 401 once for a known token; client refreshes, retries, succeeds. On second 401, asserts `mcp_oauth_status_change{failed}` emitted.
+12. **Manual smoke** (after commit 6): document one real-MCP-server smoke (e.g., GitHub or a test provider) in commit 6's message, including the `/mcp add` payload.

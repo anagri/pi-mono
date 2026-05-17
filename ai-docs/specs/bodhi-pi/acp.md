@@ -78,7 +78,7 @@ Throws `-32601` when host omitted `kvStore`.
 
 | Method | Params | Response | Side effects | Throws |
 |---|---|---|---|---|
-| `_bodhi-pi/mcp/add` | `{url, auth: "public" \| "http-param", headers?, queries?, label?}` for http; `{command, args?, env?, label?}` for stdio | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`); tags every header/query/env value `secret:true` | `-32602` if neither `url` nor `command`; `-32602` on auth-shape errors (see [mcp.md § Auth](./mcp.md#auth)); `-32601` if `command` and `!supportsStdio` |
+| `_bodhi-pi/mcp/add` | `{url, auth: "public" \| "http-param" \| "oauth-preregistered", headers?, queries?, authorizeUrl?, tokenUrl?, clientId?, clientSecret?, scopes?, redirectUri?, tokenAuthMethod?, label?}` for http; `{command, args?, env?, label?}` for stdio | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`); tags every header/query/env/clientSecret value `secret:true` | `-32602` if neither `url` nor `command`; `-32602` on auth-shape errors (see [mcp.md § Auth](./mcp.md#auth)); `-32601` if `command` and `!supportsStdio` |
 | `_bodhi-pi/mcp/remove` | `{slug}` | `{slug}` | `provider.disconnect(slug)`, KV remove, emits `mcp_status_change{status:"disconnected"}` | |
 | `_bodhi-pi/mcp/connect` | `{slug}` | `{tools:[…]}` | `provider.connect(...)`, status broadcasts, persists `lastKnownStatus:"connected"` | `-32602` unknown slug; `-32603` from provider error |
 | `_bodhi-pi/mcp/disconnect` | `{slug}` | `{slug}` | `provider.disconnect`, persists `disconnected`, broadcasts | — |
@@ -87,6 +87,9 @@ Throws `-32601` when host omitted `kvStore`.
 | `_bodhi-pi/mcp/tools` | `{sessionId, slug}` | `{tools:[…]}` | per-session visibility (returns `[]` if not included or not connected) |
 | `_bodhi-pi/mcp/include` | `{sessionId, slug}` | `{slug, tools}` | adds to inclusion, applies to session, persists `mcp_inclusion_set` | `-32602` unknown slug |
 | `_bodhi-pi/mcp/exclude` | `{sessionId, slug}` | `{slug}` | removes from inclusion, applies, persists snapshot | — |
+| `_bodhi-pi/mcp/oauth/start` | `{slug, redirectUri?}` | `{authorizeUrl, state} \| {status:"completed"}` | builds `KvOAuthProvider`, runs the auth flow; persists codeVerifier to `OAuthStateKv` under `state` (5-min TTL); emits `mcp_oauth_status_change{status:"started"\|"completed"}` | `-32602` unknown slug or not oauth-preregistered; `-32602` if no redirectUri available |
+| `_bodhi-pi/mcp/oauth/finish` | `{slug, code, state}` | `{status:"completed" \| "failed", errorMessage?}` | exchanges `code` for tokens; persists to `auth.tokens` (secret-tagged); emits `mcp_oauth_status_change` | `-32602` invalid/expired state |
+| `_bodhi-pi/mcp/oauth/cancel` | `{slug, state}` | `{ok: true}` | drops the `OAuthStateKv` entry; emits `mcp_oauth_status_change{status:"cancelled"}` | — |
 
 See [mcp.md](./mcp.md) for the connection model and per-tenant ConnectionProvider story.
 
@@ -110,6 +113,7 @@ Non-`sessionUpdate` notifications under a single method name `LIFECYCLE_EVENT_ME
 
 - `{type:"mcp_status_change", sessionId, slug, status, errorMessage?}`
 - `{type:"mcp_tools_change", sessionId, slug, toolNames}`
+- `{type:"mcp_oauth_status_change", sessionId, slug, status: "started" \| "completed" \| "failed" \| "cancelled", errorMessage?}` — own channel (separate from `mcp_status_change`) so UIs can render the "click to authenticate" affordance independently of connect/disconnect. When no session is loaded (e.g. callback lands between session closes), `sessionId` is the empty string `""`.
 
 **Mapping policy**: every wire-bound event flows through `src/acp/event-wiring.ts`. Services emit domain events on `EventDispatcher`; `event-wiring.ts` is the sole translation surface that calls `conn.sessionUpdate(...)` / `conn.notification(...)`. `McpConnectionLifecycle` emits `mcp_status_change` / `mcp_tools_change` to the dispatcher only — event-wiring registers handlers that forward them as `LIFECYCLE_EVENT_METHOD` notifications. This keeps SDK extraction tractable (one module owns wire translation) and lets extensions observe the same domain events without subscribing to a wire-shape.
 

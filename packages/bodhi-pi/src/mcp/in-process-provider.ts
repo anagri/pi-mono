@@ -1,4 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { KvStore } from "../kv/kv-store.js";
 import { type ConnectedClient, connectMcp } from "./mcp-client.js";
 import type { McpConnectionProvider, McpProviderConnectResult } from "./mcp-connection-provider.js";
 import { adaptMcpTool, toolName } from "./mcp-tool-adapter.js";
@@ -11,6 +12,11 @@ interface InProcessEntry {
 	close(): Promise<void>;
 }
 
+export interface InProcessMcpConnectionProviderOptions {
+	/** Required to support `oauth-preregistered` entries — the attacher re-reads tokens per request. */
+	kvStore?: KvStore;
+}
+
 /**
  * Default `McpConnectionProvider` shipped by the SDK. Owns a process-local
  * `Map<slug, ...>`. Suitable for single-tenant embedded hosts (cli, in-memory)
@@ -19,7 +25,9 @@ interface InProcessEntry {
  * The implementation calls `connectMcp` from `mcp-client.ts` to dial the
  * underlying transport; tools are adapted via `adaptMcpTool`.
  */
-export function createInProcessMcpConnectionProvider(): McpConnectionProvider {
+export function createInProcessMcpConnectionProvider(
+	opts: InProcessMcpConnectionProviderOptions = {},
+): McpConnectionProvider {
 	const bySlug = new Map<string, InProcessEntry>();
 	const subs = new Set<() => void>();
 	const fire = () => {
@@ -39,6 +47,7 @@ export function createInProcessMcpConnectionProvider(): McpConnectionProvider {
 				bySlug.delete(slug);
 				fire();
 			},
+			...(opts.kvStore !== undefined ? { kvStore: opts.kvStore, slug } : {}),
 		});
 		const tools = connected.tools.map((info) => adaptMcpTool(slug, info, connected.client));
 		bySlug.set(slug, {

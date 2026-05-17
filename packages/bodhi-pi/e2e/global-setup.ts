@@ -12,6 +12,7 @@ import {
 	closeSharedChromeExtContext,
 	ensureSharedChromeExtContext,
 } from "./helpers/chrome-ext/launch.js";
+import { type OAuthMcpServerHandle, spawnOAuthMcpServer } from "./helpers/oauth-mcp-server.js";
 
 const REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
 
@@ -109,6 +110,14 @@ export async function setup(): Promise<() => Promise<void>> {
 	process.env.BODHI_PI_E2E_MCP_AUTH_HTTP_URL = authMcp.url;
 	process.env.BODHI_PI_E2E_MCP_AUTH_TOKEN = AUTH_MCP_TOKEN;
 
+	const OAUTH_MCP_PORT = 33347;
+	const oauthMcp: OAuthMcpServerHandle = await spawnOAuthMcpServer({ port: OAUTH_MCP_PORT });
+	process.env.BODHI_PI_E2E_OAUTH_MCP_URL = oauthMcp.mcpUrl;
+	process.env.BODHI_PI_E2E_OAUTH_AUTHORIZE_URL = oauthMcp.authorizeUrl;
+	process.env.BODHI_PI_E2E_OAUTH_TOKEN_URL = oauthMcp.tokenUrl;
+	process.env.BODHI_PI_E2E_OAUTH_CLIENT_ID = oauthMcp.clientId;
+	process.env.BODHI_PI_E2E_OAUTH_CLIENT_SECRET = oauthMcp.clientSecret;
+
 	// Two shared test-app-http instances for the run: one for the |http| project
 	// (per-turn agent rebuild over HTTP+SSE on /acp) and one for the |ws| project
 	// (stateful per-connection agent over WebSocket on /acp-ws). Separate ports +
@@ -155,6 +164,11 @@ export async function setup(): Promise<() => Promise<void>> {
 		}
 		try {
 			await authMcp.close();
+		} catch {
+			// already closed
+		}
+		try {
+			await oauthMcp.close();
 		} catch {
 			// already closed
 		}

@@ -24,6 +24,9 @@ import {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
+	EXT_MCP_OAUTH_CANCEL,
+	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
@@ -72,6 +75,12 @@ import type {
 	McpIncludeParams,
 	McpIncludeResult,
 	McpListItem,
+	McpOauthCancelParams,
+	McpOauthCancelResult,
+	McpOauthFinishParams,
+	McpOauthFinishResult,
+	McpOauthStartParams,
+	McpOauthStartResult,
 	McpRemoveResult,
 	McpToolsResult,
 	ModelConfigState,
@@ -301,6 +310,14 @@ export class BodhiPiClient {
 			if (params.auth === "http-param") {
 				if (params.headers !== undefined) body.headers = params.headers;
 				if (params.queries !== undefined) body.queries = params.queries;
+			} else if (params.auth === "oauth-preregistered") {
+				body.authorizeUrl = params.authorizeUrl;
+				body.tokenUrl = params.tokenUrl;
+				body.clientId = params.clientId;
+				if (params.clientSecret !== undefined) body.clientSecret = params.clientSecret;
+				if (params.scopes !== undefined) body.scopes = params.scopes;
+				if (params.redirectUri !== undefined) body.redirectUri = params.redirectUri;
+				if (params.tokenAuthMethod !== undefined) body.tokenAuthMethod = params.tokenAuthMethod;
 			}
 		} else {
 			body.command = params.command;
@@ -310,6 +327,27 @@ export class BodhiPiClient {
 		}
 		if (params.label !== undefined) body.label = params.label;
 		return this.ext<McpAddResult>(EXT_MCP_ADD, body);
+	}
+
+	mcpOauthStart(params: McpOauthStartParams): Promise<McpOauthStartResult> {
+		const body: Record<string, unknown> = { slug: params.slug };
+		if (params.redirectUri !== undefined) body.redirectUri = params.redirectUri;
+		return this.ext<McpOauthStartResult>(EXT_MCP_OAUTH_START, body);
+	}
+
+	mcpOauthFinish(params: McpOauthFinishParams): Promise<McpOauthFinishResult> {
+		return this.ext<McpOauthFinishResult>(EXT_MCP_OAUTH_FINISH, {
+			slug: params.slug,
+			code: params.code,
+			state: params.state,
+		});
+	}
+
+	mcpOauthCancel(params: McpOauthCancelParams): Promise<McpOauthCancelResult> {
+		return this.ext<McpOauthCancelResult>(EXT_MCP_OAUTH_CANCEL, {
+			slug: params.slug,
+			state: params.state,
+		});
 	}
 
 	mcpRemove(params: { slug: string }): Promise<McpRemoveResult> {

@@ -137,8 +137,10 @@ export type { McpConnectionProvider, McpProviderConnectResult } from "./mcp/mcp-
 export type {
 	McpAuthConfig,
 	McpAuthHttpParamConfig,
+	McpAuthOAuthPreregisteredConfig,
 	McpAuthPublicConfig,
 	McpNamedSecret,
+	McpOAuthTokens,
 	McpServerEntry,
 	McpToolInfo,
 } from "./mcp/mcp-types.js";
@@ -208,6 +210,9 @@ export {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
+	EXT_MCP_OAUTH_CANCEL,
+	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,

@@ -8,10 +8,10 @@ export type McpTransport = "http" | "stdio";
 /**
  * Top-level auth discriminator. `"public"` carries no credentials. `"http-param"` attaches
  * static headers and/or query parameters to every request against an HTTP-streamable MCP server.
- * Future auth modes (e.g. `"oauth-dcr"`, `"oauth-preregistered"`) will extend this union with
- * their own additional fields on `McpAuthConfig`.
+ * `"oauth-preregistered"` runs the OAuth 2.1 authorization-code-with-PKCE flow using
+ * pre-registered `client_id` / `client_secret`; no DCR, no RFC 8414 discovery.
  */
-export type McpAuthMode = "public" | "http-param";
+export type McpAuthMode = "public" | "http-param" | "oauth-preregistered";
 
 export type McpStatus = "connected" | "disconnected" | "error";
 
@@ -31,7 +31,26 @@ export interface McpAuthHttpParamConfig {
 	queries?: McpNamedSecret[];
 }
 
-export type McpAuthConfig = McpAuthPublicConfig | McpAuthHttpParamConfig;
+export interface McpOAuthTokens {
+	access: McpNamedSecret;
+	refresh?: McpNamedSecret;
+	expiresAt?: number;
+	tokenType?: string;
+}
+
+export interface McpAuthOAuthPreregisteredConfig {
+	mode: "oauth-preregistered";
+	authorizeUrl: string;
+	tokenUrl: string;
+	clientId: string;
+	clientSecret?: McpNamedSecret;
+	scopes?: string[];
+	redirectUri?: string;
+	tokenAuthMethod?: "basic" | "post";
+	tokens?: McpOAuthTokens;
+}
+
+export type McpAuthConfig = McpAuthPublicConfig | McpAuthHttpParamConfig | McpAuthOAuthPreregisteredConfig;
 
 export interface McpServerEntry {
 	transport: McpTransport;
@@ -114,12 +133,32 @@ export function serializeMcpServerEntry(entry: McpServerEntry): JsonValue {
 
 export function serializeAuthConfig(auth: McpAuthConfig): JsonValue {
 	if (auth.mode === "public") return { mode: "public" };
-	const out: { [k: string]: JsonValue } = { mode: "http-param" };
-	if (auth.headers !== undefined && auth.headers.length > 0) {
-		out.headers = auth.headers.map(serializeNamedSecret);
+	if (auth.mode === "http-param") {
+		const out: { [k: string]: JsonValue } = { mode: "http-param" };
+		if (auth.headers !== undefined && auth.headers.length > 0) {
+			out.headers = auth.headers.map(serializeNamedSecret);
+		}
+		if (auth.queries !== undefined && auth.queries.length > 0) {
+			out.queries = auth.queries.map(serializeNamedSecret);
+		}
+		return out;
 	}
-	if (auth.queries !== undefined && auth.queries.length > 0) {
-		out.queries = auth.queries.map(serializeNamedSecret);
+	const out: { [k: string]: JsonValue } = {
+		mode: "oauth-preregistered",
+		authorizeUrl: auth.authorizeUrl,
+		tokenUrl: auth.tokenUrl,
+		clientId: auth.clientId,
+	};
+	if (auth.clientSecret !== undefined) out.clientSecret = serializeNamedSecret(auth.clientSecret);
+	if (auth.scopes !== undefined && auth.scopes.length > 0) out.scopes = [...auth.scopes];
+	if (auth.redirectUri !== undefined) out.redirectUri = auth.redirectUri;
+	if (auth.tokenAuthMethod !== undefined) out.tokenAuthMethod = auth.tokenAuthMethod;
+	if (auth.tokens !== undefined) {
+		const t: { [k: string]: JsonValue } = { access: serializeNamedSecret(auth.tokens.access) };
+		if (auth.tokens.refresh !== undefined) t.refresh = serializeNamedSecret(auth.tokens.refresh);
+		if (auth.tokens.expiresAt !== undefined) t.expiresAt = auth.tokens.expiresAt;
+		if (auth.tokens.tokenType !== undefined) t.tokenType = auth.tokens.tokenType;
+		out.tokens = t;
 	}
 	return out;
 }
@@ -144,7 +183,53 @@ function parseAuthConfigStored(value: JsonValue | undefined): McpAuthConfig | nu
 		}
 		return cfg;
 	}
+	if (obj.mode === "oauth-preregistered") {
+		const authorizeUrl = obj.authorizeUrl;
+		const tokenUrl = obj.tokenUrl;
+		const clientId = obj.clientId;
+		if (typeof authorizeUrl !== "string" || typeof tokenUrl !== "string" || typeof clientId !== "string") {
+			return null;
+		}
+		const cfg: McpAuthOAuthPreregisteredConfig = {
+			mode: "oauth-preregistered",
+			authorizeUrl,
+			tokenUrl,
+			clientId,
+		};
+		const clientSecret = parseNamedSecret(obj.clientSecret);
+		if (clientSecret !== null) cfg.clientSecret = clientSecret;
+		if (Array.isArray(obj.scopes) && obj.scopes.every((s) => typeof s === "string")) {
+			cfg.scopes = obj.scopes as string[];
+		}
+		if (typeof obj.redirectUri === "string") cfg.redirectUri = obj.redirectUri;
+		if (obj.tokenAuthMethod === "basic" || obj.tokenAuthMethod === "post") {
+			cfg.tokenAuthMethod = obj.tokenAuthMethod;
+		}
+		const tokens = parseOAuthTokens(obj.tokens);
+		if (tokens !== null) cfg.tokens = tokens;
+		return cfg;
+	}
 	return null;
+}
+
+function parseOAuthTokens(value: JsonValue | undefined): McpOAuthTokens | null {
+	if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const obj = value as { [k: string]: JsonValue };
+	const access = parseNamedSecret(obj.access);
+	if (access === null) return null;
+	const out: McpOAuthTokens = { access };
+	const refresh = parseNamedSecret(obj.refresh);
+	if (refresh !== null) out.refresh = refresh;
+	if (typeof obj.expiresAt === "number") out.expiresAt = obj.expiresAt;
+	if (typeof obj.tokenType === "string") out.tokenType = obj.tokenType;
+	return out;
+}
+
+function parseNamedSecret(value: JsonValue | undefined): McpNamedSecret | null {
+	if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const o = value as { [k: string]: JsonValue };
+	if (typeof o.name !== "string" || typeof o.value !== "string" || o.secret !== true) return null;
+	return { name: o.name, value: o.value, secret: true };
 }
 
 function parseNamedSecretArray(value: JsonValue | undefined): McpNamedSecret[] | null {

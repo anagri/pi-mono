@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
@@ -11,6 +12,9 @@ import {
 	EXT_MCP_EXCLUDE,
 	EXT_MCP_INCLUDE,
 	EXT_MCP_LIST,
+	EXT_MCP_OAUTH_CANCEL,
+	EXT_MCP_OAUTH_FINISH,
+	EXT_MCP_OAUTH_START,
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
@@ -18,6 +22,8 @@ import {
 import { requireStringParam, validateSessionId } from "../wire/validators.js";
 import { McpConnectionLifecycle } from "./mcp-connection-lifecycle.js";
 import type { McpConnectionProvider } from "./mcp-connection-provider.js";
+import { KvOAuthProvider, runAuthFlow } from "./mcp-oauth-provider.js";
+import { OAuthStateKv } from "./mcp-oauth-state-kv.js";
 import { McpRegistry } from "./mcp-registry.js";
 import { resolveUniqueSlug, slugifyCommand, slugifyUrl } from "./mcp-slug.js";
 import { McpStore } from "./mcp-store.js";
@@ -25,6 +31,7 @@ import {
 	MCP_PREFIX,
 	type McpAuthConfig,
 	type McpAuthHttpParamConfig,
+	type McpAuthOAuthPreregisteredConfig,
 	type McpListEntry,
 	type McpNamedSecret,
 	type McpServerEntry,
@@ -84,6 +91,9 @@ export class McpService {
 			[EXT_MCP_TOOLS, this.handleTools.bind(this)],
 			[EXT_MCP_INCLUDE, this.handleInclude.bind(this)],
 			[EXT_MCP_EXCLUDE, this.handleExclude.bind(this)],
+			[EXT_MCP_OAUTH_START, this.handleOauthStart.bind(this)],
+			[EXT_MCP_OAUTH_FINISH, this.handleOauthFinish.bind(this)],
+			[EXT_MCP_OAUTH_CANCEL, this.handleOauthCancel.bind(this)],
 		];
 	}
 
@@ -231,6 +241,93 @@ export class McpService {
 		await this.store.persistInclusion(sessionId, this.registry.getInclusion(sessionId));
 		return { slug };
 	}
+
+	private async handleOauthStart(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.store.requireKv(EXT_MCP_OAUTH_START);
+		const slug = requireStringParam(EXT_MCP_OAUTH_START, params, "slug");
+		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
+		const entry = parseMcpServerEntry(raw ?? null);
+		if (!entry) throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: unknown mcp ${slug}`);
+		if (entry.auth.mode !== "oauth-preregistered") {
+			throw new RequestError(-32602, `${EXT_MCP_OAUTH_START}: ${slug} is not configured for oauth-preregistered`);
+		}
+		const paramRedirectUri = typeof params.redirectUri === "string" ? params.redirectUri : undefined;
+		const redirectUri = paramRedirectUri ?? entry.auth.redirectUri;
+		if (!redirectUri) {
+			throw new RequestError(
+				-32602,
+				`${EXT_MCP_OAUTH_START}: redirect_uri required (pass on /mcp add or oauth/start)`,
+			);
+		}
+		const stateKv = new OAuthStateKv(kv);
+		const state = randomStateToken();
+		const provider = new KvOAuthProvider({
+			kvStore: kv,
+			slug,
+			cfg: entry.auth,
+			redirectUri,
+			stateKv,
+			state,
+		});
+		const result = await runAuthFlow(provider, entry.auth.tokenUrl);
+		if (result.authorized) {
+			await this.lifecycle.emitOauthStatusBroadcast(slug, "completed");
+			return { status: "completed" };
+		}
+		await this.lifecycle.emitOauthStatusBroadcast(slug, "started");
+		return { authorizeUrl: result.authorizeUrl, state };
+	}
+
+	private async handleOauthFinish(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.store.requireKv(EXT_MCP_OAUTH_FINISH);
+		const slug = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "slug");
+		const code = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "code");
+		const state = requireStringParam(EXT_MCP_OAUTH_FINISH, params, "state");
+		const stateKv = new OAuthStateKv(kv);
+		const stateEntry = await stateKv.get(state);
+		if (!stateEntry || stateEntry.slug !== slug) {
+			throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: invalid or expired state`);
+		}
+		const raw = await kv.get(`${MCP_PREFIX}${slug}`);
+		const entry = parseMcpServerEntry(raw ?? null);
+		if (!entry || entry.auth.mode !== "oauth-preregistered") {
+			throw new RequestError(-32602, `${EXT_MCP_OAUTH_FINISH}: ${slug} is not configured for oauth-preregistered`);
+		}
+		const provider = new KvOAuthProvider({
+			kvStore: kv,
+			slug,
+			cfg: entry.auth,
+			redirectUri: stateEntry.redirectUri,
+			stateKv,
+			state,
+		});
+		try {
+			await runAuthFlow(provider, entry.auth.tokenUrl, code);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			await stateKv.remove(state);
+			await this.lifecycle.emitOauthStatusBroadcast(slug, "failed", message);
+			return { status: "failed", errorMessage: message };
+		}
+		await stateKv.remove(state);
+		await this.lifecycle.emitOauthStatusBroadcast(slug, "completed");
+		return { status: "completed" };
+	}
+
+	private async handleOauthCancel(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		const kv = this.store.requireKv(EXT_MCP_OAUTH_CANCEL);
+		const slug = requireStringParam(EXT_MCP_OAUTH_CANCEL, params, "slug");
+		const state = requireStringParam(EXT_MCP_OAUTH_CANCEL, params, "state");
+		const stateKv = new OAuthStateKv(kv);
+		await stateKv.remove(state);
+		await this.lifecycle.emitOauthStatusBroadcast(slug, "cancelled");
+		return { ok: true };
+	}
+}
+
+function randomStateToken(): string {
+	// 24 bytes → 32 base64url chars. Unguessable; doubles as the OAuthStateKv key.
+	return randomBytes(24).toString("base64url");
 }
 
 function parseStringArray(value: unknown, errPrefix: string): string[] {
@@ -272,13 +369,13 @@ function parseAuthInput(params: Record<string, unknown>, transport: "http" | "st
 	const queriesIn = params.queries;
 	const hasHeaders = headersIn !== undefined;
 	const hasQueries = queriesIn !== undefined;
-	const authMode: "public" | "http-param" | undefined =
-		rawAuth === undefined ? undefined : rawAuth === "public" || rawAuth === "http-param" ? rawAuth : (null as never);
-	if (rawAuth !== undefined && authMode === null) {
-		throw new RequestError(-32602, `${EXT_MCP_ADD}: auth must be "public" or "http-param"`);
+	const isKnownAuth = rawAuth === "public" || rawAuth === "http-param" || rawAuth === "oauth-preregistered";
+	if (rawAuth !== undefined && !isKnownAuth) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: auth must be "public", "http-param", or "oauth-preregistered"`);
 	}
+	const authMode = isKnownAuth ? (rawAuth as "public" | "http-param" | "oauth-preregistered") : undefined;
 	if (transport === "stdio") {
-		if (authMode === "http-param" || hasHeaders || hasQueries) {
+		if (authMode === "http-param" || authMode === "oauth-preregistered" || hasHeaders || hasQueries) {
 			throw new RequestError(-32602, `${EXT_MCP_ADD}: stdio entries do not accept auth/headers/queries`);
 		}
 		return { mode: "public" };
@@ -294,6 +391,12 @@ function parseAuthInput(params: Record<string, unknown>, transport: "http" | "st
 		}
 		return { mode: "public" };
 	}
+	if (resolvedMode === "oauth-preregistered") {
+		if (hasHeaders || hasQueries) {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: auth "oauth-preregistered" rejects sibling headers/queries`);
+		}
+		return parseOauthPreregisteredInput(params);
+	}
 	// http-param
 	const headers = hasHeaders ? parseStringRecord(headersIn, "headers") : undefined;
 	const queries = hasQueries ? parseStringRecord(queriesIn, "queries") : undefined;
@@ -306,6 +409,76 @@ function parseAuthInput(params: Record<string, unknown>, transport: "http" | "st
 	if (hasHeaderEntries) cfg.headers = recordToNamedSecrets(headers as Record<string, string>);
 	if (hasQueryEntries) cfg.queries = recordToNamedSecrets(queries as Record<string, string>);
 	return cfg;
+}
+
+function parseOauthPreregisteredInput(params: Record<string, unknown>): McpAuthOAuthPreregisteredConfig {
+	const authorizeUrl = requireNonEmptyString(params.authorizeUrl, "authorizeUrl");
+	const tokenUrl = requireNonEmptyString(params.tokenUrl, "tokenUrl");
+	const clientId = requireNonEmptyString(params.clientId, "clientId");
+	validateOauthUrl(authorizeUrl, "authorizeUrl");
+	validateOauthUrl(tokenUrl, "tokenUrl");
+	const cfg: McpAuthOAuthPreregisteredConfig = {
+		mode: "oauth-preregistered",
+		authorizeUrl,
+		tokenUrl,
+		clientId,
+	};
+	if (params.clientSecret !== undefined) {
+		if (typeof params.clientSecret !== "string" || params.clientSecret.length === 0) {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: clientSecret must be a non-empty string`);
+		}
+		cfg.clientSecret = { name: "clientSecret", value: params.clientSecret, secret: true };
+	}
+	if (params.scopes !== undefined) {
+		if (!Array.isArray(params.scopes) || !params.scopes.every((s) => typeof s === "string")) {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: scopes must be a string[]`);
+		}
+		const scopes = params.scopes as string[];
+		if (scopes.length > 0) cfg.scopes = scopes;
+	}
+	if (params.redirectUri !== undefined) {
+		const redirectUri = requireNonEmptyString(params.redirectUri, "redirectUri");
+		try {
+			new URL(redirectUri);
+		} catch {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: redirectUri must be a valid URL`);
+		}
+		cfg.redirectUri = redirectUri;
+	}
+	if (params.tokenAuthMethod !== undefined) {
+		if (params.tokenAuthMethod !== "basic" && params.tokenAuthMethod !== "post") {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: tokenAuthMethod must be "basic" or "post"`);
+		}
+		cfg.tokenAuthMethod = params.tokenAuthMethod;
+	}
+	if (params.tokens !== undefined) {
+		throw new RequestError(
+			-32602,
+			`${EXT_MCP_ADD}: tokens field is owned by the oauth handler; do not pass on /mcp add`,
+		);
+	}
+	return cfg;
+}
+
+function requireNonEmptyString(value: unknown, field: string): string {
+	if (typeof value !== "string" || value.length === 0) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: ${field} must be a non-empty string`);
+	}
+	return value;
+}
+
+function validateOauthUrl(value: string, field: string): void {
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: ${field} must be a valid URL`);
+	}
+	const isHttps = url.protocol === "https:";
+	const isLocalHttp = url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+	if (!isHttps && !isLocalHttp) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: ${field} must use https (http allowed only for localhost)`);
+	}
 }
 
 function parseStringRecord(value: unknown, field: string): Record<string, string> {

@@ -98,8 +98,8 @@ export type RemoveProviderOptions = SessionRef;
 // --- MCP --------------------------------------------------------------
 
 export type McpTransport = "http" | "stdio";
-/** Auth mode discriminator. Extends with `"oauth-dcr"`, `"oauth-preregistered"` as those land. */
-export type McpAuthMode = "public" | "http-param";
+/** Auth mode discriminator. Mirrors the wire shape accepted by `_bodhi-pi/mcp/add`. */
+export type McpAuthMode = "public" | "http-param" | "oauth-preregistered";
 export type McpStatus = "connected" | "disconnected" | "error";
 
 export interface McpNamedValueInput {
@@ -109,8 +109,8 @@ export interface McpNamedValueInput {
 
 /**
  * HTTP MCP add params, discriminated on the top-level `auth` field. Mirrors the wire shape
- * accepted by `_bodhi-pi/mcp/add`. `"http-param"` carries sibling `headers` and/or `queries`
- * objects whose values become per-request secret attachments.
+ * accepted by `_bodhi-pi/mcp/add`. `"http-param"` carries sibling `headers` and/or `queries`;
+ * `"oauth-preregistered"` carries the OAuth 2.1 endpoint URLs + pre-issued client credentials.
  */
 export type McpAddHttpParams =
 	| {
@@ -124,7 +124,48 @@ export type McpAddHttpParams =
 			headers?: Record<string, string>;
 			queries?: Record<string, string>;
 			label?: string;
+	  }
+	| {
+			url: string;
+			auth: "oauth-preregistered";
+			authorizeUrl: string;
+			tokenUrl: string;
+			clientId: string;
+			clientSecret?: string;
+			scopes?: string[];
+			redirectUri?: string;
+			tokenAuthMethod?: "basic" | "post";
+			label?: string;
 	  };
+
+export interface McpOauthStartParams {
+	slug: string;
+	redirectUri?: string;
+}
+
+export type McpOauthStartResult =
+	| { authorizeUrl: string; state: string; status?: undefined }
+	| { status: "completed"; authorizeUrl?: undefined; state?: undefined };
+
+export interface McpOauthFinishParams {
+	slug: string;
+	code: string;
+	state: string;
+}
+
+export interface McpOauthFinishResult {
+	status: "completed" | "failed";
+	errorMessage?: string;
+}
+
+export interface McpOauthCancelParams {
+	slug: string;
+	state: string;
+}
+
+export interface McpOauthCancelResult {
+	ok: true;
+}
 
 export interface McpAddStdioParams {
 	command: string;

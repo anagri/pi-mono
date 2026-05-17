@@ -7,7 +7,15 @@ import {
 	ClientSideConnection,
 	type Stream,
 } from "@agentclientprotocol/sdk";
-import { type createBodhiPiAgent, createBodhiPiClient, parseMcpAddArgs, type SessionStore } from "@bodhiapp/bodhi-pi";
+import {
+	type createBodhiPiAgent,
+	createBodhiPiClient,
+	LIFECYCLE_EVENT_METHOD,
+	parseMcpAddArgs,
+	type SessionStore,
+} from "@bodhiapp/bodhi-pi";
+// seam-exception: slash command (client) starts the OAuth redirect server (host) — single-process flow, redirect_uri lives in the start request.
+import { startOAuthCallbackServer } from "../../host/oauth-callback-server.js";
 
 const INIT_PARAMS = {
 	protocolVersion: 1,
@@ -21,6 +29,15 @@ interface SessionRegistry {
 	active: string;
 	all: string[];
 }
+
+interface OAuthListenerEntry {
+	resolve: (outcome: { status: string; errorMessage?: string }) => void;
+}
+
+const oauthListeners = new Map<string, OAuthListenerEntry>();
+
+/** Port the cli host binds for OAuth redirects. Override per-flow by passing `--port=NNNN` on `/mcp oauth start`. */
+const DEFAULT_OAUTH_CALLBACK_PORT = 7777;
 
 async function tryHandleSlash(
 	line: string,
@@ -71,6 +88,9 @@ async function tryHandleSlash(
 			const result = await client.mcpAdd(args.value as Parameters<typeof client.mcpAdd>[0]);
 			return `added: ${result.slug}`;
 		}
+		if (sub === "oauth") {
+			return await handleOauthSlash(client, rest);
+		}
 		const slug = rest[0];
 		if (!sub || !slug) {
 			return "usage: /mcp <add|connect|disconnect|reconnect|remove|include|exclude|tools> [args…]";
@@ -109,6 +129,99 @@ async function tryHandleSlash(
 	return null;
 }
 
+async function handleOauthSlash(
+	client: ReturnType<typeof createBodhiPiClient>,
+	args: string[],
+): Promise<string> {
+	const action = args[0];
+	if (action !== "start" && action !== "cancel") {
+		return "usage: /mcp oauth <start|cancel> <slug> [--auto] [--port=NNNN]";
+	}
+	const slug = args[1];
+	if (!slug) return `usage: /mcp oauth ${action} <slug>`;
+	const flags = parseFlags(args.slice(2));
+	const port = typeof flags.port === "string" ? Number(flags.port) : DEFAULT_OAUTH_CALLBACK_PORT;
+	if (!Number.isInteger(port) || port <= 0 || port >= 65536) {
+		return `error: invalid --port=${flags.port}`;
+	}
+
+	if (action === "cancel") {
+		const state = typeof flags.state === "string" ? flags.state : undefined;
+		if (!state) return "usage: /mcp oauth cancel <slug> --state=<state>";
+		await client.mcpOauthCancel({ slug, state });
+		return `oauth: cancelled ${slug}`;
+	}
+
+	// action === "start" — register listener BEFORE calling oauth/start so we don't race the event.
+	const completion = new Promise<{ status: string; errorMessage?: string }>((resolve) => {
+		oauthListeners.set(slug, { resolve });
+	});
+
+	const server = await startOAuthCallbackServer({
+		port,
+		onCallback: async ({ code, state }) => {
+			try {
+				await client.mcpOauthFinish({ slug, code, state });
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				const listener = oauthListeners.get(slug);
+				if (listener) {
+					oauthListeners.delete(slug);
+					listener.resolve({ status: "failed", errorMessage: message });
+				}
+			}
+		},
+		onTimeout: () => {
+			const listener = oauthListeners.get(slug);
+			if (listener) {
+				oauthListeners.delete(slug);
+				listener.resolve({ status: "failed", errorMessage: "callback timeout" });
+			}
+		},
+	});
+
+	try {
+		const start = await client.mcpOauthStart({ slug, redirectUri: server.redirectUri });
+		if (start.status === "completed") {
+			oauthListeners.delete(slug);
+			await server.close();
+			return `oauth: already authorized for ${slug}`;
+		}
+		const authorizeUrl = start.authorizeUrl!;
+		const lines: string[] = [`oauth: open this URL to authenticate ${slug}:`, authorizeUrl];
+		if (flags.auto) {
+			// Test-only convenience: fetch the URL ourselves (the fixture's `?auto=1` query bypasses
+			// the approve page). Fires the redirect → our callback server → mcpOauthFinish.
+			const u = new URL(authorizeUrl);
+			u.searchParams.set("auto", "1");
+			void fetch(u.toString()).catch(() => {
+				// best-effort; the lifecycle event listener will time out and surface failure.
+			});
+		}
+		const outcome = await completion;
+		if (outcome.status === "completed") {
+			lines.push("oauth: completed");
+		} else {
+			lines.push(`oauth: failed: ${outcome.errorMessage ?? "unknown"}`);
+		}
+		return lines.join("\n");
+	} catch (err) {
+		oauthListeners.delete(slug);
+		await server.close();
+		throw err;
+	}
+}
+
+function parseFlags(tokens: string[]): { auto?: boolean; port?: string; state?: string } {
+	const out: { auto?: boolean; port?: string; state?: string } = {};
+	for (const t of tokens) {
+		if (t === "--auto") out.auto = true;
+		else if (t.startsWith("--port=")) out.port = t.slice("--port=".length);
+		else if (t.startsWith("--state=")) out.state = t.slice("--state=".length);
+	}
+	return out;
+}
+
 export interface HeadlessOptions {
 	factory: ReturnType<typeof createBodhiPiAgent>;
 	cwd: string;
@@ -142,6 +255,21 @@ export async function runHeadless(opts: HeadlessOptions): Promise<void> {
 				}
 			},
 			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
+			extNotification: async (method, params) => {
+				if (method !== LIFECYCLE_EVENT_METHOD) return;
+				const event = params as { type?: string; slug?: string; status?: string; errorMessage?: string };
+				if (event?.type !== "mcp_oauth_status_change") return;
+				if (event.status !== "completed" && event.status !== "failed") return;
+				const slug = event.slug;
+				if (!slug) return;
+				const listener = oauthListeners.get(slug);
+				if (!listener) return;
+				oauthListeners.delete(slug);
+				listener.resolve({
+					status: event.status,
+					...(event.errorMessage !== undefined ? { errorMessage: event.errorMessage } : {}),
+				});
+			},
 		}),
 		clientStream,
 	);
