@@ -204,7 +204,10 @@ export function bootstrapAgentWorker(): void {
 			// so connections die too — but kv (Dexie/IndexedDB) survives, so we
 			// auto-reconnect any entry with `lastKnownStatus === "connected"`
 			// below. Restore is host policy; the SDK never auto-rehydrates.
-			const mcpConnectionProvider = createInProcessMcpConnectionProvider();
+			// `kvStore` is threaded so the oauth-preregistered attacher can re-read
+			// the latest access token from kv per outbound request (refresh writes
+			// new tokens back; next request picks them up automatically).
+			const mcpConnectionProvider = createInProcessMcpConnectionProvider({ kvStore });
 
 			const factory = createBodhiPiHostAgent(
 				{ sessionStore, filesystem },

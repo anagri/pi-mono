@@ -73,15 +73,37 @@ export async function handleOauthCallback(
 	try {
 		await runAuthFlow(provider, entry.auth.tokenUrl, code);
 		await stateKv.remove(state);
-		writeHtml(
-			res,
-			200,
-			"<!doctype html><html><body><h2>OAuth complete</h2><p>You can close this window — bodhi-pi has saved your tokens.</p></body></html>",
-		);
+		writeHtml(res, 200, completionPageHtml(stateEntry.slug, "completed"));
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		writeHtml(res, 500, `<!doctype html><html><body>OAuth failed: ${escapeHtml(message)}</body></html>`);
+		writeHtml(res, 500, completionPageHtml(stateEntry.slug, "failed", message));
 	}
+}
+
+/**
+ * HTML for the popup window after the server-side flow completes. The page postMessages
+ * `{kind: "bodhi-pi-oauth-callback-done", slug, status}` to `window.opener` (pinned to the
+ * opener's origin via `*` since the opener's origin can be anything — the slash command
+ * filters by message kind + slug, which provides equivalent CSRF protection given the
+ * page is only reachable via the OAuth provider's redirect, which itself requires a valid
+ * state token bound to the slug). The opener's chat slash listens for this message and
+ * resolves the in-flight completion promise WITHOUT calling `oauth/finish` again (server
+ * already did it).
+ */
+function completionPageHtml(slug: string, status: "completed" | "failed", errorMessage?: string): string {
+	const safeSlug = escapeJsString(slug);
+	const safeStatus = escapeJsString(status);
+	const safeError = errorMessage ? escapeJsString(errorMessage) : "";
+	const heading = status === "completed" ? "OAuth complete" : "OAuth failed";
+	const message =
+		status === "completed"
+			? "You can close this window — bodhi-pi has saved your tokens."
+			: `OAuth failed: ${escapeHtml(errorMessage ?? "unknown")}`;
+	return `<!doctype html><html><body><h2>${heading}</h2><p>${message}</p><script>(function(){if(window.opener){window.opener.postMessage({kind:"bodhi-pi-oauth-callback-done",slug:"${safeSlug}",status:"${safeStatus}"${safeError ? `,errorMessage:"${safeError}"` : ""}},"*");setTimeout(function(){window.close();},200);}})();</script></body></html>`;
+}
+
+function escapeJsString(s: string): string {
+	return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r");
 }
 
 function writeHtml(res: ServerResponse, status: number, body: string): void {

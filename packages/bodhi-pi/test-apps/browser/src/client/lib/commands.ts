@@ -369,29 +369,60 @@ async function handleMcpSubcommand(
 				cbCode = cb.searchParams.get("code") ?? "";
 				cbState = cb.searchParams.get("state") ?? "";
 			} else {
-				const completion = new Promise<{ source: "postmessage"; code: string; state: string } | { source: "event" }>(
-					(resolve) => {
-						const onMsg = (e: MessageEvent) => {
+				const completion = new Promise<
+					| { source: "postmessage"; code: string; state: string }
+					| { source: "server"; status: "completed" | "failed"; errorMessage?: string }
+					| { source: "event" }
+				>((resolve) => {
+					const onMsg = (e: MessageEvent) => {
+						const data = e.data as {
+							kind?: string;
+							code?: string;
+							state?: string;
+							slug?: string;
+							status?: string;
+							errorMessage?: string;
+						};
+						// Path A: browser popup React route — we own the page, so origin must match.
+						if (data?.kind === "bodhi-pi-oauth-callback" && data.code && data.state) {
 							if (e.origin !== window.location.origin) return;
-							const data = e.data as { kind?: string; code?: string; state?: string };
-							if (data?.kind !== "bodhi-pi-oauth-callback" || !data.code || !data.state) return;
 							if (data.state !== startResp.state) return;
 							cleanup();
 							resolve({ source: "postmessage", code: data.code, state: data.state });
-						};
-						const offEvent = onOauthStatusEvent((event) => {
-							if (event.slug !== oauthSlug) return;
-							if (event.status !== "completed" && event.status !== "failed") return;
+							return;
+						}
+						// Path B: HTTP/WS server-side /oauth/callback finished the flow itself; the popup's
+						// inline script postMessages us a "done" marker (no code/state — already exchanged
+						// for tokens server-side). Origin filter is intentionally loose: the redirect lands
+						// on the server's origin which may differ from the app's origin, and the slug match
+						// is the load-bearing identity check (the popup couldn't know our slug without the
+						// server having validated the state token first).
+						if (
+							data?.kind === "bodhi-pi-oauth-callback-done" &&
+							data.slug === oauthSlug &&
+							(data.status === "completed" || data.status === "failed")
+						) {
 							cleanup();
-							resolve({ source: "event" });
-						});
-						const cleanup = () => {
-							window.removeEventListener("message", onMsg);
-							offEvent();
-						};
-						window.addEventListener("message", onMsg);
-					},
-				);
+							resolve({
+								source: "server",
+								status: data.status,
+								...(data.errorMessage !== undefined ? { errorMessage: data.errorMessage } : {}),
+							});
+							return;
+						}
+					};
+					const offEvent = onOauthStatusEvent((event) => {
+						if (event.slug !== oauthSlug) return;
+						if (event.status !== "completed" && event.status !== "failed") return;
+						cleanup();
+						resolve({ source: "event" });
+					});
+					const cleanup = () => {
+						window.removeEventListener("message", onMsg);
+						offEvent();
+					};
+					window.addEventListener("message", onMsg);
+				});
 				window.open(urlToOpen, "oauth", "popup=yes,width=500,height=600");
 				ctx.pushSystemMessage(`oauth: opened popup for ${oauthSlug}`, {
 					"data-mcp-event": "oauth-popup-opened",
@@ -401,9 +432,19 @@ async function handleMcpSubcommand(
 				if (r.source === "postmessage") {
 					cbCode = r.code;
 					cbState = r.state;
+				} else if (r.source === "server") {
+					// HTTP/WS server-side /oauth/callback finished the flow; tokens already persisted.
+					// Skip the follow-up oauth/finish call.
+					if (r.status === "failed") {
+						ctx.pushSystemMessage(`oauth: failed ${oauthSlug}: ${r.errorMessage ?? "server-side error"}`, {
+							"data-mcp-event": "oauth-failed",
+							"data-mcp-slug": oauthSlug,
+						});
+						return { handled: true };
+					}
+					serverCompleted = true;
 				} else {
-					// Server-side completion (HTTP/WS): tokens already persisted; skip the
-					// follow-up oauth/finish call.
+					// Lifecycle event path (future server-side push via SSE/WS); same skip.
 					serverCompleted = true;
 				}
 			}

@@ -73,7 +73,10 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 		"Access-Control-Allow-Origin": "*",
 		"Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
 		"Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version",
-		"Access-Control-Expose-Headers": "Mcp-Session-Id",
+		// Expose `Location` so cross-origin callers (chrome-ext Playwright stub) can read the
+		// `?auto=1` redirect target from a `redirect: "manual"` fetch — without this Chrome
+		// hides the header and the stub can't extract code+state.
+		"Access-Control-Expose-Headers": "Mcp-Session-Id, Location",
 		"Access-Control-Max-Age": "86400",
 	};
 
@@ -167,6 +170,19 @@ export async function spawnOAuthMcpServer(opts: SpawnOAuthMcpServerOptions): Pro
 			const redirect = new URL(redirectUri);
 			redirect.searchParams.set("code", code);
 			if (state) redirect.searchParams.set("state", state);
+			// `?auto=1&respond=json` returns the redirect URL in a CORS-readable JSON body
+			// instead of a 302. Necessary for the chrome-ext Playwright stub because browser
+			// fetch with `redirect: "manual"` always produces an opaqueredirect response with
+			// no readable headers cross-origin — Location can't be extracted that way.
+			if (url.searchParams.get("respond") === "json") {
+				const body = JSON.stringify({ redirectUri: redirect.toString(), code, state });
+				res.writeHead(200, {
+					...corsHeaders,
+					"Content-Type": "application/json",
+					"Content-Length": Buffer.byteLength(body),
+				}).end(body);
+				return;
+			}
 			res.writeHead(302, { Location: redirect.toString() }).end();
 			return;
 		}

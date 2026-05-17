@@ -108,7 +108,7 @@ export async function buildAgentFactory(opts: WireAgentOptions, label: string): 
 	const kvRoot = opts.kvStoreDir ?? path.join(opts.dataDir, "kv");
 	const kvDir = path.join(kvRoot, String(opts.user.id));
 	const kvStore = createNodeKvStore({ dir: kvDir });
-	const mcpConnectionProvider = opts.mcpStore.getProviderForUser(String(opts.user.id));
+	const mcpConnectionProvider = opts.mcpStore.getProviderForUser(String(opts.user.id), kvStore);
 
 	const factory: AgentFactory = (conn) => {
 		const innerFactory = createBodhiPiHostAgent(

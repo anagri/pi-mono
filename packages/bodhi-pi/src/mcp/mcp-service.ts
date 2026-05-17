@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { discoverOAuthServerInfo, registerClient } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientMetadata } from "@modelcontextprotocol/sdk/shared/auth.js";
@@ -582,11 +581,13 @@ async function runDcrAddFlow(
 
 function makeStateToken(tenantId: string | undefined): string {
 	// 24 bytes → 32 base64url chars. Unguessable; doubles as the OAuthStateKv key.
-	const random = randomBytes(24).toString("base64url");
+	const arr = new Uint8Array(24);
+	globalThis.crypto.getRandomValues(arr);
+	const random = base64UrlEncodeBytes(arr);
 	if (tenantId === undefined) return random;
 	// Multi-tenant prefix: `<base64url(tenantId)>.<random>` so a process-wide /oauth/callback
 	// route can split on the first `.` and decode the tenant without holding extra state.
-	return `${Buffer.from(tenantId).toString("base64url")}.${random}`;
+	return `${base64UrlEncodeString(tenantId)}.${random}`;
 }
 
 /** Inverse of `makeStateToken`'s tenant prefix; returns `null` if the state has no tenant prefix. */
@@ -594,10 +595,36 @@ export function decodeTenantFromState(state: string): string | null {
 	const idx = state.indexOf(".");
 	if (idx <= 0) return null;
 	try {
-		return Buffer.from(state.slice(0, idx), "base64url").toString("utf8");
+		return base64UrlDecodeToString(state.slice(0, idx));
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Cross-runtime base64url helpers — Web Crypto + `globalThis.atob`/`btoa` work in Node 19+ AND
+ * every browser/worker we ship, with no `node:crypto` or `Buffer` coupling. Keeps bodhi-pi core
+ * free of new Node-only imports per the deep-import discipline in CLAUDE.md.
+ */
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+	let bin = "";
+	for (const b of bytes) bin += String.fromCharCode(b);
+	return globalThis.btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlEncodeString(s: string): string {
+	// utf8 → bytes via TextEncoder (global in Node 11+ and all browsers/workers).
+	return base64UrlEncodeBytes(new TextEncoder().encode(s));
+}
+
+function base64UrlDecodeToString(s: string): string {
+	// Reverse the base64url URL-safe alphabet then pad to a multiple of 4 for atob.
+	const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+	const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+	const bin = globalThis.atob(padded);
+	const bytes = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+	return new TextDecoder("utf-8").decode(bytes);
 }
 
 function parseStringArray(value: unknown, errPrefix: string): string[] {

@@ -32,40 +32,39 @@ async function lastSystemEvent(page: import("@playwright/test").Page, event: str
  * without a real Chrome-managed auth window. The stub fetches the authorize URL (which has
  * `&auto=1` appended by the slash) and returns the resulting redirect URL synchronously — the
  * same shape the real chrome.identity would return after a successful flow.
+ *
+ * Extension pages define `window.chrome` as a non-writable property, so we use
+ * `Object.defineProperty` to override `chrome.identity` (which is also locked down). Without
+ * the configurable: true reassignment, simple `chrome.identity.launchWebAuthFlow = …`
+ * silently no-ops in strict mode.
  */
 async function stubChromeIdentity(page: import("@playwright/test").Page): Promise<void> {
 	await page.addInitScript(() => {
-		const win = window as unknown as {
-			chrome?: {
-				identity?: {
-					launchWebAuthFlow?: (
-						opts: { url: string; interactive: boolean },
-						cb: (responseUrl?: string) => void,
-					) => void;
-					getRedirectURL?: (path?: string) => string;
-				};
-				runtime?: { lastError?: { message?: string } };
-			};
+		const stubIdentity = {
+			getRedirectURL: (_path?: string): string => "https://test-ext-id.chromiumapp.org/",
+			launchWebAuthFlow: (opts: { url: string; interactive: boolean }, cb: (responseUrl?: string) => void): void => {
+				// `redirect: "manual"` cross-origin returns an opaqueredirect response with no
+				// readable headers, so the fixture's `&respond=json` mode returns the redirect URL
+				// in a CORS-readable JSON body instead. We construct the final responseUrl from it.
+				const url = new URL(opts.url);
+				url.searchParams.set("respond", "json");
+				fetch(url.toString())
+					.then((r) => r.json())
+					.then((body: { redirectUri?: string }) => cb(body.redirectUri))
+					.catch(() => cb(undefined));
+			},
 		};
-		if (!win.chrome) win.chrome = {};
-		if (!win.chrome.identity) win.chrome.identity = {};
-		win.chrome.identity.getRedirectURL = () => "https://test-ext-id.chromiumapp.org/";
-		win.chrome.identity.launchWebAuthFlow = (opts, cb) => {
-			// Fetch the authorize URL ourselves; the fixture's `?auto=1` query (added by the slash)
-			// causes /authorize to immediately 302 to the redirect URL with code+state. We follow
-			// the redirect manually so we can hand the redirect URL straight back to the slash.
-			fetch(opts.url, { redirect: "manual" })
-				.then(async (r) => {
-					const loc = r.headers.get("location");
-					if (loc) {
-						cb(loc);
-					} else {
-						// 200 means fetch already followed the redirect; pull the URL from response.url.
-						cb(r.url);
-					}
-				})
-				.catch(() => cb(undefined));
-		};
+		const win = window as unknown as { chrome?: Record<string, unknown> };
+		if (!win.chrome) {
+			Object.defineProperty(window, "chrome", { value: {}, configurable: true, writable: true });
+		}
+		// Force-override chrome.identity even if it's defined as a non-writable property by
+		// Chrome's extension runtime — defineProperty with configurable:true wins.
+		Object.defineProperty(win.chrome as object, "identity", {
+			value: stubIdentity,
+			configurable: true,
+			writable: true,
+		});
 	});
 }
 
