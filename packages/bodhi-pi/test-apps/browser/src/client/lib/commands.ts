@@ -248,16 +248,11 @@ async function handleMcpSubcommand(
 	try {
 		if (sub === "add") {
 			const args = parseMcpAddArgs(rest);
-			if (args.error) {
-				ctx.pushSystemMessage(args.error);
+			if (args.error || !args.value) {
+				ctx.pushSystemMessage(args.error ?? "missing argument");
 				return { handled: true };
 			}
-			const params: Record<string, unknown> = {};
-			if (args.url) params.url = args.url;
-			if (args.command) params.command = args.command;
-			if (args.args) params.args = args.args;
-			if (args.label) params.label = args.label;
-			const result = (await ctx.conn.extMethod(EXT_MCP_ADD, params)) as { slug: string };
+			const result = (await ctx.conn.extMethod(EXT_MCP_ADD, args.value)) as { slug: string };
 			ctx.pushSystemMessage(`added: ${result.slug}`, {
 				"data-mcp-event": "added",
 				"data-mcp-slug": result.slug,

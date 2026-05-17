@@ -117,7 +117,7 @@ First-party in `src/mcp/`. Decomposed into `McpService` (ACP methods) + `McpStor
 
 **Transports.** http-streamable everywhere; stdio in Node-spawnable Hosts only. Hosts that cannot spawn (`test-apps/browser`, `test-apps/chrome-ext`) and stateless rebuild Hosts (`test-apps/http`) MUST pass `supportsMcpStdio: false` when constructing the agent. `_bodhi-pi/mcp/add` with `command=` then rejects with `-32601` rather than silently saving an unusable entry.
 
-**Auth.** Only `auth.mode = "public"` is supported today. OAuth re-introduction is tracked in `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-{dcr,preregistered,header-query}.md`.
+**Auth.** Top-level discriminator on `_bodhi-pi/mcp/add` and on the persisted `McpServerEntry`: `auth: "public" | "http-param"`. `"http-param"` carries sibling `headers?: Record<string,string>` and/or `queries?: Record<string,string>` (at least one required). Header/query values are tagged `secret: true` internally and masked to `"***"` on every ACP-boundary read. OAuth modes (`oauth-dcr`, `oauth-preregistered`) extend the discriminator and are tracked in `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-*.md`.
 
 ## pi-agent-core import policy
 

@@ -29,7 +29,7 @@ test("mcp session resume: closing + resuming restores included MCPs", async () =
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
-	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl() });
+	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public" });
 	const connectResult = await h.client.mcpConnect({ slug });
 	expect.soft(connectResult.tools).toContain(`${slug}__get-sum`);
 	await h.client.mcpInclude({ slug, sessionId });

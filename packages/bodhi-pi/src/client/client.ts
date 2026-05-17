@@ -297,6 +297,11 @@ export class BodhiPiClient {
 		const body: Record<string, unknown> = {};
 		if ("url" in params) {
 			body.url = params.url;
+			body.auth = params.auth;
+			if (params.auth === "http-param") {
+				if (params.headers !== undefined) body.headers = params.headers;
+				if (params.queries !== undefined) body.queries = params.queries;
+			}
 		} else {
 			body.command = params.command;
 			if (params.args !== undefined) body.args = params.args;

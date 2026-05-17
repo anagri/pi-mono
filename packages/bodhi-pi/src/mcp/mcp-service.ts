@@ -1,7 +1,7 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
-import type { KvStore } from "../kv/kv-store.js";
+import { type KvStore, maskSecrets } from "../kv/kv-store.js";
 import type { AppendEntry } from "../models/registry.js";
 import type { SessionState } from "../sessions/session-state.js";
 import {
@@ -23,10 +23,13 @@ import { resolveUniqueSlug, slugifyCommand, slugifyUrl } from "./mcp-slug.js";
 import { McpStore } from "./mcp-store.js";
 import {
 	MCP_PREFIX,
+	type McpAuthConfig,
+	type McpAuthHttpParamConfig,
 	type McpListEntry,
 	type McpNamedSecret,
 	type McpServerEntry,
 	parseMcpServerEntry,
+	serializeAuthConfig,
 	serializeMcpServerEntry,
 } from "./mcp-types.js";
 
@@ -110,11 +113,12 @@ export class McpService {
 		const args = parseStringArray(params.args, `${EXT_MCP_ADD}: args`);
 		const env = parseNamedSecretListParam(params.env);
 		const label = typeof params.label === "string" && params.label.length > 0 ? params.label : undefined;
+		const auth = parseAuthInput(params, transport);
 		const candidate = transport === "http" ? slugifyUrl(url ?? "") : slugifyCommand(command ?? "", args);
 		const slug = await resolveUniqueSlug(candidate, kv);
 		const entry: McpServerEntry = {
 			transport,
-			auth: { mode: "public" },
+			auth,
 			label: label ?? slug,
 			addedAt: new Date().toISOString(),
 			lastKnownStatus: "disconnected",
@@ -185,11 +189,15 @@ export class McpService {
 			if (!entry) continue;
 			const slug = e.key.slice(MCP_PREFIX.length);
 			const liveStatus = this.provider.isConnected(slug) ? "connected" : entry.lastKnownStatus;
+			// Per spec: list response carries the auth blob with secret values left tagged
+			// `{value, secret: true}`. The KV/ACP boundary masks values to `***` via `maskSecrets`;
+			// callers reading this response over ACP see masked values, in-process callers see plaintext.
 			const item: McpListEntry = {
 				slug,
 				label: entry.label,
 				transport: entry.transport,
 				status: liveStatus,
+				auth: maskSecrets(serializeAuthConfig(entry.auth)),
 			};
 			if (entry.url !== undefined) item.url = entry.url;
 			if (entry.command !== undefined) item.command = entry.command;
@@ -244,4 +252,76 @@ function parseNamedSecretListParam(value: unknown): McpNamedSecret[] {
 		}
 	}
 	return out;
+}
+
+/**
+ * Parse the top-level `auth` discriminator and sibling `headers`/`queries` fields from the
+ * `_bodhi-pi/mcp/add` params. Stdio entries (transport === "stdio") may omit `auth` entirely;
+ * stdio auth is always treated as public. HTTP entries default to `"public"` when omitted.
+ *
+ * Validation:
+ * - `auth` must be `"public"` or `"http-param"` if present
+ * - `"public"` + sibling headers/queries present → -32602 (use `"http-param"` to attach)
+ * - `"http-param"` + neither headers nor queries (or both empty) → -32602
+ * - headers/queries must be `{ [name]: string }` objects; non-string values → -32602
+ * - stdio + auth !== "public" (when present) → -32602
+ */
+function parseAuthInput(params: Record<string, unknown>, transport: "http" | "stdio"): McpAuthConfig {
+	const rawAuth = params.auth;
+	const headersIn = params.headers;
+	const queriesIn = params.queries;
+	const hasHeaders = headersIn !== undefined;
+	const hasQueries = queriesIn !== undefined;
+	const authMode: "public" | "http-param" | undefined =
+		rawAuth === undefined ? undefined : rawAuth === "public" || rawAuth === "http-param" ? rawAuth : (null as never);
+	if (rawAuth !== undefined && authMode === null) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: auth must be "public" or "http-param"`);
+	}
+	if (transport === "stdio") {
+		if (authMode === "http-param" || hasHeaders || hasQueries) {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: stdio entries do not accept auth/headers/queries`);
+		}
+		return { mode: "public" };
+	}
+	// http transport
+	const resolvedMode = authMode ?? "public";
+	if (resolvedMode === "public") {
+		if (hasHeaders || hasQueries) {
+			throw new RequestError(
+				-32602,
+				`${EXT_MCP_ADD}: auth "public" rejects headers/queries; use auth "http-param" to attach`,
+			);
+		}
+		return { mode: "public" };
+	}
+	// http-param
+	const headers = hasHeaders ? parseStringRecord(headersIn, "headers") : undefined;
+	const queries = hasQueries ? parseStringRecord(queriesIn, "queries") : undefined;
+	const hasHeaderEntries = headers !== undefined && Object.keys(headers).length > 0;
+	const hasQueryEntries = queries !== undefined && Object.keys(queries).length > 0;
+	if (!hasHeaderEntries && !hasQueryEntries) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: auth "http-param" requires at least one header or query entry`);
+	}
+	const cfg: McpAuthHttpParamConfig = { mode: "http-param" };
+	if (hasHeaderEntries) cfg.headers = recordToNamedSecrets(headers as Record<string, string>);
+	if (hasQueryEntries) cfg.queries = recordToNamedSecrets(queries as Record<string, string>);
+	return cfg;
+}
+
+function parseStringRecord(value: unknown, field: string): Record<string, string> {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) {
+		throw new RequestError(-32602, `${EXT_MCP_ADD}: ${field} must be a { name: value } object`);
+	}
+	const out: Record<string, string> = {};
+	for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+		if (typeof v !== "string") {
+			throw new RequestError(-32602, `${EXT_MCP_ADD}: ${field}["${k}"] must be a string`);
+		}
+		out[k] = v;
+	}
+	return out;
+}
+
+function recordToNamedSecrets(record: Record<string, string>): McpNamedSecret[] {
+	return Object.entries(record).map(([name, value]) => ({ name, value, secret: true }));
 }

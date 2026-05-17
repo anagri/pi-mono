@@ -78,12 +78,12 @@ Throws `-32601` when host omitted `kvStore`.
 
 | Method | Params | Response | Side effects | Throws |
 |---|---|---|---|---|
-| `_bodhi-pi/mcp/add` | `{url?, command?, args?, env?, label?}` | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`) | `-32602` if neither `url` nor `command`; `-32601` if `command` and `!supportsStdio` |
+| `_bodhi-pi/mcp/add` | `{url, auth: "public" \| "http-param", headers?, queries?, label?}` for http; `{command, args?, env?, label?}` for stdio | `{slug}` | writes `mcp/<slug>` to KV (status `disconnected`); tags every header/query/env value `secret:true` | `-32602` if neither `url` nor `command`; `-32602` on auth-shape errors (see [mcp.md § Auth](./mcp.md#auth)); `-32601` if `command` and `!supportsStdio` |
 | `_bodhi-pi/mcp/remove` | `{slug}` | `{slug}` | `provider.disconnect(slug)`, KV remove, emits `mcp_status_change{status:"disconnected"}` | |
 | `_bodhi-pi/mcp/connect` | `{slug}` | `{tools:[…]}` | `provider.connect(...)`, status broadcasts, persists `lastKnownStatus:"connected"` | `-32602` unknown slug; `-32603` from provider error |
 | `_bodhi-pi/mcp/disconnect` | `{slug}` | `{slug}` | `provider.disconnect`, persists `disconnected`, broadcasts | — |
 | `_bodhi-pi/mcp/reconnect` | `{slug}` | `{tools:[…]}` | `provider.reconnect`, broadcasts | `-32602` unknown; `-32603` provider error |
-| `_bodhi-pi/mcp/list` | `{}` | `{entries:[{slug,label,transport,status,url?,command?}]}` | live status = `provider.isConnected(slug) ? "connected" : entry.lastKnownStatus` |
+| `_bodhi-pi/mcp/list` | `{}` | `{entries:[{slug,label,transport,status,url?,command?,auth}]}` — `auth` mirrors the persisted blob with secret values masked to `"***"` | live status = `provider.isConnected(slug) ? "connected" : entry.lastKnownStatus` |
 | `_bodhi-pi/mcp/tools` | `{sessionId, slug}` | `{tools:[…]}` | per-session visibility (returns `[]` if not included or not connected) |
 | `_bodhi-pi/mcp/include` | `{sessionId, slug}` | `{slug, tools}` | adds to inclusion, applies to session, persists `mcp_inclusion_set` | `-32602` unknown slug |
 | `_bodhi-pi/mcp/exclude` | `{sessionId, slug}` | `{slug}` | removes from inclusion, applies, persists snapshot | — |

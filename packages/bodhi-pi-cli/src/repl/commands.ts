@@ -562,22 +562,12 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			const rest = parts.slice(2);
 			if (sub === "add") {
 				const parsed = parseMcpAddArgs(rest);
-				if (parsed.error) {
-					process.stdout.write(`${parsed.error}\n`);
+				if (parsed.error || !parsed.value) {
+					process.stdout.write(`${parsed.error ?? "missing argument"}\n`);
 					return false;
 				}
 				try {
-					const result = parsed.url
-						? await ctx.client.mcpAdd({
-								url: parsed.url,
-								...(parsed.label ? { label: parsed.label } : {}),
-							})
-						: await ctx.client.mcpAdd({
-								command: parsed.command!,
-								...(parsed.args ? { args: parsed.args } : {}),
-								...(parsed.env ? { env: parsed.env } : {}),
-								...(parsed.label ? { label: parsed.label } : {}),
-							});
+					const result = await ctx.client.mcpAdd(parsed.value as Parameters<typeof ctx.client.mcpAdd>[0]);
 					process.stdout.write(`added: ${result.slug}\n`);
 				} catch (err) {
 					process.stdout.write(`error: ${String(err)}\n`);

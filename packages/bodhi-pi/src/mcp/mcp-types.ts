@@ -5,7 +5,13 @@ export const MCP_PREFIX = "mcp/";
 
 export type McpTransport = "http" | "stdio";
 
-export type McpAuthMode = "public";
+/**
+ * Top-level auth discriminator. `"public"` carries no credentials. `"http-param"` attaches
+ * static headers and/or query parameters to every request against an HTTP-streamable MCP server.
+ * Future auth modes (e.g. `"oauth-dcr"`, `"oauth-preregistered"`) will extend this union with
+ * their own additional fields on `McpAuthConfig`.
+ */
+export type McpAuthMode = "public" | "http-param";
 
 export type McpStatus = "connected" | "disconnected" | "error";
 
@@ -15,9 +21,17 @@ export interface McpNamedSecret {
 	secret: true;
 }
 
-export interface McpAuthConfig {
-	mode: McpAuthMode;
+export interface McpAuthPublicConfig {
+	mode: "public";
 }
+
+export interface McpAuthHttpParamConfig {
+	mode: "http-param";
+	headers?: McpNamedSecret[];
+	queries?: McpNamedSecret[];
+}
+
+export type McpAuthConfig = McpAuthPublicConfig | McpAuthHttpParamConfig;
 
 export interface McpServerEntry {
 	transport: McpTransport;
@@ -44,6 +58,7 @@ export interface McpListEntry {
 	status: McpStatus;
 	url?: string;
 	command?: string;
+	auth: JsonValue;
 	error?: string;
 }
 
@@ -62,7 +77,7 @@ export function parseMcpServerEntry(value: JsonValue | null | undefined): McpSer
 	) {
 		return null;
 	}
-	const auth = parseAuthConfig(obj.auth);
+	const auth = parseAuthConfigStored(obj.auth);
 	if (auth === null) return null;
 	const entry: McpServerEntry = {
 		transport,
@@ -85,7 +100,7 @@ export function parseMcpServerEntry(value: JsonValue | null | undefined): McpSer
 export function serializeMcpServerEntry(entry: McpServerEntry): JsonValue {
 	const out: { [k: string]: JsonValue } = {
 		transport: entry.transport,
-		auth: { mode: entry.auth.mode },
+		auth: serializeAuthConfig(entry.auth),
 		label: entry.label,
 		addedAt: entry.addedAt,
 		lastKnownStatus: entry.lastKnownStatus,
@@ -97,11 +112,39 @@ export function serializeMcpServerEntry(entry: McpServerEntry): JsonValue {
 	return out;
 }
 
-function parseAuthConfig(value: JsonValue | undefined): McpAuthConfig | null {
+export function serializeAuthConfig(auth: McpAuthConfig): JsonValue {
+	if (auth.mode === "public") return { mode: "public" };
+	const out: { [k: string]: JsonValue } = { mode: "http-param" };
+	if (auth.headers !== undefined && auth.headers.length > 0) {
+		out.headers = auth.headers.map(serializeNamedSecret);
+	}
+	if (auth.queries !== undefined && auth.queries.length > 0) {
+		out.queries = auth.queries.map(serializeNamedSecret);
+	}
+	return out;
+}
+
+function parseAuthConfigStored(value: JsonValue | undefined): McpAuthConfig | null {
 	if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) return null;
 	const obj = value as { [k: string]: JsonValue };
-	if (obj.mode !== "public") return null;
-	return { mode: "public" };
+	if (obj.mode === "public") return { mode: "public" };
+	if (obj.mode === "http-param") {
+		const cfg: McpAuthHttpParamConfig = { mode: "http-param" };
+		const headers = parseNamedSecretArray(obj.headers);
+		if (headers !== null) cfg.headers = headers;
+		const queries = parseNamedSecretArray(obj.queries);
+		if (queries !== null) cfg.queries = queries;
+		// A persisted http-param entry must carry at least one header or query —
+		// otherwise it's indistinguishable from "public" and shouldn't exist on disk.
+		if (
+			(cfg.headers === undefined || cfg.headers.length === 0) &&
+			(cfg.queries === undefined || cfg.queries.length === 0)
+		) {
+			return null;
+		}
+		return cfg;
+	}
+	return null;
 }
 
 function parseNamedSecretArray(value: JsonValue | undefined): McpNamedSecret[] | null {

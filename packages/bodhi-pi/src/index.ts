@@ -25,7 +25,6 @@ export type {
 	McpAddParams,
 	McpAddResult,
 	McpAddStdioParams,
-	McpAuthInput,
 	McpAuthMode,
 	McpConnectParams,
 	McpConnectResult,

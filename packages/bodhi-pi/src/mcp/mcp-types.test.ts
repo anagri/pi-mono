@@ -22,17 +22,50 @@ const stdioEntry: McpServerEntry = {
 	lastKnownStatus: "disconnected",
 };
 
+const httpHeaderEntry: McpServerEntry = {
+	transport: "http",
+	url: "https://mcp.example/mcp",
+	auth: {
+		mode: "http-param",
+		headers: [{ name: "Authorization", value: "Bearer secret-token", secret: true }],
+	},
+	label: "example",
+	addedAt: "2026-05-17T00:00:00.000Z",
+	lastKnownStatus: "disconnected",
+};
+
+const httpMixedEntry: McpServerEntry = {
+	transport: "http",
+	url: "https://mcp.example/mcp",
+	auth: {
+		mode: "http-param",
+		headers: [{ name: "X-Trace", value: "abc", secret: true }],
+		queries: [{ name: "api_key", value: "k1", secret: true }],
+	},
+	label: "example",
+	addedAt: "2026-05-17T00:00:00.000Z",
+	lastKnownStatus: "disconnected",
+};
+
 describe("serialize + parse round-trip", () => {
-	it("preserves http entries", () => {
+	it("preserves http public entries", () => {
 		const wire = serializeMcpServerEntry(httpEntry);
-		const back = parseMcpServerEntry(wire);
-		expect(back).toEqual(httpEntry);
+		expect(parseMcpServerEntry(wire)).toEqual(httpEntry);
 	});
 
 	it("preserves stdio entries", () => {
 		const wire = serializeMcpServerEntry(stdioEntry);
-		const back = parseMcpServerEntry(wire);
-		expect(back).toEqual(stdioEntry);
+		expect(parseMcpServerEntry(wire)).toEqual(stdioEntry);
+	});
+
+	it("preserves http http-param entries with headers only", () => {
+		const wire = serializeMcpServerEntry(httpHeaderEntry);
+		expect(parseMcpServerEntry(wire)).toEqual(httpHeaderEntry);
+	});
+
+	it("preserves http http-param entries with both headers and queries", () => {
+		const wire = serializeMcpServerEntry(httpMixedEntry);
+		expect(parseMcpServerEntry(wire)).toEqual(httpMixedEntry);
 	});
 });
 
@@ -71,10 +104,22 @@ describe("parseMcpServerEntry rejects malformed shapes", () => {
 		expect(parseMcpServerEntry(bad)).toBeNull();
 	});
 
-	it("rejects non-public auth mode", () => {
+	it("rejects unknown auth mode", () => {
 		const bad = serializeMcpServerEntry(httpEntry) as { [k: string]: unknown };
-		(bad.auth as { [k: string]: unknown }).mode = "header";
+		(bad.auth as { [k: string]: unknown }).mode = "oauth-dcr";
 		expect(parseMcpServerEntry(bad as never)).toBeNull();
+	});
+
+	it("rejects http-param entry with no headers or queries (indistinguishable from public)", () => {
+		const bad = {
+			transport: "http",
+			url: "https://x/mcp",
+			auth: { mode: "http-param" },
+			label: "x",
+			addedAt: "x",
+			lastKnownStatus: "disconnected",
+		};
+		expect(parseMcpServerEntry(bad)).toBeNull();
 	});
 });
 
@@ -86,5 +131,19 @@ describe("kvStore masking compatibility", () => {
 		};
 		expect(masked.env[0].name).toBe("FOO");
 		expect(masked.env[0].value).toBe("***");
+	});
+
+	it("masks http-param header and query values inside the auth blob", () => {
+		const wire = serializeMcpServerEntry(httpMixedEntry);
+		const masked = maskSecrets(wire) as {
+			auth: {
+				mode: string;
+				headers: Array<{ name: string; value: string }>;
+				queries: Array<{ name: string; value: string }>;
+			};
+		};
+		expect(masked.auth.mode).toBe("http-param");
+		expect(masked.auth.headers).toEqual([{ name: "X-Trace", value: "***", secret: true }]);
+		expect(masked.auth.queries).toEqual([{ name: "api_key", value: "***", secret: true }]);
 	});
 });

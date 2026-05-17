@@ -39,7 +39,7 @@ test("/mcp add with a url stores an entry under mcp/<slug> and returns the slug"
 	await client.initialize(stdInitParams);
 	await client.newSession({ cwd: "/proj" });
 
-	const result = await client.mcpAdd({ url: "https://mcp.github.com/mcp" });
+	const result = await client.mcpAdd({ url: "https://mcp.github.com/mcp", auth: "public" });
 	expect(result).toEqual({ slug: "github" });
 
 	const stored = await harness.kvStore.get("mcp/github");
@@ -59,20 +59,20 @@ test("/mcp add collides cleanly with a random suffix on second add of the same u
 	await client.initialize(stdInitParams);
 	await client.newSession({ cwd: "/proj" });
 
-	const first = await client.mcpAdd({ url: "https://mcp.github.com/mcp" });
-	const second = await client.mcpAdd({ url: "https://mcp.github.com/mcp" });
+	const first = await client.mcpAdd({ url: "https://mcp.github.com/mcp", auth: "public" });
+	const second = await client.mcpAdd({ url: "https://mcp.github.com/mcp", auth: "public" });
 	expect(first.slug).toBe("github");
 	expect(second.slug).toMatch(/^github-[0-9a-f]{5}$/);
 });
 
-test("/mcp list exposes (slug, label, status, transport, url) for added entries", async () => {
+test("/mcp list exposes (slug, label, status, transport, url, auth) for added entries", async () => {
 	const model = newFaux();
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id });
 	const client = bindClient(harness);
 	await client.initialize(stdInitParams);
 	await client.newSession({ cwd: "/proj" });
 
-	await client.mcpAdd({ url: "https://mcp.example.com/mcp", label: "Example" });
+	await client.mcpAdd({ url: "https://mcp.example.com/mcp", auth: "public", label: "Example" });
 
 	const entries = await client.mcpList();
 	expect(entries).toEqual([
@@ -82,6 +82,7 @@ test("/mcp list exposes (slug, label, status, transport, url) for added entries"
 			status: "disconnected",
 			transport: "http",
 			url: "https://mcp.example.com/mcp",
+			auth: { mode: "public" },
 		},
 	]);
 });
@@ -93,7 +94,7 @@ test("/mcp remove drops the kv entry", async () => {
 	await client.initialize(stdInitParams);
 	await client.newSession({ cwd: "/proj" });
 
-	await client.mcpAdd({ url: "https://mcp.foo.com/mcp" });
+	await client.mcpAdd({ url: "https://mcp.foo.com/mcp", auth: "public" });
 	await client.mcpRemove({ slug: "foo" });
 
 	const remaining = await client.kv.list({ prefix: "mcp/" });
@@ -136,8 +137,8 @@ test("/mcp include writes an mcp_inclusion_set session entry; /mcp exclude write
 	const { sessionId } = await client.newSession({ cwd: "/proj" });
 
 	// Add two MCP entries (don't need to connect; include() doesn't auto-connect).
-	await client.mcpAdd({ url: "https://mcp.a.com/mcp" });
-	await client.mcpAdd({ url: "https://mcp.b.com/mcp" });
+	await client.mcpAdd({ url: "https://mcp.a.com/mcp", auth: "public" });
+	await client.mcpAdd({ url: "https://mcp.b.com/mcp", auth: "public" });
 
 	await client.mcpInclude({ sessionId, slug: "a" });
 	let record = await harness.sessionStore.load(sessionId);
@@ -165,7 +166,7 @@ test("session/resume restores inclusion from the last mcp_inclusion_set entry wh
 	await client.initialize(stdInitParams);
 	const { sessionId } = await client.newSession({ cwd: "/proj" });
 
-	await client.mcpAdd({ url: "https://mcp.x.com/mcp" });
+	await client.mcpAdd({ url: "https://mcp.x.com/mcp", auth: "public" });
 	await client.mcpInclude({ sessionId, slug: "x" });
 
 	// resume with mcpServers omitted should fall back to the session-stored inclusion.
@@ -184,7 +185,7 @@ test("session/resume with mcpServers: [] overrides session-stored inclusion and 
 	await client.initialize(stdInitParams);
 	const { sessionId } = await client.newSession({ cwd: "/proj" });
 
-	await client.mcpAdd({ url: "https://mcp.y.com/mcp" });
+	await client.mcpAdd({ url: "https://mcp.y.com/mcp", auth: "public" });
 	await client.mcpInclude({ sessionId, slug: "y" });
 
 	await client.resumeSession({ sessionId, cwd: "/proj", mcpServers: [] });

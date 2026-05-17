@@ -98,7 +98,8 @@ export type RemoveProviderOptions = SessionRef;
 // --- MCP --------------------------------------------------------------
 
 export type McpTransport = "http" | "stdio";
-export type McpAuthMode = "public";
+/** Auth mode discriminator. Extends with `"oauth-dcr"`, `"oauth-preregistered"` as those land. */
+export type McpAuthMode = "public" | "http-param";
 export type McpStatus = "connected" | "disconnected" | "error";
 
 export interface McpNamedValueInput {
@@ -106,15 +107,24 @@ export interface McpNamedValueInput {
 	value: string;
 }
 
-export interface McpAuthInput {
-	mode: McpAuthMode;
-}
-
-export interface McpAddHttpParams {
-	url: string;
-	auth?: McpAuthInput;
-	label?: string;
-}
+/**
+ * HTTP MCP add params, discriminated on the top-level `auth` field. Mirrors the wire shape
+ * accepted by `_bodhi-pi/mcp/add`. `"http-param"` carries sibling `headers` and/or `queries`
+ * objects whose values become per-request secret attachments.
+ */
+export type McpAddHttpParams =
+	| {
+			url: string;
+			auth: "public";
+			label?: string;
+	  }
+	| {
+			url: string;
+			auth: "http-param";
+			headers?: Record<string, string>;
+			queries?: Record<string, string>;
+			label?: string;
+	  };
 
 export interface McpAddStdioParams {
 	command: string;
@@ -162,6 +172,11 @@ export interface McpExcludeResult {
 	slug: string;
 }
 
+/**
+ * `_bodhi-pi/mcp/list` response item. The `auth` field carries the persisted auth blob with
+ * secret values masked to `"***"` (per `maskSecrets`); shape mirrors `_bodhi-pi/mcp/add` input
+ * but with `headers`/`queries` flattened into `McpNamedSecret[]` form for uniform masking.
+ */
 export interface McpListItem {
 	slug: string;
 	label: string;
@@ -169,6 +184,7 @@ export interface McpListItem {
 	status: McpStatus;
 	url?: string;
 	command?: string;
+	auth: JsonValue;
 }
 
 export interface McpToolsResult {

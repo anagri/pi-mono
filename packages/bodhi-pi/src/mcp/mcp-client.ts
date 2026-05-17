@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker-provider.js";
 import { BODHI_PI_VERSION } from "../version.js";
 import { resolveStdioEnv } from "./mcp-stdio-env.js";
-import type { McpServerEntry, McpToolInfo } from "./mcp-types.js";
+import type { McpAuthConfig, McpServerEntry, McpToolInfo } from "./mcp-types.js";
 
 const CLIENT_INFO = { name: "bodhi-pi", version: BODHI_PI_VERSION };
 // MV3 chrome ext / other CSP-restricted runtimes forbid `new Function` (Ajv default).
@@ -26,7 +26,7 @@ export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {
 	const client = new Client(CLIENT_INFO, { jsonSchemaValidator: SCHEMA_VALIDATOR });
 	if (entry.transport === "http") {
 		if (!entry.url) throw new Error("http MCP entry missing url");
-		const transport = new StreamableHTTPClientTransport(new URL(entry.url));
+		const transport = buildHttpTransport(entry.url, entry.auth);
 		await client.connect(transport);
 	} else {
 		if (opts.supportsStdio === false) throw new Error("stdio MCP not supported on this runtime");
@@ -61,6 +61,28 @@ export async function connectMcp(entry: McpServerEntry, opts: ConnectOptions = {
 			}
 		},
 	};
+}
+
+/**
+ * Build the SDK transport for an http-streamable MCP server, attaching `auth.headers` via
+ * `requestInit.headers` and `auth.queries` as URL search params. Duplicate query keys would be
+ * lost here (input shape is `Record<string,string>`); this is an accepted trade-off for the
+ * simpler input UX.
+ */
+export function buildHttpTransport(rawUrl: string, auth: McpAuthConfig): StreamableHTTPClientTransport {
+	const url = new URL(rawUrl);
+	const opts: { requestInit?: { headers: Record<string, string> } } = {};
+	if (auth.mode === "http-param") {
+		if (auth.queries) {
+			for (const q of auth.queries) url.searchParams.append(q.name, q.value);
+		}
+		if (auth.headers && auth.headers.length > 0) {
+			const headers: Record<string, string> = {};
+			for (const h of auth.headers) headers[h.name] = h.value;
+			opts.requestInit = { headers };
+		}
+	}
+	return new StreamableHTTPClientTransport(url, opts);
 }
 
 async function listTools(client: Client): Promise<McpToolInfo[]> {

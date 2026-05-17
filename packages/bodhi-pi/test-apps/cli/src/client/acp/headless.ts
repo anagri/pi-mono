@@ -67,17 +67,8 @@ async function tryHandleSlash(
 		const rest = parts.slice(2);
 		if (sub === "add") {
 			const args = parseMcpAddArgs(rest);
-			if (args.error) return `error: ${args.error}`;
-			const result = args.url
-				? await client.mcpAdd({
-						url: args.url,
-						...(args.label ? { label: args.label } : {}),
-					})
-				: await client.mcpAdd({
-						command: args.command as string,
-						...(args.args ? { args: args.args } : {}),
-						...(args.label ? { label: args.label } : {}),
-					});
+			if (args.error || !args.value) return `error: ${args.error ?? "missing argument"}`;
+			const result = await client.mcpAdd(args.value as Parameters<typeof client.mcpAdd>[0]);
 			return `added: ${result.slug}`;
 		}
 		const slug = rest[0];

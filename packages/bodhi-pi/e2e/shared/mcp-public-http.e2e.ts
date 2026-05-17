@@ -26,7 +26,7 @@ test("mcp public+http: add → connect → include → tools → disconnect → 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
-	const added = await h.client.mcpAdd({ url: mcpEverythingUrl() });
+	const added = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public" });
 	expect.soft(added.slug.length).toBeGreaterThan(0);
 	const slug = added.slug;
 
@@ -73,7 +73,7 @@ test("mcp public+http: LLM prompts agent to use get-sum(20, 22) and gets 42 stre
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 
-	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl() });
+	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public" });
 	const connectResult = await h.client.mcpConnect({ slug });
 	expect.soft(connectResult.tools).toContain(`${slug}__get-sum`);
 	await h.client.mcpInclude({ slug, sessionId });
@@ -125,7 +125,7 @@ test("mcp public+http: ACP-native `mcpServers: [name]` on session/new connects +
 	await h.clientConn.initialize(stdInitParams);
 
 	const url = mcpEverythingUrl();
-	const { slug } = await h.client.mcpAdd({ url, label: "everything-by-name" });
+	const { slug } = await h.client.mcpAdd({ url, auth: "public", label: "everything-by-name" });
 
 	const { sessionId } = await h.clientConn.newSession({
 		cwd: h.cwd,

@@ -29,7 +29,12 @@ Source: `src/mcp/mcp-service.ts:47-100`. Plan that drove it: `ai-docs/plans/2026
   command?: string;                   // when transport === "stdio"
   args?: string[];
   env?: McpNamedSecret[];             // tagged secret:true; masked on ACP reads
-  auth: { mode: "public" };           // only mode today; OAuth removed
+  auth:                               // top-level discriminator
+    | { mode: "public" }
+    | { mode: "http-param";
+        headers?: McpNamedSecret[];   // tagged secret:true; masked on ACP reads
+        queries?: McpNamedSecret[];   // tagged secret:true; masked on ACP reads
+      };
   label: string;
   addedAt: string;                    // ISO timestamp
   lastKnownStatus: "connected" | "disconnected" | "error";
@@ -94,9 +99,32 @@ Method handlers map directly to extension methods — see [acp.md § MCP methods
 
 ## Auth
 
-**Only `mode: "public"` is supported today.** The OAuth-DCR variant (`KvOAuthProvider`, `_bodhi-pi/mcp/oauth/start`, `_bodhi-pi/mcp/oauth/finish`) was removed in commit `6a3966f4` because it lacked end-to-end coverage across the runtime matrix. Recent exploratory prompts under `ai-docs/plans/` discuss re-introduction; until then, MCP servers must accept unauthenticated requests.
+`auth` is a **top-level discriminator** on `_bodhi-pi/mcp/add` and in the persisted `McpServerEntry`. Two modes are supported today; OAuth modes (`oauth-dcr`, `oauth-preregistered`) are tracked separately under `ai-docs/prompts/bodhi-pi-mcp-auth-oauth-*.md` and reuse the same envelope shape.
 
-CLAUDE.md and PARITY.md still reference OAuth — that's stale (call-out for [cleanup-plan.md](../../prompts/cleanup-plan.md)).
+| `auth` | Sibling fields | Applied where |
+|---|---|---|
+| `"public"` | (none) | No credentials. Sibling `headers`/`queries` → `-32602`. |
+| `"http-param"` | `headers?: Record<string,string>`; `queries?: Record<string,string>` | Headers attach via `requestInit.headers`; queries append to `URL.searchParams` before constructing `StreamableHTTPClientTransport`. Both are sent on every request against the server. At least one of `headers` or `queries` must be non-empty — otherwise `-32602`. |
+
+`_bodhi-pi/mcp/add` examples:
+
+```text
+/mcp add {"url":"https://example/mcp", "auth":"public"}
+/mcp add {"url":"https://example/mcp", "auth":"http-param", "headers":{"Authorization":"Bearer X"}}
+/mcp add {"url":"https://example/mcp", "auth":"http-param", "queries":{"api_key":"k1"}}
+/mcp add {"url":"https://example/mcp", "auth":"http-param", "headers":{"Authorization":"Bearer X"}, "queries":{"api_key":"k1"}}
+```
+
+Validation (`src/mcp/mcp-service.ts:parseAuthInput`):
+- `auth` must be `"public"` or `"http-param"` (other values → `-32602`).
+- `auth: "public"` with sibling `headers` / `queries` → `-32602` (refuses silent attachment).
+- `auth: "http-param"` with no headers AND no queries → `-32602` (an empty `http-param` entry is indistinguishable from `"public"` and is a likely bug).
+- `headers` / `queries` must be `{ [name]: string }` objects; non-string values → `-32602`. Duplicate header names are not supported (JSON-object input).
+- stdio entries (`transport === "stdio"`) reject `auth`, `headers`, and `queries` outright; stdio has no HTTP auth concept.
+
+Internally, every header/query value is tagged as a secret: the parser lifts each `{ [name]: value }` entry into `{ name, value, secret: true }` (`McpNamedSecret`). `maskSecrets` (`src/kv/kv-store.ts`) walks the persisted blob and replaces `value` strings on `{value, secret:true}` nodes with `"***"` on every ACP-boundary read (`EXT_KV_GET`, `EXT_KV_LIST`, `EXT_MCP_LIST`). In-process callers (the MCP connection layer in particular) see plaintext.
+
+`_bodhi-pi/mcp/list` carries the full auth blob in each item's `auth` field — same shape as the persisted entry, with secret values masked. UIs can read it directly to render "uses Authorization + api_key" without ever holding plaintext.
 
 ## Transport gating
 

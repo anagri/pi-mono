@@ -29,8 +29,8 @@ test("mcp multi: two MCPs added + connected; only one included; /mcp include add
 	);
 	await h.clientConn.initialize(stdInitParams);
 
-	const a = await h.client.mcpAdd({ url: mcpEverythingUrl(), label: "everything" });
-	const b = await h.client.mcpAdd({ url: DEEPWIKI_URL, label: "deepwiki" });
+	const a = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public", label: "everything" });
+	const b = await h.client.mcpAdd({ url: DEEPWIKI_URL, auth: "public", label: "deepwiki" });
 	await h.client.mcpConnect({ slug: a.slug });
 	await h.client.mcpConnect({ slug: b.slug });
 
@@ -63,7 +63,7 @@ test("mcp multi: empty-array mcpServers means session sees zero MCP tools", asyn
 	);
 	await h.clientConn.initialize(stdInitParams);
 
-	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl() });
+	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public" });
 	await h.client.mcpConnect({ slug });
 
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
@@ -101,8 +101,8 @@ test("mcp multi: LLM uses tools from BOTH connected+included MCPs in one prompt"
 	);
 	await h.clientConn.initialize(stdInitParams);
 
-	const a = await h.client.mcpAdd({ url: mcpEverythingUrl(), label: "everything" });
-	const b = await h.client.mcpAdd({ url: DEEPWIKI_URL, label: "deepwiki" });
+	const a = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public", label: "everything" });
+	const b = await h.client.mcpAdd({ url: DEEPWIKI_URL, auth: "public", label: "deepwiki" });
 	await h.client.mcpConnect({ slug: a.slug });
 	await h.client.mcpConnect({ slug: b.slug });
 

@@ -81,7 +81,7 @@ A markdown document in `<cwd>/.bodhi-pi/skills/<name>/SKILL.md` with frontmatter
 A markdown prompt template in `<cwd>/.bodhi-pi/commands/<name>.md` (optionally nested). Frontmatter declares `description` and `argument-hint`; the body is expanded on slash-command invocation with `$1`/`$@`/`$ARGUMENTS`.
 
 **MCP server**:
-An external tool provider speaking the **Model Context Protocol**. Persisted under KV key `mcp/<slug>`. Transports: `http` (Streamable HTTP, all runtimes) and `stdio` (Node-spawnable Hosts only).
+An external tool provider speaking the **Model Context Protocol**. Persisted under KV key `mcp/<slug>`. Transports: `http` (Streamable HTTP, all runtimes) and `stdio` (Node-spawnable Hosts only). HTTP auth is a top-level discriminator `auth: "public" | "http-param"`; `"http-param"` carries sibling `headers` and/or `queries` whose values are stored as `McpNamedSecret` and masked on ACP reads.
 _Avoid_: "MCP" alone for the server (use "MCP server"); "MCP" alone for the connection (use "MCP connection").
 
 **Slug**:
