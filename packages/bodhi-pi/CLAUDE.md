@@ -4,7 +4,19 @@ ACP-speaking coding agent. Hosts inject `Filesystem`, `SessionStore`, `ScriptExe
 
 **DEVELOPMENT.md** covers: Node/toolchain setup, verification commands, ENV files, comments policy, test architecture, test helper catalog, stub strategy (aimock vs faux provider), e2e model selection, and external reference paths (coding-agent, ACP spec, SDK types).
 
-**Specs are living docs.** `ai-docs/specs/bodhi-pi/` (index, architecture, acp, lifecycle, mcp, extensions-skills-commands, hosts, testing, configuration, client-sdk-seed) + `CONTEXT.md` (glossary) are the source-of-truth architecture map. **Any change to the ACP surface (native or `_bodhi-pi/*`), session lifecycle, MCP wiring, the Host/Client boundary, a new reference Host, or a major feature MUST land with a same-PR spec update.** Touched-method → update `acp.md`'s table + sequence diagrams if behaviour changed. Touched-entry-type → update `lifecycle.md` SessionEntry table. New term → update `CONTEXT.md`. New Host or adapter shape → update `hosts.md`. Stale specs are a regression by default. If unsure where it lands, update `index.md`'s "Read this if…" pointer.
+**Specs are living docs.** `ai-docs/specs/bodhi-pi/` (index, architecture, acp, lifecycle, mcp, extensions-skills-commands, hosts, testing, configuration, client-sdk-seed) + `CONTEXT.md` (glossary) are the source-of-truth architecture map. **Any change to the ACP surface (native or `_bodhi-pi/*`), session lifecycle, MCP wiring, the Host/Client boundary, a new reference Host, or a major feature MUST land with a same-commit spec update.** Touched-method → update `acp.md`'s table + sequence diagrams if behaviour changed. Touched-entry-type → update `lifecycle.md` SessionEntry table. New term → update `CONTEXT.md`. New Host or adapter shape → update `hosts.md`. Stale specs are a regression by default. If unsure where it lands, update `index.md`'s "Read this if…" pointer.
+
+Keep comments to minimal. Do not add comments unless it adds to the code laid out because of some quirks/hackiness in the behaviour.
+
+## Trunk-based development
+
+This repo follows **trunk-based development**: all changes land directly on `main` as small, individually-green commits. There are **no pull requests, no review branches, no merge queues**. Each commit must pass `npm run check`, `npm test`, and (for changes that touch the matrix) `just test-e2e` + `just test-e2e-ui` on its own — bisecting the trunk is the contract that keeps trunk-based development safe.
+
+Practical implications when working in this repo:
+- Don't write "in this PR …" / "per the PR description" / "review at PR time" — there is no PR. Write "in this commit", "per the commit message", or just describe what changed.
+- Branch only as a private working space; rebase frequently and fast-forward into `main` when done. Long-lived feature branches are an anti-pattern here.
+- Don't ask Claude to `gh pr create` or open a pull request — the workflow does not use them.
+- Cross-cutting changes (e.g. parity work that touches all four reference Hosts) still land as a sequence of commits, but each intermediate commit must keep the trunk green.
 
 ## Architecture pillars
 
@@ -44,7 +56,7 @@ Each Reference Host's source lives under `test-apps/<host>/src/{host,client}/`. 
 import type { PortBundle } from "../client/acp/port-bundle.ts";
 ```
 
-Exceptions are reviewed at PR time; prefer refactoring (move the shared symbol to `app-utils/`) over an exception when the type or function is genuinely runtime-neutral.
+Exceptions are reviewed at commit time; prefer refactoring (move the shared symbol to `app-utils/`) over an exception when the type or function is genuinely runtime-neutral.
 
 > **Deprecated reference**: `packages/bodhi-pi-{cli,web,http,ws-server,ws-frontend,chrome-ext,node,browser}` are the previous generation of test apps. They are **not maintained** — historical reference only. All new work lands under `test-apps/`.
 
@@ -52,9 +64,9 @@ Exceptions are reviewed at PR time; prefer refactoring (move the shared symbol t
 
 Every user-visible feature MUST land in **all four reference Hosts**: `test-apps/cli`, `test-apps/http`, `test-apps/browser`, `test-apps/chrome-ext`. Functional parity is required, technical parity is not — different runtimes (Node CLI vs. browser Worker vs. HTTP+SSE split vs. chrome-ext sandbox) get to use whichever Transport / storage / extension-loader fits, but the user-observable behavior and the e2e assertions MUST line up.
 
-A PR that adds a feature to one Host without the others is a regression by default. Either:
-- include parity changes in the same PR (preferred), or
-- explicitly justify and file follow-up work for the missing Hosts in the PR description.
+A commit that adds a feature to one Host without the others is a regression by default. Either:
+- include parity changes in the same commit (or a tight sequence of commits, each individually green), or
+- explicitly justify the missing Hosts in the commit message and file a follow-up task before landing.
 
 `test-apps/http` is the **deployment-portability lens**: same agent, same features, but state lives in storage between every turn (per-turn agent rebuild from SQLite).
 

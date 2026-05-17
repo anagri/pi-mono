@@ -71,7 +71,7 @@ Plan integration and e2e at design time, not after.
 No comments by default. Add one only when the **why** is non-obvious to a reader with the code in front of them:
 
 - Hidden constraint, subtle invariant, cross-module coupling, or a protocol/wire rule not visible locally
-- Don't restate types, narrate the next line, or reference the current task / issue / PR
+- Don't restate types, narrate the next line, or reference the current task / issue / commit
 
 Examples worth keeping: why mutating `session.piAgent.state.model` re-routes the next turn; why `cancelled` is reset at the start of every `prompt`; why `closeSession` keeps the persisted record; ACP spec citations that pin a behaviour to an external contract.
 
