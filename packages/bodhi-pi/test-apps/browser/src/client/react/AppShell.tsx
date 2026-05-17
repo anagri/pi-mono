@@ -12,6 +12,7 @@ import type {
 } from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { extractModelFromConfigOptions, isSlash, tryHandleSlash } from "../lib/commands.ts";
+import { emitOauthStatusEvent } from "../lib/oauth-event-bus.ts";
 import { tryHandleSlash as tryHandleAcpSlash } from "../lib/slash-router.ts";
 import { ChatPanel, type ChatMessage, type ChatPanelState, type ChatToolCall } from "./ChatPanel.tsx";
 import { DevAcpIo } from "./DevAcpIo.tsx";
@@ -65,6 +66,27 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 
 	const pushEvent = useCallback((type: string, payload: string) => {
 		setEvents((prev) => [...prev, { seq: prev.length + 1, type, payload }]);
+		if (type === "mcp_oauth_status_change") {
+			// HTTP+WS server-side /oauth/callback path completes silently — there's no popup-to-opener
+			// postMessage path. Forward the lifecycle event to the in-process bus so the chat slash
+			// command can resolve its in-flight promise on it.
+			try {
+				const event = JSON.parse(payload) as {
+					slug?: string;
+					status?: "started" | "completed" | "failed" | "cancelled";
+					errorMessage?: string;
+				};
+				if (event.slug && event.status) {
+					emitOauthStatusEvent({
+						slug: event.slug,
+						status: event.status,
+						...(event.errorMessage !== undefined ? { errorMessage: event.errorMessage } : {}),
+					});
+				}
+			} catch {
+				// payload not JSON or malformed — silently drop; slash command will rely on postMessage or time out.
+			}
+		}
 	}, []);
 
 	const applyContentBlocks = (blocks: ContentBlock[] | undefined): string => {

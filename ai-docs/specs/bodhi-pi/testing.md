@@ -67,6 +67,7 @@ Cross-host parity is enforced by feature: every shipped feature must reach every
 | Browser host loads a session and replays history correctly | UI e2e (`e2e-ui/`) |
 | http per-turn rebuild preserves MCP inclusion across requests | Per-Host e2e (`test-apps/http/e2e/`) — server-side via real LLM |
 | Chrome extension sandbox script executor runs a skill | Per-Host e2e (`test-apps/chrome-ext/e2e/`) |
+| MCP OAuth (pre-registered or DCR) end-to-end against a PKCE-validating server | Integration (`test/mcp-oauth*.test.ts`) + cli-headless e2e (`e2e/cli-headless/mcp-oauth*.e2e.ts`) + UI e2e (`e2e-ui/shared/mcp-oauth.spec.ts`) — fixture lives in `e2e/helpers/oauth-mcp-server.ts`, spawned by both `e2e/global-setup.ts` and `e2e-ui/global-setup.ts` so every layer can drive a deterministic OAuth flow. The fixture serves RFC 9728 + 8414 + 7591 + `/authorize` (with `?auto=1` for headless auto-approval) + `/token` (validates PKCE) + `/mcp` (Bearer-gated). |
 
 ## Adding a new test
 

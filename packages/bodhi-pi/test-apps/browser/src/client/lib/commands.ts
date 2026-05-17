@@ -13,6 +13,7 @@ import {
 	EXT_MCP_TOOLS,
 	parseMcpAddArgs,
 } from "@bodhiapp/bodhi-pi";
+import { onOauthStatusEvent } from "./oauth-event-bus.ts";
 
 /**
  * Local slash dispatcher for the shared test-app UI. Operates on the raw
@@ -341,8 +342,15 @@ async function handleMcpSubcommand(
 				return { handled: true };
 			}
 			const urlToOpen = auto ? `${startResp.authorizeUrl}&auto=1` : startResp.authorizeUrl!;
-			let cbCode: string;
-			let cbState: string;
+			// Two completion paths race here so the slash works across all runtimes:
+			//   - postMessage path (browser / chrome-ext: redirect_uri = ${origin}/oauth/callback,
+			//     popup is our React route which postMessages to opener)
+			//   - lifecycle-event path (HTTP+WS: redirect_uri = ${server}/oauth/callback, server
+			//     completes silently and emits `mcp_oauth_status_change` over SSE/WS)
+			// chrome-ext takes its own branch — chrome.identity blocks and returns the redirect URL.
+			let cbCode: string | undefined;
+			let cbState: string | undefined;
+			let serverCompleted = false;
 			if (useChromeIdentity) {
 				ctx.pushSystemMessage(`oauth: launching chrome.identity for ${oauthSlug}`, {
 					"data-mcp-event": "oauth-popup-opened",
@@ -361,40 +369,65 @@ async function handleMcpSubcommand(
 				cbCode = cb.searchParams.get("code") ?? "";
 				cbState = cb.searchParams.get("state") ?? "";
 			} else {
-				const completion = new Promise<{ code: string; state: string }>((resolve) => {
-					const onMsg = (e: MessageEvent) => {
-						if (e.origin !== window.location.origin) return;
-						const data = e.data as { kind?: string; code?: string; state?: string };
-						if (data?.kind !== "bodhi-pi-oauth-callback" || !data.code || !data.state) return;
-						if (data.state !== startResp.state) return;
-						window.removeEventListener("message", onMsg);
-						resolve({ code: data.code, state: data.state });
-					};
-					window.addEventListener("message", onMsg);
-				});
+				const completion = new Promise<{ source: "postmessage"; code: string; state: string } | { source: "event" }>(
+					(resolve) => {
+						const onMsg = (e: MessageEvent) => {
+							if (e.origin !== window.location.origin) return;
+							const data = e.data as { kind?: string; code?: string; state?: string };
+							if (data?.kind !== "bodhi-pi-oauth-callback" || !data.code || !data.state) return;
+							if (data.state !== startResp.state) return;
+							cleanup();
+							resolve({ source: "postmessage", code: data.code, state: data.state });
+						};
+						const offEvent = onOauthStatusEvent((event) => {
+							if (event.slug !== oauthSlug) return;
+							if (event.status !== "completed" && event.status !== "failed") return;
+							cleanup();
+							resolve({ source: "event" });
+						});
+						const cleanup = () => {
+							window.removeEventListener("message", onMsg);
+							offEvent();
+						};
+						window.addEventListener("message", onMsg);
+					},
+				);
 				window.open(urlToOpen, "oauth", "popup=yes,width=500,height=600");
 				ctx.pushSystemMessage(`oauth: opened popup for ${oauthSlug}`, {
 					"data-mcp-event": "oauth-popup-opened",
 					"data-mcp-slug": oauthSlug,
 				});
 				const r = await completion;
-				cbCode = r.code;
-				cbState = r.state;
+				if (r.source === "postmessage") {
+					cbCode = r.code;
+					cbState = r.state;
+				} else {
+					// Server-side completion (HTTP/WS): tokens already persisted; skip the
+					// follow-up oauth/finish call.
+					serverCompleted = true;
+				}
 			}
-			const finishResp = (await ctx.conn.extMethod(EXT_MCP_OAUTH_FINISH, {
-				slug: oauthSlug,
-				code: cbCode,
-				state: cbState,
-			})) as { status: string; errorMessage?: string };
-			ctx.pushSystemMessage(
-				finishResp.status === "completed"
-					? `oauth: completed ${oauthSlug}`
-					: `oauth: failed ${oauthSlug}: ${finishResp.errorMessage ?? "unknown"}`,
-				{
-					"data-mcp-event": finishResp.status === "completed" ? "oauth-completed" : "oauth-failed",
+			if (serverCompleted) {
+				ctx.pushSystemMessage(`oauth: completed ${oauthSlug}`, {
+					"data-mcp-event": "oauth-completed",
 					"data-mcp-slug": oauthSlug,
-				},
-			);
+				});
+			} else {
+				const finishResp = (await ctx.conn.extMethod(EXT_MCP_OAUTH_FINISH, {
+					slug: oauthSlug,
+					code: cbCode!,
+					state: cbState!,
+				})) as { status: string; errorMessage?: string };
+				ctx.pushSystemMessage(
+					finishResp.status === "completed"
+						? `oauth: completed ${oauthSlug}`
+						: `oauth: failed ${oauthSlug}: ${finishResp.errorMessage ?? "unknown"}`,
+					{
+						"data-mcp-event": finishResp.status === "completed" ? "oauth-completed" : "oauth-failed",
+						"data-mcp-slug": oauthSlug,
+					},
+				);
+			}
 		} else if (sub === "tools") {
 			const result = (await ctx.conn.extMethod(EXT_MCP_TOOLS, {
 				sessionId: ctx.state.sessionId,
