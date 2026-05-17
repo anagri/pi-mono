@@ -386,14 +386,12 @@ class BodhiPiAcpAgent implements AcpAgent {
 		await this.ensureExtensionRunner();
 		const record = await this.config.sessionStore.create({ cwd: params.cwd });
 		await buildSessionStateFn(this.bootstrapDeps(), { sessionId: record.id, model: null, cwd: record.cwd });
-		await this.advertiseSlashable(record.id);
-		// New session: no prior `mcp_inclusion_set` entry, so restoredSlugs=null.
-		const { notFoundSlugs } = await this.mcpService.hydrate(record.id, params.mcpServers, null);
-		await this.events.emit({
-			type: "session_start",
+		const { notFoundSlugs } = await this.finalizeSessionBoot({
 			sessionId: record.id,
 			cwd: record.cwd,
 			reason: "new",
+			mcpServers: params.mcpServers,
+			restoredSlugs: null, // new session: no prior mcp_inclusion_set entry.
 		});
 		return {
 			sessionId: record.id,
@@ -405,46 +403,96 @@ class BodhiPiAcpAgent implements AcpAgent {
 	async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
 		await this.ensureExtensionRunner();
 		const restored = await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
+		await this.replayHistoryForLoad(params.sessionId, restored.entries);
+		const { notFoundSlugs } = await this.finalizeSessionBoot({
+			sessionId: params.sessionId,
+			cwd: params.cwd,
+			reason: "load",
+			mcpServers: params.mcpServers,
+			restoredSlugs: restored.mcpInclusion,
+		});
+		return {
+			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
+			...metaWithNotFoundSlugs(notFoundSlugs),
+		};
+	}
 
-		// Stream history back via session/update notifications, pairing each
-		// assistant tool_use block with its persisted tool_result.
+	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+		await this.ensureExtensionRunner();
+		// Per ACP spec: rehydrate without replaying history.
+		const restored = await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
+		const { notFoundSlugs } = await this.finalizeSessionBoot({
+			sessionId: params.sessionId,
+			cwd: params.cwd,
+			reason: "resume",
+			mcpServers: params.mcpServers,
+			restoredSlugs: restored.mcpInclusion,
+		});
+		return {
+			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
+			...metaWithNotFoundSlugs(notFoundSlugs),
+		};
+	}
+
+	/**
+	 * Shared tail of new/load/resume: announce slash commands, hydrate MCP, emit session_start.
+	 * Returns the hydration result so the caller can lift `notFoundSlugs` into the response meta.
+	 */
+	private async finalizeSessionBoot(opts: {
+		sessionId: string;
+		cwd: string;
+		reason: "new" | "load" | "resume";
+		mcpServers: Parameters<McpService["hydrate"]>[1];
+		restoredSlugs: string[] | null;
+	}): Promise<{ notFoundSlugs: string[] }> {
+		await this.advertiseSlashable(opts.sessionId);
+		const result = await this.mcpService.hydrate(opts.sessionId, opts.mcpServers, opts.restoredSlugs);
+		await this.events.emit({
+			type: "session_start",
+			sessionId: opts.sessionId,
+			cwd: opts.cwd,
+			reason: opts.reason,
+		});
+		return result;
+	}
+
+	/**
+	 * Stream session history back via `session/update` notifications, pairing each assistant
+	 * `tool_use` block with its persisted `tool_result`. Only invoked from `loadSession` —
+	 * `resumeSession` deliberately skips replay per ACP spec.
+	 */
+	private async replayHistoryForLoad(sessionId: string, entries: readonly SessionEntry[]): Promise<void> {
 		const toolResultsById = new Map<string, ReturnType<typeof toolResultContentForAcp>>();
 		const toolResultIsError = new Map<string, boolean>();
-		for (const entry of restored.entries) {
+		for (const entry of entries) {
 			if (entry.type !== "message") continue;
 			if (!isToolResultMessage(entry.message)) continue;
 			toolResultsById.set(entry.message.toolCallId, toolResultContentForAcp(entry.message));
 			toolResultIsError.set(entry.message.toolCallId, entry.message.isError);
 		}
 
-		for (const entry of restored.entries) {
+		for (const entry of entries) {
 			if (entry.type !== "message") continue;
 			const role = entry.message.role;
 			if (role === "user") {
 				const text = extractText(entry.message);
 				if (text) {
 					await this.conn.sessionUpdate({
-						sessionId: params.sessionId,
-						update: {
-							sessionUpdate: "user_message_chunk",
-							content: { type: "text", text },
-						},
+						sessionId,
+						update: { sessionUpdate: "user_message_chunk", content: { type: "text", text } },
 					});
 				}
 			} else if (role === "assistant") {
 				const text = extractText(entry.message);
 				if (text) {
 					await this.conn.sessionUpdate({
-						sessionId: params.sessionId,
-						update: {
-							sessionUpdate: "agent_message_chunk",
-							content: { type: "text", text },
-						},
+						sessionId,
+						update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
 					});
 				}
 				for (const toolCall of extractToolCalls(entry.message)) {
 					await this.conn.sessionUpdate({
-						sessionId: params.sessionId,
+						sessionId,
 						update: {
 							sessionUpdate: "tool_call",
 							toolCallId: toolCall.id,
@@ -457,7 +505,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 					const resultContent = toolResultsById.get(toolCall.id);
 					if (resultContent !== undefined) {
 						await this.conn.sessionUpdate({
-							sessionId: params.sessionId,
+							sessionId,
 							update: {
 								sessionUpdate: "tool_call_update",
 								toolCallId: toolCall.id,
@@ -469,45 +517,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 				}
 			}
 		}
-
-		await this.advertiseSlashable(params.sessionId);
-		const { notFoundSlugs } = await this.mcpService.hydrate(
-			params.sessionId,
-			params.mcpServers,
-			restored.mcpInclusion,
-		);
-		await this.events.emit({
-			type: "session_start",
-			sessionId: params.sessionId,
-			cwd: params.cwd,
-			reason: "load",
-		});
-		return {
-			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
-			...metaWithNotFoundSlugs(notFoundSlugs),
-		};
-	}
-
-	async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-		await this.ensureExtensionRunner();
-		// Per ACP spec: rehydrate without replaying history.
-		const restored = await rehydrateSessionFn(this.bootstrapDeps(), params.sessionId, params.cwd);
-		await this.advertiseSlashable(params.sessionId);
-		const { notFoundSlugs } = await this.mcpService.hydrate(
-			params.sessionId,
-			params.mcpServers,
-			restored.mcpInclusion,
-		);
-		await this.events.emit({
-			type: "session_start",
-			sessionId: params.sessionId,
-			cwd: params.cwd,
-			reason: "resume",
-		});
-		return {
-			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
-			...metaWithNotFoundSlugs(notFoundSlugs),
-		};
 	}
 
 	async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
