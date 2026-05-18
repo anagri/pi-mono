@@ -1,5 +1,5 @@
 import { randomUUID } from "@/_internal/uuid.js";
-import { walkPath } from "./build-context.js";
+import { cloneTranscriptSlice } from "./clone-slice.js";
 import type {
 	ExtensionEntry,
 	ListSessionsRequest,
@@ -62,8 +62,10 @@ export function createInMemorySessionStore(): SessionStore {
 			if (!source.entries.some((e) => e.id === fromEntryId)) {
 				throw new Error(`entry ${fromEntryId} not found in session ${sourceSessionId}`);
 			}
-			const chain = walkPath(source.entries, fromEntryId);
-			const copied = position === "before" ? chain.slice(0, -1) : chain;
+			const copied = cloneTranscriptSlice(source.entries, {
+				leafOrFromEntryId: fromEntryId,
+				excludeTargetEntry: position === "before",
+			});
 			const now = Date.now();
 			const newRecord: SessionRecord = {
 				id: randomUUID(),
