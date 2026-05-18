@@ -4,6 +4,7 @@ import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
+import { loadScenarioFiles } from "../helpers/load-scenario.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
@@ -18,18 +19,7 @@ test("subagent: parent LLM invokes the extractor profile and surfaces the summar
 		}),
 	);
 
-	await h.setupFiles({
-		"doc.md": "The quick brown fox jumps over the lazy dog.",
-		".bodhi-pi/agents/extractor.md": [
-			"---",
-			"name: extractor",
-			"description: Read a file and return a one-sentence summary.",
-			"tools:",
-			"  - read",
-			"---",
-			"You are an extractor sub-agent. The task you receive contains an absolute file path. Use the `read` tool to read that file, then reply with a single short sentence summarizing the file content. Do not write, edit, or run scripts.",
-		].join("\n"),
-	});
+	await h.setupFiles(await loadScenarioFiles("subagents-extractor"));
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
