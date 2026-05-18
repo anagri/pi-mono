@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 
 export function loadScenario(name: string): Record<string, string> {
 	const here = path.dirname(fileURLToPath(import.meta.url));
-	const root = path.join(here, "..", "data", name);
+	const sharedRoot = path.join(here, "..", "..", "scenarios", name);
+	const localRoot = path.join(here, "..", "data", name);
+	const root = fs.existsSync(sharedRoot) ? sharedRoot : localRoot;
 	const out: Record<string, string> = {};
 	const walk = (abs: string) => {
 		for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {

@@ -1,12 +1,16 @@
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const DATA_ROOT = path.resolve(here, "..", "data");
+const SHARED_ROOT = path.resolve(here, "..", "..", "scenarios");
+const LOCAL_ROOT = path.resolve(here, "..", "data");
 
 export async function loadScenarioFiles(name: string): Promise<Record<string, string>> {
-	const root = path.join(DATA_ROOT, name);
+	const sharedRoot = path.join(SHARED_ROOT, name);
+	const localRoot = path.join(LOCAL_ROOT, name);
+	const root = existsSync(sharedRoot) ? sharedRoot : localRoot;
 	const out: Record<string, string> = {};
 	async function walk(absDir: string, relDir: string): Promise<void> {
 		const entries = await fs.readdir(absDir, { withFileTypes: true });

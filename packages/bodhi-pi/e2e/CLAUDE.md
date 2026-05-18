@@ -105,6 +105,8 @@ Use `test.runIf(!isRuntime("http"))` for tests that fail under bodhi-pi-http's p
 
 The test-apps live under `packages/bodhi-pi/test-apps/` (a peer of `e2e/` and `e2e-ui/`) — six workspaces: `app-utils`, `node-adapters`, `cli`, `http`, `browser`, `chrome-ext`. They depend on each other and on `@bodhiapp/bodhi-pi`, never on `e2e/`. The vitest e2e config (`vitest.e2e.config.ts`) and `global-setup.ts` build the four runnable test-apps and spawn their compiled `dist/` outputs as subprocesses.
 
+Scenario fixtures shared between e2e and e2e-ui live in `packages/bodhi-pi/scenarios/` (a peer of `e2e/` and `e2e-ui/`); both `loadScenarioFiles` (e2e) and `loadScenario` (e2e-ui) resolve from `scenarios/` first, falling back to their own `data/` for runner-specific fixtures. Always put a new fixture in `scenarios/` if both runners need it — keeping two byte-identical trees in lockstep is the failure mode this layout prevents.
+
 ### Anti-patterns
 
 | ❌ | ✅ |

@@ -18,6 +18,12 @@ test("subagent fork: parent reads diff, spawns reviewer fork sub-agent via slash
 	await expect.soft(slashResult).toHaveAttribute("data-subagent-status", "completed");
 	await expect.soft(slashResult).toContainText("BLUE_FORK_42_handler");
 
+	const group = chat.root.locator('[data-testid="subagent-group"][data-subagent-name="reviewer"]').last();
+	await expect.soft(group).toBeVisible();
+	await expect.soft(group).toHaveAttribute("data-subagent-status", "completed");
+	await expect.soft(group).toHaveAttribute("open", "");
+	await expect.soft(group.locator('[data-testid="subagent-group-body"]')).toContainText("BLUE_FORK_42_handler");
+
 	await chat.send(
 		"Now use the reviewer sub-agent again, but this time via a natural-language request: ask the reviewer to confirm the new symbol name.",
 	);
