@@ -91,6 +91,32 @@ export interface CustomMessageEntry extends BaseEntry {
 	details?: unknown;
 }
 
+/**
+ * Lineage record for a sub-agent child session. Appended as the first entry of a child session
+ * by `SubagentService.spawn`. Never appears in a parent's session log.
+ */
+export interface SubagentLinkEntry extends BaseEntry {
+	type: "subagent_link";
+	parentSessionId: string;
+	profileName: string;
+	task: string;
+	toolCallId: string;
+	depth: number;
+}
+
+/**
+ * Terminal marker for a sub-agent child run. Appended after `runPromptLoop` returns (or aborts).
+ * `summary` is the child's last assistant text (truncated to a bounded size); `error` is set when
+ * `status === "failed"`.
+ */
+export interface SubagentCompleteEntry extends BaseEntry {
+	type: "subagent_complete";
+	status: "completed" | "cancelled" | "failed";
+	summary: string;
+	durationMs: number;
+	error?: string;
+}
+
 export type SessionEntry =
 	| MessageEntry
 	| ModelChangeEntry
@@ -100,7 +126,9 @@ export type SessionEntry =
 	| BranchSummaryEntry
 	| SessionInfoEntry
 	| ExtensionEntry
-	| CustomMessageEntry;
+	| CustomMessageEntry
+	| SubagentLinkEntry
+	| SubagentCompleteEntry;
 
 export interface ReadExtensionEntriesFilter {
 	extensionName?: string;

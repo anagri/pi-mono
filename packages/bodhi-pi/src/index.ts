@@ -100,6 +100,8 @@ export type {
 	SessionStartEvent,
 	SettingsChangeEvent,
 	StopReason,
+	SubagentEndEvent,
+	SubagentStartEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolExecutionEndEvent,
@@ -183,6 +185,8 @@ export type {
 	SessionInfoEntry,
 	SessionRecord,
 	SessionStore,
+	SubagentCompleteEntry,
+	SubagentLinkEntry,
 } from "./sessions/session-store.js";
 export {
 	type BodhiPiProjectSettings,

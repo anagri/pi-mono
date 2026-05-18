@@ -66,7 +66,7 @@ test("_bodhi-pi/subagent/list returns parsed profiles", async () => {
 	]);
 });
 
-test("_bodhi-pi/subagent/run is not implemented in C1 — rejects with -32601", async () => {
+test("_bodhi-pi/subagent/run rejects when agent name is unknown", async () => {
 	const model = newModel();
 	const filesystem = createInMemoryFilesystem();
 	await seedSubagent(filesystem, "/proj", "extractor", "---\ndescription: x\n---\nbody\n");
@@ -76,8 +76,8 @@ test("_bodhi-pi/subagent/run is not implemented in C1 — rejects with -32601", 
 	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
 
 	await expect(
-		harness.clientConn.extMethod(EXT_SUBAGENT_RUN, { sessionId, agent: "extractor", task: "do something" }),
-	).rejects.toMatchObject({ code: -32601 });
+		harness.clientConn.extMethod(EXT_SUBAGENT_RUN, { sessionId, agent: "no-such-agent", task: "x" }),
+	).rejects.toMatchObject({ code: -32602 });
 });
 
 test("subagent tool is registered when profiles exist and is included in available tools", async () => {

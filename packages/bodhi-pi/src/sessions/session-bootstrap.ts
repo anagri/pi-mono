@@ -34,6 +34,7 @@ import { mergeSettings } from "@/settings/settings-merge.js";
 import { loadProjectSkills } from "@/skills/discovery.js";
 import type { Skill } from "@/skills/skill.js";
 import { loadProjectSubagents } from "@/subagents/discovery.js";
+import type { SubagentService } from "@/subagents/subagent-service.js";
 import type { SubagentProfile } from "@/subagents/types.js";
 import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools } from "@/tools/index.js";
 import { type ContextFile, loadProjectContextFiles } from "./resource-loader.js";
@@ -46,6 +47,7 @@ export interface BootstrapDeps {
 	modelRegistry: ModelRegistry;
 	compactionOrchestrator: CompactionOrchestrator;
 	extensionRunner: () => ExtensionRunner | undefined;
+	subagentService: SubagentService;
 }
 
 /**
@@ -59,6 +61,7 @@ export async function loadProjectArtifacts(
 	config: BodhiPiConfig,
 	cwd: string,
 	sessionId: string,
+	subagentService: SubagentService,
 ): Promise<{
 	builtinTools: ReturnType<typeof createBuiltinTools>;
 	projectCommands: Awaited<ReturnType<typeof loadProjectCommands>>;
@@ -85,7 +88,9 @@ export async function loadProjectArtifacts(
 		cwd,
 		...(config.scriptExecutor ? { scriptExecutor: config.scriptExecutor } : {}),
 		...(config.terminal ? { terminal: config.terminal } : {}),
-		...(subagentProfiles.length > 0 ? { subagent: { sessionId, profiles: subagentProfiles } } : {}),
+		...(subagentProfiles.length > 0
+			? { subagent: { sessionId, profiles: subagentProfiles, service: subagentService } }
+			: {}),
 	});
 	const mergedFileSettings = mergeSettings(globalSettingsResult?.settings ?? {}, projectSettingsResult.settings);
 	return {
@@ -235,7 +240,7 @@ export async function buildSessionState(
 	const leafId = args.leafId ?? null;
 	const initialThinkingLevel = args.initialThinkingLevel ?? null;
 
-	const artifacts = await loadProjectArtifacts(config, cwd, sessionId);
+	const artifacts = await loadProjectArtifacts(config, cwd, sessionId, deps.subagentService);
 	const {
 		builtinTools,
 		projectCommands,

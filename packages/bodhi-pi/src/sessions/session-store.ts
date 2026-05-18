@@ -10,6 +10,8 @@ export type {
 	ReadExtensionEntriesFilter,
 	SessionEntry,
 	SessionInfoEntry,
+	SubagentCompleteEntry,
+	SubagentLinkEntry,
 } from "./entries.js";
 
 import type { ExtensionEntry, ReadExtensionEntriesFilter, SessionEntry } from "./entries.js";

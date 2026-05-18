@@ -2,6 +2,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { isAbsolute, join, normalize } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import type { SubagentService } from "@/subagents/subagent-service.js";
 import type { SubagentProfile } from "@/subagents/types.js";
 import type { Terminal } from "@/terminal/terminal.js";
 import { createBashTool } from "./bash.js";
@@ -23,6 +24,7 @@ export interface ToolDeps {
 	subagent?: {
 		sessionId: string;
 		profiles: SubagentProfile[];
+		service: SubagentService;
 	};
 }
 

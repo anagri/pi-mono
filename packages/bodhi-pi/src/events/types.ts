@@ -292,6 +292,30 @@ export interface SessionCloneEvent {
 	fromLeafId: string;
 }
 
+// === Sub-agent lifecycle ===
+
+export interface SubagentStartEvent {
+	type: "subagent_start";
+	parentSessionId: string;
+	childSessionId: string;
+	profile: string;
+	task: string;
+	toolCallId: string;
+	depth: number;
+}
+
+export interface SubagentEndEvent {
+	type: "subagent_end";
+	parentSessionId: string;
+	childSessionId: string;
+	profile: string;
+	status: "completed" | "cancelled" | "failed";
+	durationMs: number;
+	toolCount: number;
+	summary?: string;
+	error?: string;
+}
+
 // === Discriminated union ===
 
 export type BodhiPiEvent =
@@ -324,7 +348,9 @@ export type BodhiPiEvent =
 	| SessionCloneEvent
 	| McpStatusChangeEvent
 	| McpToolsChangeEvent
-	| McpOAuthStatusChangeEvent;
+	| McpOAuthStatusChangeEvent
+	| SubagentStartEvent
+	| SubagentEndEvent;
 
 export type BodhiPiEventType = BodhiPiEvent["type"];
 
@@ -373,4 +399,6 @@ export interface BodhiPiEventHandlers {
 	mcp_status_change?: ((event: McpStatusChangeEvent) => Awaitable<void>)[];
 	mcp_tools_change?: ((event: McpToolsChangeEvent) => Awaitable<void>)[];
 	mcp_oauth_status_change?: ((event: McpOAuthStatusChangeEvent) => Awaitable<void>)[];
+	subagent_start?: ((event: SubagentStartEvent) => Awaitable<void>)[];
+	subagent_end?: ((event: SubagentEndEvent) => Awaitable<void>)[];
 }

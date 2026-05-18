@@ -284,6 +284,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 		this.subagentService = new SubagentService({
 			sessions: this.sessions,
 			sessionStore: config.sessionStore,
+			events: this.events,
+			conn: this.conn,
+			config: this.config,
+			logger,
+			mcpService: this.mcpService,
+			bootstrapDeps: () => this.bootstrapDeps(),
+			promptLoopDeps: () => this.promptLoopDeps(),
 		});
 
 		this.extHandlers = new Map<string, ExtHandler>([
@@ -318,6 +325,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			modelRegistry: this.modelRegistry,
 			compactionOrchestrator: this.compactionOrchestrator,
 			extensionRunner: () => this.extensionRunnerHost.current(),
+			subagentService: this.subagentService,
 		};
 	}
 

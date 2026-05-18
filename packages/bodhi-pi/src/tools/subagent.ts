@@ -1,15 +1,18 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { type Static, Type } from "typebox";
+import { Type } from "typebox";
+import type { SubagentService } from "@/subagents/subagent-service.js";
 import type { SubagentProfile } from "@/subagents/types.js";
 
 export interface SubagentToolDeps {
 	sessionId: string;
 	profiles: SubagentProfile[];
+	service: SubagentService;
 }
 
 export function createSubagentTool(deps: SubagentToolDeps): AgentTool<ReturnType<typeof buildSubagentSchema>> {
 	const profileLines = deps.profiles.map((p) => `- ${p.name}: ${p.description}`).join("\n");
 	const parameters = buildSubagentSchema(deps.profiles);
+	const profilesByName = new Map(deps.profiles.map((p) => [p.name, p]));
 
 	return {
 		name: "subagent",
@@ -25,8 +28,21 @@ Use this when:
 
 Default context is fresh — the sub-agent does NOT see the parent conversation, so include all relevant context in the task description.`,
 		parameters,
-		async execute(_toolCallId: string, _params: Static<typeof parameters>) {
-			throw new Error("subagent tool: spawn path lands in C2");
+		async execute(toolCallId, params, signal, onUpdate) {
+			const profile = profilesByName.get(params.agent);
+			if (!profile) {
+				throw new Error(`unknown sub-agent profile: ${params.agent}`);
+			}
+			const result = await deps.service.spawn({
+				parentSessionId: deps.sessionId,
+				profile,
+				task: params.task,
+				toolCallId,
+				...(params.model !== undefined ? { modelOverride: params.model } : {}),
+				...(signal !== undefined ? { signal } : {}),
+				...(onUpdate !== undefined ? { onUpdate } : {}),
+			});
+			return deps.service.buildToolResult(result, profile);
 		},
 	};
 }
@@ -37,17 +53,13 @@ function buildSubagentSchema(profiles: SubagentProfile[]) {
 		{
 			agent: Type.Union(
 				names.map((n) => Type.Literal(n)),
-				{
-					description: "Sub-agent profile name. Must be one of the available profiles.",
-				},
+				{ description: "Sub-agent profile name. Must be one of the available profiles." },
 			),
 			task: Type.String({
 				description: "Self-contained task description. The sub-agent does NOT see the parent conversation.",
 			}),
 			context: Type.Optional(
-				Type.Literal("fresh", {
-					description: "Context mode. Only 'fresh' is supported in v1.",
-				}),
+				Type.Literal("fresh", { description: "Context mode. Only 'fresh' is supported in v1." }),
 			),
 			model: Type.Optional(
 				Type.String({
