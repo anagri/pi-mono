@@ -1,0 +1,921 @@
+## Aider-AI/aider (0 relevant)
+
+
+## FoundationAgents/MetaGPT (11 relevant)
+
+- `metagpt/tools/tool_registry.py:43:        if self.has_tool(tool_name):`
+- `metagpt/tools/tool_registry.py:71:    def has_tool(self, key: str) -> Tool:`
+- `metagpt/tools/tool_registry.py:83:    def has_tool_tag(self, key) -> bool:`
+- `metagpt/tools/tool_registry.py:139:        elif TOOL_REGISTRY.has_tool(key.split(":")[0]):`
+- `metagpt/tools/tool_registry.py:159:        elif TOOL_REGISTRY.has_tool_tag(key):`
+- `tests/metagpt/tools/test_tool_registry.py:44:def test_has_tool(tool_registry):`
+- `tests/metagpt/tools/test_tool_registry.py:46:    assert tool_registry.has_tool("TestClassTool")`
+- `tests/metagpt/tools/test_tool_registry.py:47:    assert not tool_registry.has_tool("NonexistentTool")`
+- `tests/metagpt/tools/test_tool_registry.py:60:def test_has_tool_tag(tool_registry):`
+- `tests/metagpt/tools/test_tool_registry.py:64:    assert tool_registry.has_tool_tag("test")`
+- `tests/metagpt/tools/test_tool_registry.py:65:    assert not tool_registry.has_tool_tag("Non-existent tag")`
+
+## OpenHands/OpenHands (32 relevant)
+
+- `frontend/__tests__/components/features/chat/switch-profile-button.test.tsx:103:    // LLM profiles don't apply to ACP — the sub-agent picks its own model.`
+- `frontend/__tests__/components/v1/chat/event-message-acp-tool-call.test.tsx:57:    // sub-agent (Claude Code / Codex / Gemini CLI) already emits a`
+- `frontend/src/components/features/chat/switch-profile-button.tsx:31:  // LLM profiles don't apply to ACP conversations: the sub-agent`
+- `frontend/src/components/v1/chat/event-content-helpers/get-event-content.tsx:272:    // ACP sub-agent tool calls reuse the same card shape as observations.`
+- `frontend/src/components/v1/chat/event-content-helpers/get-event-content.tsx:273:    // ``event.title`` is the upstream sub-agent's own humanised label`
+- `frontend/src/components/v1/chat/event-content-helpers/should-render-event.ts:62:  // Render ACP sub-agent tool call events only once they've reached a`
+- `frontend/src/components/v1/chat/event-message.tsx:156:  // ACP sub-agent tool call events (Claude Code, Codex, Gemini CLI, …)`
+- `frontend/src/constants/settings-nav.tsx:28:  // The ACP sub-agent manages its own LLM / condenser / MCP, so these`
+- `frontend/src/i18n/translation.json:2145:    "en": "Enable sub-agent delegation via TaskToolSet.",`
+- `frontend/src/i18n/translation.json:2152:    "pt": "Ative a delegação para subagentes via TaskToolSet.",`
+- `frontend/src/i18n/translation.json:2153:    "es": "Habilita la delegación a subagentes mediante TaskToolSet.",`
+- `frontend/src/i18n/translation.json:2159:    "ca": "Activa la delegació a subagents mitjançant TaskToolSet."`
+- `frontend/src/i18n/translation.json:2162:    "en": "Enable sub-agents",`
+- `frontend/src/i18n/translation.json:2169:    "pt": "Ativar subagentes",`
+- `frontend/src/i18n/translation.json:2170:    "es": "Habilitar subagentes",`
+- `frontend/src/i18n/translation.json:2176:    "ca": "Activa subagents"`
+- `frontend/src/mocks/settings-handlers.ts:91:          label: "Enable sub-agents",`
+- `frontend/src/mocks/settings-handlers.ts:93:            "Allow the agent to delegate work to specialized built-in sub-agents.",`
+- `frontend/src/routes/agent-settings.tsx:176:      // the kind alone (sub-agents toggle resets too — preserved as a`
+- `frontend/src/routes/agent-settings.tsx:180:      // Only sub-agents toggled, no kind change.`
+- `frontend/src/routes/agent-settings.tsx:239:        {/* OpenHands: sub-agents toggle */}`
+- `frontend/src/routes/agent-settings.tsx:245:                  testId="agent-settings-enable-sub-agents"`
+- `frontend/src/routes/settings.tsx:80:  // conversations (the sub-agent owns its own tools, LLM, condenser, MCP),`
+- `frontend/src/types/v1/core/events/acp-tool-call-event.ts:39:   * ACP sub-agent is the event source; kept as ``"agent"`` in the SDK.`
+- `frontend/src/types/v1/core/openhands-event.ts:32:  // ACP sub-agent tool call events`
+- `openhands/app_server/app_conversation/live_status_app_conversation_service.py:102:from openhands.sdk.subagent import get_registered_agent_definitions`
+- `openhands/app_server/sandbox/process_sandbox_service.py:3:This service creates sandboxes by spawning separate agent server processes,`
+- `openhands/app_server/sandbox/process_sandbox_service.py:68:    """Sandbox service that spawns separate agent server processes.`
+- `tests/unit/app_server/test_live_status_app_conversation_service.py:947:        """Built-in sub-agents are registered when the user setting is on."""`
+- `tests/unit/app_server/test_live_status_app_conversation_service.py:949:        from openhands.sdk.subagent.schema import AgentDefinition`
+- `tests/unit/app_server/test_live_status_app_conversation_service.py:953:            description='General-purpose subagent',`
+- `tests/unit/app_server/test_live_status_app_conversation_service.py:998:        """Built-in sub-agents are registered but not forwarded when disabled."""`
+
+## QwenLM/qwen-code (80 relevant)
+
+- `.qwen/skills/docs-update-from-diff/references/docs-surface.md:10:  MCP, sandbox, sub-agents, commands, checkpointing, and approval modes.`
+- `.qwen/skills/qwen-code-claw/SKILL.md:216:  See `docs/users/features/sub-agents.md`.`
+- `AGENTS.md:141:- **Bug reproduction & verification**: spawn the `test-engineer` agent. It`
+- `docs/design/compact-mode/compact-mode-design.md:63:6. **Per-tool hint.** `CtrlOToExpand` component shows a contextual hint on individual tools when they produce large output, suppressed in sub-agents.`
+- `docs/design/fork-subagent/fork-subagent-design.md:3:> Implicit fork subagent that inherits the parent's full conversation context and shares prompt cache for cost-efficient parallel task execution.`
+- `docs/design/fork-subagent/fork-subagent-design.md:7:When the Agent tool is called without `subagent_type`, it triggers an implicit **fork** — a background subagent that inherits the parent's conversation history, system prompt, and tool definitions. The fork uses `CacheSafeParams` to ensure its API `
+- `docs/design/fork-subagent/fork-subagent-design.md:79:1. Model calls Agent tool (no subagent_type)`
+- `docs/design/slash-command/phase1-technical-design.md:290:| `agentsCommand.ts`        | `agents`         | `dialog: subagent_create/subagent_list`    |`
+- `docs/design/slash-command/phase2-technical-design.md:70:**当前状态**：`supportedModes: ['interactive']`，action 始终返回 `SubmitPromptActionReturn`（将 subagent 调用 prompt 提交给模型）。`
+- `docs/design/slash-command/phase2-technical-design.md:72:**设计决策**：`/statusline` 是触发 subagent 对当前状态进行总结的命令，语义上与交互界面紧密耦合。经讨论决定保持 `supportedModes: ['interactive']`，不扩展至 non-interactive/acp 模式。`
+- `docs/design/tool-use-summary/tool-use-summary-design.md:15:| Subagent behavior     | `!toolUseContext.agentId` — main session only                         | Implicit — subagents run through `agents/runtime/`, not `useGeminiStream`                  |`
+- `docs/design/tool-use-summary/tool-use-summary-design.md:50:| Trigger         | `query.ts:1411-1482`                                       | Guard by `emitToolUseSummaries` gate + no-subagent; fork Haiku; carry promise           |`
+- `docs/design/tool-use-summary/tool-use-summary-design.md:59:3. **Subagents are excluded.** `!toolUseContext.agentId` — subagent output is aggregated upstream; individual subagent batches would produce noisy labels that never surface in the primary UI.`
+- `docs/design/workflow-tracing-gaps.md:40:| `subagent` root span                       | subagent 内部 llm/tool 调用无法形成 trace 子树  |`
+- `docs/design/workflow-tracing-gaps.md:64:subagent 启动/完成时记录 `SubagentExecutionEvent` 并进入 log/metric，但没有形成显式 span 子树。`
+- `docs/design/workflow-tracing-gaps.md:66:- 能统计"哪个 subagent 跑过"`
+- `docs/design/workflow-tracing-gaps.md:67:- 不能顺着 trace 看"这个 subagent 触发了哪些 llm/tool 调用"`
+- `docs/design/workflow-tracing-gaps.md:68:- 并发 subagent 场景下因果链不清`
+- `docs/design/workflow-tracing-gaps.md:81:  subagent_execution        (log/metric)`
+- `docs/design/workflow-tracing-gaps.md:95:  subagent`
+- `docs/design/workflow-tracing-gaps.md:107:- 从一个用户轮次追到内部 llm/tool/hook/subagent 的体验不连续`
+- `docs/design/workflow-tracing-gaps.md:113:- 无法把 subagent 运行过程还原为可阅读的 trace 子树`
+- `docs/design/workflow-tracing-gaps.md:318:##### 5. subagent trace tree — 双方都不完整，不建议直接复用`
+- `docs/design/workflow-tracing-gaps.md:322:| OTel trace 传播 | **无** — subagent 的 interaction 是新 root                              | **无** — subagent 无显式 trace 传播                  |`
+- `docs/design/workflow-tracing-gaps.md:323:| 身份关联        | Perfetto metadata（agent process/thread）+ `teammateContextStorage` ALS | `subagentNameContext` ALS + `SubagentExecutionEvent` |`
+- `docs/design/workflow-tracing-gaps.md:324:| 并发隔离        | OTel ALS 有泄漏风险（`enterWith` 是进程级，并发 subagent 会互覆盖）     | 同样的风险                                           |`
+- `docs/design/workflow-tracing-gaps.md:326:claude-code 在 subagent OTel tracing 上**自己也没解决好**：`
+- `docs/design/workflow-tracing-gaps.md:328:- `interactionContext.enterWith()` 是进程级的，并发 subagent 会覆盖彼此的 ALS 值`
+- `docs/design/workflow-tracing-gaps.md:333:- 短期：沿用 qwen-code 现有的 `subagentNameContext` + 事件日志方案`
+- `docs/design/workflow-tracing-gaps.md:334:- 中期：在 subagent 启动时创建一个 `subagent` span（parent = 当前 toolContext），并用 `context.with()` 而非 `enterWith()` 来隔离并发 subagent 的 OTel context`
+- `docs/design/workflow-tracing-gaps.md:357:| subagent trace tree                                                       | **不建议直接复用** — 需独立设计       | 高                                            | P2     |`
+- `docs/design/workflow-tracing-gaps.md:374:├── 3b. subagent 启动时创建 subagent root span`
+- `docs/design/workflow-tracing-gaps.md:375:└── 3c. 并发 subagent 场景验证`
+- `docs/design/worktree.md:5:qwen-code 目前仅有面向 Arena 多模型对比场景的内部 worktree 实现（`GitWorktreeService`），用户无法在普通会话中使用 worktree 隔离工作，AgentTool 也不支持为 subagent 创建隔离的 worktree 环境。`
+- `docs/design/worktree.md:117:| Agent 隔离     | 模型为 subagent 设置 `isolation: 'worktree'`             | Phase B  |`
+- `docs/design/worktree.md:157:**目标：** 模型可为 subagent 创建临时隔离 worktree，agent 结束后自动清理；同步更新受影响的工具描述和提示词。`
+- `docs/design/worktree.md:171:- 新增 `buildWorktreeNotice()`：当 fork subagent 在 worktree 中运行时，向其注入上下文提示，说明其处于隔离 worktree、路径继承自父 agent、编辑前需重新读取文件（参考 claude-code `forkSubagent.ts:buildWorktreeNotice`）`
+- `docs/design/worktree.md:184:| `packages/core/src/tools/agent/fork-subagent.ts`   | 新增 `buildWorktreeNotice()` 并在 worktree 模式下注入  |`
+- `docs/developers/examples/daemon-client-quickstart.md:162:console.log(a.attached); // false — A spawned the agent`
+- `docs/developers/qwen-serve-protocol.md:363:Concurrent `POST /session` calls for the same workspace are **coalesced** to one spawn — both callers get the same `sessionId`, exactly one reports `attached: false`. If the underlying spawn fails (init timeout, malformed agent output, OOM), **all coalesced`
+- `docs/developers/roadmap.md:55:| SubAgent                | `V0.0.11` | Dedicated sub-agent system                              | Coding Workflow                 | 1     |`
+- `docs/developers/sdk-typescript.md:75:| `agents`                 | `SubagentConfig[]`                             | -                | Configuration for subagents that can be invoked during the session. Subagents are specialized AI agents for specific tasks or domains.                                `
+- `docs/developers/tools/introduction.md:52:- **[Task Tool](./task.md) (`task`):** For delegating complex tasks to specialized subagents.`
+- `docs/developers/tools/task.md:7:Use `task` to launch a specialized subagent to handle complex, multi-step tasks autonomously. The Task tool delegates work to specialized agents that can work independently with access to their own set of tools, allowing for parallel task execution and specialized exp`
+- `docs/developers/tools/task.md:14:- `prompt` (string, required): The detailed task prompt for the subagent to execute. Should contain comprehensive instructions for autonomous execution.`
+- `docs/developers/tools/task.md:15:- `subagent_type` (string, required): The type of specialized agent to use for this task. Must match one of the available configured subagents.`
+- `docs/developers/tools/task.md:19:The Task tool dynamically loads available subagents from your configuration and delegates tasks to them. Each subagent runs independently and can use its own set of tools, allowing for specialized expertise and parallel execution.`
+- `docs/developers/tools/task.md:21:When you use the Task tool, the subagent will:`
+- `docs/developers/tools/task.md:26:4. Terminate (subagents are stateless and single-use)`
+- `docs/developers/tools/task.md:31:task(description="Brief task description", prompt="Detailed task instructions for the subagent", subagent_type="agent_name")`
+
+## Significant-Gravitas/AutoGPT (80 relevant)
+
+- `.agents/skills/orchestrate/SKILL.md:3:description: "Meta-agent supervisor that manages a fleet of Claude Code agents running in tmux windows. Auto-discovers spare worktrees, spawns agents, monitors state, kicks idle agents, approves safe confirmations, and recycles worktrees when done. TRIGGER when `
+- `.agents/skills/orchestrate/SKILL.md:25:| `spawn-agent.sh SESSION PATH SPARE NEW_BRANCH OBJECTIVE [PR_NUMBER] [STEPS...]` | Create window + checkout branch + launch claude + send task. **Stdout: `SESSION:WIN` only** |`
+- `.agents/skills/orchestrate/SKILL.md:27:| `run-loop.sh` | **Mechanical babysitter** — idle restart + dialog approval + recycle on ORCHESTRATOR:DONE + supervisor health check + all-done notification |`
+- `.agents/skills/orchestrate/SKILL.md:38:Orchestrating Claude (this Claude session — IS the supervisor)`
+- `.agents/skills/orchestrate/SKILL.md:44:**You (the orchestrating Claude)** are the supervisor. After spawning agents, stay in this conversation and actively monitor: poll each agent's pane every 2-3 minutes, check CI, nudge stalled agents, and verify completions. Do not spawn a separate supervisor Cl`
+- `.agents/skills/orchestrate/SKILL.md:56:Required steps are passed as args to `spawn-agent.sh` (e.g. `pr-address pr-test`). `run-loop.sh` will not recycle a window until all required checkpoints are found in the pane output. If `verify-complete.sh` fails, the agent is re-briefed automatically.`
+- `.agents/skills/orchestrate/SKILL.md:61:spare/N branch  →  spawn-agent.sh (--session-id UUID)  →  window + feat/branch + claude running`
+- `.agents/skills/orchestrate/SKILL.md:240:WINDOW=$(bash $SKILLS_DIR/spawn-agent.sh "$SESSION" "$WORKTREE_PATH" "$SPARE_BRANCH" "$NEW_BRANCH" "$OBJECTIVE" "$PR_NUMBER" "pr-address" "pr-test")`
+- `.agents/skills/orchestrate/SKILL.md:243:WINDOW=$(bash $SKILLS_DIR/spawn-agent.sh "$SESSION" "$WORKTREE_PATH" "$SPARE_BRANCH" "$NEW_BRANCH" "$OBJECTIVE")`
+- `.agents/skills/orchestrate/SKILL.md:249:# Derive repo from git remote (used by verify-complete.sh + supervisor)`
+- `.agents/skills/orchestrate/SKILL.md:257:    repo:$repo, loop_window:null, supervisor_window:null, last_poll_at:0, agents:[]}' \`
+- `.agents/skills/orchestrate/SKILL.md:267:`spawn-agent.sh` writes the initial agent record (window, worktree_path, branch, objective, state, etc.) to the state file automatically — **do not append the record again after calling it.** The record already exists and `pr_number`/`steps` are patched in by `
+- `.agents/skills/orchestrate/SKILL.md:282:You are the supervisor. After spawning, immediately start your first poll loop (see **Supervisor duties** below) and continue every 2-3 minutes. Do NOT spawn a separate supervisor Claude window.`
+- `.agents/skills/orchestrate/SKILL.md:290:You are the supervisor. Run this poll loop directly in your Claude session — not in a separate window.`
+- `.agents/skills/orchestrate/SKILL.md:334:and capture every window listed. If you manually added a window outside spawn-agent.sh, ensure it's in the state file first.`
+- `.agents/skills/orchestrate/SKILL.md:420:spawn-agent.sh automatically includes this instruction in every objective:`
+- `.agents/skills/orchestrate/SKILL.md:445:**Rule**: always use `/tmp/orchestrator-context-<timestamp>.png` as the naming convention so the supervisor knows what to look for if it needs to re-brief an agent with the same image.`
+- `.agents/skills/orchestrate/SKILL.md:584:| `AutoGPT1` | `dx/orchestrate-skill` | Hosts the orchestrate skill scripts. `recycle-agent.sh` would check out `spare/1`, wiping `.claude/skills/` and breaking all subsequent `spawn-agent.sh` calls. |`
+- `.agents/skills/orchestrate/SKILL.md:586:**Rule**: when selecting spare worktrees via `find-spare.sh`, skip any worktree whose CURRENT branch matches a protected branch. If you accidentally spawn an agent in a protected worktree, do not let `recycle-agent.sh` run on it — manually restore the branch a`
+- `.agents/skills/orchestrate/SKILL.md:605:**The supervisor must verify actual thread counts via GraphQL** — never trust an agent's claim of "0 unresolved." After any agent's ORCHESTRATOR:DONE, always run:`
+- `.agents/skills/orchestrate/SKILL.md:705:16. **Poll ALL windows from state file** — never hardcode window count. Derive active windows dynamically: `jq -r '.agents[] | select(.state | test("running|idle|stuck")) | .window' ~/.claude/orchestrator-state.json`. If you added a window mid-session outside `
+- `.agents/skills/orchestrate/SKILL.md:706:20. **Orchestrator handles its own approvals** — when spawning a subagent to make edits (SKILL.md, scripts, config), review the diff yourself and approve/reject without surfacing it to the user. The user should never have to open a file to check the orchestrat`
+- `.agents/skills/orchestrate/scripts/run-loop.sh:116:  [[ "$state" != "idle" ]] && return  # stuck agents handled by supervisor`
+- `.agents/skills/orchestrate/scripts/run-loop.sh:168:  # Anything else — supervisor handles it, just log`
+- `.agents/skills/orchestrate/scripts/run-loop.sh:169:  echo "[$(date +%H:%M:%S)] APPROVE skip   $window — unknown dialog, supervisor will handle"`
+- `.agents/skills/orchestrate/scripts/spawn-agent.sh:2:# spawn-agent.sh — create tmux window, checkout branch, launch claude, send task`
+- `.agents/skills/orchestrate/scripts/spawn-agent.sh:4:# Usage: spawn-agent.sh SESSION WORKTREE_PATH SPARE_BRANCH NEW_BRANCH OBJECTIVE [PR_NUMBER] [STEPS...]`
+- `.agents/skills/orchestrate/scripts/spawn-agent.sh:19:  echo "Usage: spawn-agent.sh SESSION WORKTREE_PATH SPARE_BRANCH NEW_BRANCH OBJECTIVE [PR_NUMBER] [STEPS...]" >&2`
+- `.agents/skills/orchestrate/scripts/spawn-agent.sh:119:  echo "[spawn-agent] WARNING: timed out waiting for idle ❯ prompt on $WINDOW — sending objective anyway" >&2`
+- `.agents/skills/orchestrate/scripts/verify-complete.sh:8:#   4. spawned_at — a new CI run was triggered after agent spawned (proves real work)`
+- `.agents/skills/orchestrate/scripts/verify-complete.sh:93:      echo "NOT COMPLETE: latest CI run on $BRANCH predates agent spawn — agent may not have pushed yet" >&2`
+- `.agents/skills/pr-polish/SKILL.md:219:Spawning `/pr-polish` inside an `Agent(subagent_type="general-purpose")` background task **does not work**. Background agents don't inherit the parent's slash-command registry, so `Skill(skill="pr-review")` and `Skill(skill="pr-address")` calls aren't available `
+- `.claude/skills/orchestrate/SKILL.md:3:description: "Meta-agent supervisor that manages a fleet of Claude Code agents running in tmux windows. Auto-discovers spare worktrees, spawns agents, monitors state, kicks idle agents, approves safe confirmations, and recycles worktrees when done. TRIGGER when `
+- `.claude/skills/orchestrate/SKILL.md:25:| `spawn-agent.sh SESSION PATH SPARE NEW_BRANCH OBJECTIVE [PR_NUMBER] [STEPS...]` | Create window + checkout branch + launch claude + send task. **Stdout: `SESSION:WIN` only** |`
+- `.claude/skills/orchestrate/SKILL.md:27:| `run-loop.sh` | **Mechanical babysitter** — idle restart + dialog approval + recycle on ORCHESTRATOR:DONE + supervisor health check + all-done notification |`
+- `.claude/skills/orchestrate/SKILL.md:38:Orchestrating Claude (this Claude session — IS the supervisor)`
+- `.claude/skills/orchestrate/SKILL.md:44:**You (the orchestrating Claude)** are the supervisor. After spawning agents, stay in this conversation and actively monitor: poll each agent's pane every 2-3 minutes, check CI, nudge stalled agents, and verify completions. Do not spawn a separate supervisor Cl`
+- `.claude/skills/orchestrate/SKILL.md:56:Required steps are passed as args to `spawn-agent.sh` (e.g. `pr-address pr-test`). `run-loop.sh` will not recycle a window until all required checkpoints are found in the pane output. If `verify-complete.sh` fails, the agent is re-briefed automatically.`
+- `.claude/skills/orchestrate/SKILL.md:61:spare/N branch  →  spawn-agent.sh (--session-id UUID)  →  window + feat/branch + claude running`
+- `.claude/skills/orchestrate/SKILL.md:240:WINDOW=$(bash $SKILLS_DIR/spawn-agent.sh "$SESSION" "$WORKTREE_PATH" "$SPARE_BRANCH" "$NEW_BRANCH" "$OBJECTIVE" "$PR_NUMBER" "pr-address" "pr-test")`
+- `.claude/skills/orchestrate/SKILL.md:243:WINDOW=$(bash $SKILLS_DIR/spawn-agent.sh "$SESSION" "$WORKTREE_PATH" "$SPARE_BRANCH" "$NEW_BRANCH" "$OBJECTIVE")`
+- `.claude/skills/orchestrate/SKILL.md:249:# Derive repo from git remote (used by verify-complete.sh + supervisor)`
+- `.claude/skills/orchestrate/SKILL.md:257:    repo:$repo, loop_window:null, supervisor_window:null, last_poll_at:0, agents:[]}' \`
+- `.claude/skills/orchestrate/SKILL.md:267:`spawn-agent.sh` writes the initial agent record (window, worktree_path, branch, objective, state, etc.) to the state file automatically — **do not append the record again after calling it.** The record already exists and `pr_number`/`steps` are patched in by `
+- `.claude/skills/orchestrate/SKILL.md:282:You are the supervisor. After spawning, immediately start your first poll loop (see **Supervisor duties** below) and continue every 2-3 minutes. Do NOT spawn a separate supervisor Claude window.`
+- `.claude/skills/orchestrate/SKILL.md:290:You are the supervisor. Run this poll loop directly in your Claude session — not in a separate window.`
+- `.claude/skills/orchestrate/SKILL.md:334:and capture every window listed. If you manually added a window outside spawn-agent.sh, ensure it's in the state file first.`
+- `.claude/skills/orchestrate/SKILL.md:420:spawn-agent.sh automatically includes this instruction in every objective:`
+- `.claude/skills/orchestrate/SKILL.md:445:**Rule**: always use `/tmp/orchestrator-context-<timestamp>.png` as the naming convention so the supervisor knows what to look for if it needs to re-brief an agent with the same image.`
+- `.claude/skills/orchestrate/SKILL.md:584:| `AutoGPT1` | `dx/orchestrate-skill` | Hosts the orchestrate skill scripts. `recycle-agent.sh` would check out `spare/1`, wiping `.claude/skills/` and breaking all subsequent `spawn-agent.sh` calls. |`
+
+## TransformerOptimus/SuperAGI (0 relevant)
+
+
+## aaif-goose/goose (62 relevant)
+
+- `CUSTOM_DISTROS.md:54:| Build complex multi-step workflows | Recipes with sub-recipes and subagents | Medium |`
+- `CUSTOM_DISTROS.md:658:The AI can then invoke these sub-recipes using the `subagent` tool:`
+- `CUSTOM_DISTROS.md:661:subagent(subrecipe: "find_files", parameters: {"search_term": "authentication"})`
+- `CUSTOM_DISTROS.md:674:Create subagents on-the-fly with custom instructions:`
+- `CUSTOM_DISTROS.md:680:  1. Spawn a subagent to analyze the frontend code:`
+- `CUSTOM_DISTROS.md:681:     subagent(instructions: "Analyze all React components in src/components/ `
+- `CUSTOM_DISTROS.md:684:  2. Spawn another subagent for the backend:`
+- `CUSTOM_DISTROS.md:685:     subagent(instructions: "Document all API endpoints in src/api/ `
+- `CUSTOM_DISTROS.md:688:  3. Synthesize findings from both subagents into a unified report.`
+- `CUSTOM_DISTROS.md:693:Multiple subagent calls in the same message execute in parallel:`
+- `CUSTOM_DISTROS.md:697:  Run these analyses in parallel by making all subagent calls at once:`
+- `CUSTOM_DISTROS.md:699:  subagent(instructions: "Count lines of code by language")`
+- `CUSTOM_DISTROS.md:700:  subagent(instructions: "Find all TODO comments") `
+- `CUSTOM_DISTROS.md:701:  subagent(instructions: "List external dependencies")`
+- `CUSTOM_DISTROS.md:708:Customize model, provider, or behavior per subagent:`
+- `CUSTOM_DISTROS.md:714:  subagent(`
+- `CUSTOM_DISTROS.md:724:  subagent(`
+- `CUSTOM_DISTROS.md:735:Limit which extensions a subagent can access:`
+- `CUSTOM_DISTROS.md:739:  Create a sandboxed subagent with only file reading capabilities:`
+- `CUSTOM_DISTROS.md:741:  subagent(`
+- `CUSTOM_DISTROS.md:819:2. **Parallelize independent tasks** - Multiple subagent calls in one message run concurrently`
+- `CUSTOM_DISTROS.md:821:4. **Scope extensions appropriately** - Give subagents only the tools they need`
+- `CUSTOM_DISTROS.md:823:6. **Handle failures gracefully** - Design workflows to continue even if one subagent fails`
+- `CUSTOM_DISTROS.md:827:- Subagent tool: `crates/goose/src/agents/subagent_tool.rs``
+- `CUSTOM_DISTROS.md:828:- Subagent execution: `crates/goose/src/agents/subagent_handler.rs``
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/context_length_exceeded.json:137:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extens`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/context_length_exceeded.json:194:                      "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/context_length_exceeded.json:224:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/image_analysis.json:158:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; arr`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/image_analysis.json:215:                      "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/image_analysis.json:245:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/weather_tool.json:75:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; array `
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/weather_tool.json:143:                    "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/weather_tool.json:254:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/weather_tool.json:403:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; array`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/weather_tool.json:471:                    "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/weather_tool.json:582:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/what_is_your_name.json:153:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; `
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/what_is_your_name.json:210:                      "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/anthropic/what_is_your_name.json:240:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/weather_tool.json:73:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; arr`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/weather_tool.json:141:                    "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/weather_tool.json:252:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/weather_tool.json:412:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; ar`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/weather_tool.json:480:                    "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/weather_tool.json:591:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/what_is_your_name.json:153:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extension`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/what_is_your_name.json:210:                      "description": "If true, return only the last message from the subagent (default: false, returns full conversation)",`
+- `crates/goose-cli/src/scenario_tests/recordings/azure_openai/what_is_your_name.json:240:          "name": "subagent__execute_task",`
+- `crates/goose-cli/src/scenario_tests/recordings/google/what_is_your_name.json:153:          "description": "Create tasks with instructions or prompt. For simple tasks, only include the instructions field. Extensions control: omit field = use all current extensions; empty array [] = no extensions; arr`
+
+## agno-agi/agno (63 relevant)
+
+- `AGENTS.md:23:When working in Conductor, you can use the `.context/` directory for scratch notes or agent-to-agent handoff artifacts. This directory is gitignored.`
+- `CLAUDE.md:23:When working in Conductor, you can use the `.context/` directory for scratch notes or agent-to-agent handoff artifacts. This directory is gitignored.`
+- `cookbook/01_demo/agents/code_search.py:7:Uses ``WorkspaceContextProvider``, which exposes a read-only ``Workspace`` toolkit (list / search / read) behind a sub-agent.`
+- `cookbook/01_demo/agents/local_wiki.py:7:  query_local_wiki(question)   — read sub-agent scoped to the wiki`
+- `cookbook/01_demo/agents/local_wiki.py:8:  update_local_wiki(...)       — write sub-agent that can also fetch`
+- `cookbook/01_demo/agents/web_search.py:7:The agent sees a single ``query_web(question)`` tool that hands off to a sub-agent with ``web_search`` + ``web_fetch``. The sub-agent does the search/fetch loop and returns a synthesized answer; the parent agent stays focused on the user's question.`
+- `cookbook/01_demo/config.yaml:35:    swarm:`
+- `cookbook/01_demo/evals/cases.py:28:from teams.swarm import swarm`
+- `cookbook/01_demo/evals/cases.py:108:        name="swarm_synthesizes_two_models",`
+- `cookbook/01_demo/evals/cases.py:109:        agent=swarm,`
+- `cookbook/01_demo/run.py:33:from teams.swarm import swarm`
+- `cookbook/01_demo/run.py:72:    teams=[swarm],`
+- `cookbook/01_demo/settings.py:18:    """Smaller OpenAI model for context-provider sub-agents (tool-routing work)."""`
+- `cookbook/01_demo/teams/swarm.py:59:You lead a two-model swarm: one OpenAI agent and one Anthropic`
+- `cookbook/01_demo/teams/swarm.py:75:swarm = Team(`
+- `cookbook/01_demo/teams/swarm.py:76:    id="swarm",`
+- `cookbook/03_teams/13_hooks/post_hook_output.py:65:            "   A well-synthesized unified response DOES count as collaboration - it does NOT need explicit member attribution or handoffs.",`
+- `cookbook/12_context/00_filesystem.py:6:a single `query_<id>` tool. The tool routes through a read-only sub-agent`
+- `cookbook/12_context/04_database_read_write.py:9:Two sub-agents under the hood so the read path never sees the write`
+- `cookbook/12_context/05_slack.py:12:Separate sub-agents under the hood keep scopes minimal: read agents`
+- `cookbook/12_context/06_mcp_server.py:6:Instructions for the sub-agent are built dynamically from the`
+- `cookbook/12_context/06_mcp_server.py:20:instead wraps them in a `query_mcp_<id>` sub-agent tool — use that`
+- `cookbook/12_context/06_slack_search_media.py:14:This example uses Gemini as the sub-agent model for Slack operations,`
+- `cookbook/12_context/07_google_drive.py:8:`query_<id>` tool that routes through a sub-agent trained to`
+- `cookbook/12_context/08_multi_provider.py:33:# Every provider sub-agent in this cookbook shares the same small model.`
+- `cookbook/12_context/08_multi_provider.py:55:# in-memory DB is per-connection — the sub-agent opens its own`
+- `cookbook/12_context/13_workspace.py:6:a single `query_<id>` tool. The tool routes through a read-only sub-agent`
+- `cookbook/12_context/14_wiki_filesystem.py:6:- `query_<id>(question)`     - natural-language reads via a sub-agent`
+- `cookbook/12_context/14_wiki_filesystem.py:8:- `update_<id>(instruction)` - natural-language writes via a sub-agent`
+- `cookbook/12_context/14_wiki_filesystem.py:12:sub-agent returns. `FileSystemBackend` does nothing extra: the`
+- `cookbook/12_context/15_wiki_git.py:6:lives in a real git repository. After the write sub-agent returns,`
+- `cookbook/12_context/16_wiki_with_web.py:6:web backend wired in. The write sub-agent gets the workspace tools`
+- `cookbook/12_context/16_wiki_with_web.py:11:The read sub-agent stays scoped to the wiki on purpose — "what does`
+- `cookbook/12_context/18_gmail.py:6:specialized sub-agents. The calling agent receives:`
+- `cookbook/12_context/19_calendar.py:6:through specialized sub-agents. The calling agent receives:`
+- `cookbook/12_context/20_google_workspace.py:52:# Using gpt-5.4-mini for sub-agents keeps costs low while the main`
+- `cookbook/12_context/README.md:11:   providers) that routes through a scoped sub-agent.`
+- `cookbook/12_context/README.md:22:| `FilesystemContextProvider` | Local directory tree | `query_<id>` (read-only `FileTools` sub-agent) |`
+- `cookbook/12_context/README.md:23:| `WorkspaceContextProvider` | Local project workspace | `query_<id>` (read-only `Workspace` sub-agent with project-aware excludes) |`
+- `cookbook/12_context/README.md:24:| `WebContextProvider` + `ExaMCPBackend` | Web via Exa's public MCP server (keyless / keyed) | `query_<id>` (search + fetch sub-agent) |`
+- `cookbook/12_context/README.md:25:| `WebContextProvider` + `ExaBackend` | Web via Exa's direct SDK | `query_<id>` (search + fetch sub-agent) |`
+- `cookbook/12_context/README.md:26:| `WebContextProvider` + `ParallelBackend` | Web via Parallel's beta API | `query_<id>` (search + fetch sub-agent) |`
+- `cookbook/12_context/README.md:27:| `WebContextProvider` + `ParallelMCPBackend` | Web via Parallel's public MCP server (keyless / keyed) | `query_<id>` (search + fetch sub-agent) |`
+- `cookbook/12_context/README.md:28:| `DatabaseContextProvider` | Any SQL database (SQLAlchemy) | `query_<id>`, `update_<id>` (separate read/write sub-agents) |`
+- `cookbook/12_context/README.md:29:| `SlackContextProvider` | A Slack workspace | `query_<id>`, `update_<id>` (separate read/write sub-agents; writer only gets `send_message` + the lookup tools it needs) |`
+- `cookbook/12_context/README.md:30:| `MCPContextProvider` | One MCP server | `query_<id>` (sub-agent over the server's tools) or flat tools in `mode=tools` |`
+- `cookbook/12_context/README.md:31:| `GDriveContextProvider` | Google Drive via service account | `query_<id>` (list / search / read sub-agent; all-drives aware) |`
+- `cookbook/12_context/README.md:32:| `WikiContextProvider` + `FileSystemBackend` | A directory of markdown files | `query_<id>`, `update_<id>` (separate read/write sub-agents over `Workspace` tools) |`
+- `cookbook/12_context/README.md:35:| `WikiContextProvider` + `web=ContextBackend` | Wiki + web ingestion (e.g. `ExaMCPBackend`) | Write sub-agent gains web search/fetch so `update_<id>("add this paper")` fetches and digests in one hop |`
+- `cookbook/12_context/TEST_LOG.md:19:new Notion API (2025-09-03). Write sub-agent listed/searched the empty`
+
+## anomalyco/opencode (80 relevant)
+
+- `.github/workflows/docs-locale-sync.yml:80:            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .opencode/agent/translator.md).`
+- `.github/workflows/docs-locale-sync.yml:81:            3. Do not translate directly in the primary agent. Use translator subagent output as the source for locale text updates.`
+- `.github/workflows/docs-locale-sync.yml:82:            4. Run translator subagent Task calls in parallel whenever file/locale translation work is independent.`
+- `.opencode/command/ai-deps.md:12:Consider using subagents for each dep to save your context window.`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:3:When the user wants to explore alternative interfaces for a chosen deepening candidate, use this parallel sub-agent pattern. Based on "Design It Twice" (Ousterhout) — your first idea is unlikely to be the best.`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:11:Before spawning sub-agents, write a user-facing explanation of the problem space for the chosen candidate:`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:17:Show this to the user, then immediately proceed to Step 2. The user reads and thinks while the sub-agents work in parallel.`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:19:### 2. Spawn sub-agents`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:21:Spawn 3+ sub-agents in parallel using the Agent tool. Each must produce a **radically different** interface for the deepened module.`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:23:Prompt each sub-agent with a separate technical brief (file paths, coupling details, dependency category from [DEEPENING.md](DEEPENING.md), what sits behind the seam). The brief is independent of the user-facing problem-space expl`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:30:Include both [LANGUAGE.md](LANGUAGE.md) vocabulary and CONTEXT.md vocabulary in the brief so each sub-agent names things consistently with the architecture language and the project's domain language.`
+- `.opencode/skills/improve-codebase-architecture/INTERFACE-DESIGN.md:32:Each sub-agent outputs:`
+- `.opencode/skills/improve-codebase-architecture/SKILL.md:37:Then use the Agent tool with `subagent_type=Explore` to walk the codebase. Don't follow rigid heuristics — explore organically and note where you experience friction:`
+- `README.br.md:110:Também há um subagent **general** para buscas complexas e tarefas em várias etapas.`
+- `README.da.md:110:Derudover findes der en **general**-subagent til komplekse søgninger og flertrinsopgaver.`
+- `README.es.md:110:Además, incluye un subagente **general** para búsquedas complejas y tareas de varios pasos.`
+- `README.md:110:Also included is a **general** subagent for complex searches and multistep tasks.`
+- `README.no.md:110:Det finnes også en **general**-subagent for komplekse søk og flertrinnsoppgaver.`
+- `README.pl.md:110:Dodatkowo jest subagent **general** do złożonych wyszukiwań i wieloetapowych zadań.`
+- `README.vi.md:110:Ngoài ra còn có một subagent **general** dùng cho các tìm kiếm phức tạp và tác vụ nhiều bước.`
+- `github/index.ts:601:  if (agent.mode === "subagent") {`
+- `github/index.ts:602:    console.warn(`agent "${envAgent}" is a subagent, not a primary agent. Falling back to default agent`)`
+- `packages/app/src/components/prompt-input/submit.test.ts:121:      handoff: {`
+- `packages/app/src/components/prompt-input/submit.ts:380:        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)`
+- `packages/app/src/context/global-sync/utils.ts:10:  return item.mode === "subagent" || item.mode === "primary" || item.mode === "all"`
+- `packages/app/src/context/layout.tsx:261:        handoff: {`
+- `packages/app/src/context/layout.tsx:548:      handoff: {`
+- `packages/app/src/context/layout.tsx:549:        tabs: createMemo(() => store.handoff?.tabs),`
+- `packages/app/src/context/layout.tsx:551:          setStore("handoff", "tabs", { dir, id, at: Date.now() })`
+- `packages/app/src/context/layout.tsx:554:          if (!store.handoff?.tabs) return`
+- `packages/app/src/context/layout.tsx:555:          setStore("handoff", "tabs", undefined)`
+- `packages/app/src/context/local.tsx:26:const handoff = new Map<string, State>()`
+- `packages/app/src/context/local.tsx:28:const handoffKey = (dir: string, id: string) => `${dir}\n${id}``
+- `packages/app/src/context/local.tsx:64:    const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))`
+- `packages/app/src/context/local.tsx:124:      return saved.session[session] ?? handoff.get(handoffKey(sdk.directory, session))`
+- `packages/app/src/context/local.tsx:131:      const key = handoffKey(sdk.directory, session)`
+- `packages/app/src/context/local.tsx:132:      const next = handoff.get(key)`
+- `packages/app/src/context/local.tsx:135:        handoff.delete(key)`
+- `packages/app/src/context/local.tsx:140:      handoff.delete(key)`
+- `packages/app/src/context/local.tsx:380:          handoff.set(handoffKey(dir, session), next)`
+- `packages/app/src/context/local.tsx:388:          if (handoff.has(handoffKey(sdk.directory, session))) return`
+- `packages/app/src/i18n/br.ts:727:  "settings.permissions.tool.task.description": "Lançar sub-agentes",`
+- `packages/app/src/i18n/en.ts:916:  "settings.permissions.tool.task.description": "Launch sub-agents",`
+- `packages/app/src/i18n/es.ts:808:  "settings.permissions.tool.task.description": "Lanzar sub-agentes",`
+- `packages/app/src/pages/layout.tsx:57:import { setSessionHandoff } from "@/pages/session/handoff"`
+- `packages/app/src/pages/session.tsx:372:        const pending = layout.handoff.tabs()`
+- `packages/app/src/pages/session.tsx:375:          layout.handoff.clearTabs()`
+- `packages/app/src/pages/session.tsx:380:        layout.handoff.clearTabs()`
+- `packages/app/src/pages/session/composer/session-composer-region.tsx:10:import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"`
+- `packages/app/src/pages/session/composer/session-composer-region.tsx:57:  const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)`
+
+## crewAIInc/crewAI (1 relevant)
+
+- `docs/ar/guides/advanced/customizing-prompts.mdx:89:    has_tools=len(agent.tools) > 0,`
+
+## google-gemini/gemini-cli (77 relevant)
+
+- `.gemini/skills/async-pr-review/SKILL.md:11:1.  **Native Background Shells vs Headless Inference**: While Gemini CLI can natively spawn and detach background shell commands (using the `run_shell_command` tool with `is_background: true`), a standard bash background job cannot perform LLM inference. To`
+- `.gemini/skills/behavioral-evals/references/fixing.md:72:    - **Modifications**: Compose subagents or isolate tools. Ground in observed`
+- `.gemini/skills/docs-changelog/references/highlights_examples.md:7:  system prompt rigor, improved subagent definitions, and enhanced tool`
+- `.gemini/skills/docs-changelog/references/highlights_examples.md:30:  for structured task management and evolved subagent capabilities with dynamic`
+- `.gemini/skills/docs-changelog/references/highlights_examples.md:42:  migrating non-interactive flows and sub-agents to the new scheduler.`
+- `.gemini/skills/review-duplication/SKILL.md:32:Delegate the heavy lifting of codebase investigation to specialized sub-agents. They are optimized to perform deep searches and semantic mapping without bloating your session history.`
+- `.gemini/skills/review-duplication/SKILL.md:34:To ensure a comprehensive review, you MUST formulate highly specific objectives for the sub-agents, providing them with the "scents" you discovered in Step 1.`
+- `.gemini/skills/review-duplication/SKILL.md:41:  - **Refactoring Guidance:** Crucially, ask the sub-agent to explain *how* the new code could be refactored to use any existing logic it finds.`
+- `.github/workflows/agent-session-drift-check.yml:44:              //   label: 'local subagent invocation',`
+- `.github/workflows/gemini-automated-issue-triage.yml:210:              "Issues with sub-agents."`
+- `.github/workflows/gemini-scheduled-issue-triage.yml:252:            area/agent: The "brain" of the CLI. Core agent logic, model quality, tool/function calling, memory, web search, generated code quality, sub-agents.`
+- `docs/changelogs/index.md:133:  enhanced subagent security`
+- `docs/changelogs/index.md:148:- **Subagent Context and Feedback:** Enhanced subagents with JIT context`
+- `docs/changelogs/index.md:196:- **Plan Mode Updates:** Expanded Plan Mode with built-in research subagents,`
+- `docs/changelogs/index.md:374:  core, and workflows, addressing issues with subagent delegation, unicode`
+- `docs/changelogs/index.md:407:  CLI itself, and enhanced model routing to effectively utilize subagents.`
+- `docs/changelogs/index.md:627:![Codebase investigator subagent in Gemini CLI.](https://i.imgur.com/4J1njsx.png)`
+- `docs/changelogs/index.md:659:- **Codebase investigator subagent:** We now have a new built-in subagent that`
+- `docs/changelogs/index.md:866:    sub-agent for contextual insights`
+- `docs/changelogs/index.md:868:    [sub-agent](https://github.com/gemini-cli-extensions/bigquery-conversational-analytics))`
+- `docs/changelogs/latest.md:41:- fix(core): add missing oauth fields support in subagent parsing by`
+- `docs/changelogs/latest.md:191:- fix(core): make subagents aware of active approval modes by @akh64bit in`
+- `docs/cli/auto-memory.md:41:  ignores active, trivial, and sub-agent sessions.`
+- `docs/cli/model-steering.md:13:workflows or long-running subagent executions where you want to ensure the agent`
+- `docs/cli/model.md:11:> model used by sub-agents. Consequently, even when using the `/model` flag you`
+- `docs/cli/plan-mode.md:129:  [`codebase_investigator`](../core/subagents.md#codebase-investigator),`
+- `docs/cli/plan-mode.md:130:  [`cli_help`](../core/subagents.md#cli-help-agent)`
+- `docs/cli/plan-mode.md:243:#### Example: Enable custom subagents in Plan Mode`
+- `docs/cli/plan-mode.md:245:Built-in research [subagents](../core/subagents.md) like`
+- `docs/cli/plan-mode.md:246:[`codebase_investigator`](../core/subagents.md#codebase-investigator) and`
+- `docs/cli/plan-mode.md:247:[`cli_help`](../core/subagents.md#cli-help-agent) are enabled by default in Plan`
+- `docs/cli/plan-mode.md:249:[custom subagents](../core/subagents.md#creating-custom-subagents) by adding a`
+- `docs/cli/plan-mode.md:252:`~/.gemini/policies/research-subagents.toml``
+- `docs/cli/plan-mode.md:256:toolName = "my_custom_subagent"`
+- `docs/cli/system-prompt.md:69:  sub-agents.`
+- `docs/core/index.md:10:- **[Sub-agents](./subagents.md):** Learn how to create and use specialized`
+- `docs/core/index.md:11:  sub-agents for complex tasks.`
+- `docs/core/remote-agents.md:3:Gemini CLI supports connecting to remote subagents using the Agent-to-Agent`
+- `docs/core/remote-agents.md:27:## Defining remote subagents`
+- `docs/core/remote-agents.md:29:Remote subagents are defined as Markdown files (`.md`) with YAML frontmatter.`
+- `docs/core/remote-agents.md:45:### Single-subagent example`
+- `docs/core/remote-agents.md:55:### Multi-subagent example`
+- `docs/core/remote-agents.md:57:The loader explicitly supports multiple remote subagents defined in a single`
+- `docs/core/remote-agents.md:433:Users can manage subagents using the following commands within Gemini CLI:`
+- `docs/core/remote-agents.md:435:- `/agents list`: Displays all available local and remote subagents.`
+- `docs/core/remote-agents.md:438:- `/agents enable <agent_name>`: Enables a specific subagent.`
+- `docs/core/remote-agents.md:439:- `/agents disable <agent_name>`: Disables a specific subagent.`
+- `docs/core/remote-agents.md:444:> with configuring subagents.`
+- `docs/core/remote-agents.md:448:Remote subagents are enabled by default. To disable them, set `enableAgents` to`
+- `docs/core/subagents.md:8:## What are subagents?`
+
+## langchain-ai/deepagents (79 relevant)
+
+- `.github/workflows/release.yml:789:          # deepagents SDK: subagent middleware tests`
+- `README.md:64:The agent can plan, read/write files, and manage its own context. Add your own tools, swap models, customize prompts, configure sub-agents, and more. See the [documentation](https://docs.langchain.com/oss/python/deepagents/overview) for full details.`
+- `README.md:76:LangGraph is the graph runtime. LangChain's `create_agent` is a minimal agent harness on top of it. Deep Agents is a more opinionated harness on top of `create_agent` — same building blocks, but with filesystem, sub-agents, context management, and skills bundled in. For how the three re`
+- `README.md:90:The layers compose: any LangGraph `CompiledStateGraph` can be passed in as a sub-agent to a Deep Agent, so custom orchestration plugs in alongside the harness's defaults.`
+- `examples/README.md:63:| [**Deep Research**](deep_research/) | Multi-step web research with Tavily, parallel sub-agents, and strategic reflection |`
+- `examples/README.md:77:| [**Content Builder**](content-builder-agent/) | Blog posts, LinkedIn posts, and tweets with memory (`AGENTS.md`), skills, and subagents |`
+- `examples/README.md:86:| [**GTM Strategist**](deploy-gtm-agent/) | GTM strategy agent coordinating sync and async subagents |`
+- `examples/README.md:87:| [**Async Subagent Server**](async-subagent-server/) | Self-hosted Agent Protocol server exposing a researcher as an async subagent |`
+- `examples/README.md:94:| [**RLM Agent**](rlm_agent/) | `create_rlm_agent` helper: recursive REPL + PTC subagent chain for parallel fan-out |`
+- `examples/README.md:95:| [**REPL Swarm**](repl_swarm/) | TypeScript `swarm` skill dispatching subagents in parallel from QuickJS |`
+- `examples/async-subagent-server/.env.example:4:RESEARCHER_URL=  # supervisor only — defaults to http://localhost:2024`
+- `examples/async-subagent-server/README.md:3:A self-hosted [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server that exposes a Deep Agents researcher as an async subagent. Use this as a starting point for hosting your own agent on any infrastructure and connecting it to a Deep Agent`
+- `examples/async-subagent-server/README.md:7:- **`server.py`** — the FastAPI server your subagent runs on`
+- `examples/async-subagent-server/README.md:8:- **`supervisor.py`** — an interactive REPL showing how to connect to it`
+- `examples/async-subagent-server/README.md:20:cd examples/async-subagent-server`
+- `examples/async-subagent-server/README.md:37:**4. In another terminal, start the supervisor:**`
+- `examples/async-subagent-server/README.md:40:cd examples/async-subagent-server`
+- `examples/async-subagent-server/README.md:41:ANTHROPIC_API_KEY=... uv run python supervisor.py`
+- `examples/async-subagent-server/README.md:56:These are the Agent Protocol endpoints the Deep Agents async subagent middleware calls (via the LangGraph SDK):`
+- `examples/async-subagent-server/README.md:81:This example is intended to illustrate the self-hosted async subagent pattern. It does not feature authentication, rate limiting, or other features required for production use.`
+- `examples/async-subagent-server/pyproject.toml:2:name = "async-subagent-server-example"`
+- `examples/async-subagent-server/pyproject.toml:4:description = "Self-hosted async subagent server example using deepagents"`
+- `examples/async-subagent-server/server.py:4:researcher as an async subagent. Any Deep Agents supervisor can connect`
+- `examples/async-subagent-server/server.py:7:Implements the endpoints the Deep Agents async subagent middleware calls`
+- `examples/async-subagent-server/server.py:23:Then point a Deep Agents supervisor at:`
+- `examples/async-subagent-server/supervisor.py:3:An interactive REPL that demonstrates the five async subagent operations`
+- `examples/async-subagent-server/supervisor.py:6:The supervisor delegates research tasks to the server-hosted researcher`
+- `examples/async-subagent-server/supervisor.py:8:background — the supervisor returns a task ID immediately and lets you`
+- `examples/async-subagent-server/supervisor.py:12:    ANTHROPIC_API_KEY=... python supervisor.py`
+- `examples/async-subagent-server/supervisor.py:34:from deepagents.middleware.async_subagents import AsyncSubAgent`
+- `examples/async-subagent-server/supervisor.py:44:async_subagents: list[AsyncSubAgent] = [`
+- `examples/async-subagent-server/supervisor.py:60:supervisor = create_deep_agent(`
+- `examples/async-subagent-server/supervisor.py:64:        "You are a research supervisor coordinating a background researcher agent.\n\n"`
+- `examples/async-subagent-server/supervisor.py:68:        '  1. Call start_async_task with subagent_type "researcher" and the topic.\n'`
+- `examples/async-subagent-server/supervisor.py:87:    subagents=async_subagents,`
+- `examples/async-subagent-server/supervisor.py:94:    """Send a message to the supervisor and print the response."""`
+- `examples/async-subagent-server/supervisor.py:95:    result = await supervisor.ainvoke(`
+- `examples/async-subagent-server/test_server.py:1:"""Minimal end-to-end tests for the async subagent server.`
+- `examples/content-builder-agent/AGENTS.md:39:1. Use the `researcher` subagent for in-depth topic research`
+- `examples/content-builder-agent/README.md:10:- **Subagents** (`subagents.yaml`) – specialized agents for delegated tasks like research`
+- `examples/content-builder-agent/README.md:40:├── subagents.yaml               # Subagent definitions`
+- `examples/content-builder-agent/README.md:52:| `subagents.yaml` | Research and other delegated tasks | Always (defines `task` tool) |`
+- `examples/content-builder-agent/README.md:67:    subagents=load_subagents("./subagents.yaml"),  # ← See note below`
+- `examples/content-builder-agent/README.md:74:**Note on subagents:** Unlike `memory` and `skills`, subagents must be defined in code. We use a small `load_subagents()` helper to externalize config to YAML. You can also define them inline:`
+- `examples/content-builder-agent/README.md:77:subagents=[`
+- `examples/content-builder-agent/README.md:90:2. Delegates research to `researcher` subagent → saves to `research/``
+- `examples/content-builder-agent/README.md:125:**Add a subagent:** Add to `subagents.yaml`:`
+- `examples/content-builder-agent/content_writer.py:12:- subagents handle research and other delegated tasks`
+- `examples/content-builder-agent/content_writer.py:43:# Web search tool for the researcher subagent`
+- `examples/content-builder-agent/content_writer.py:134:def load_subagents(config_path: Path) -> list:`
+
+## langchain-ai/langchain (74 relevant)
+
+- `README.md:27:> Just getting started? Check out **[Deep Agents](http://docs.langchain.com/oss/python/deepagents/)** — a higher-level package built on LangChain for agents that have built-in capabilites for common usage patterns such as planning, subagents, file system usage, and more.`
+- `README.md:55:- **[Deep Agents](http://docs.langchain.com/oss/python/deepagents/)** — Build agents that can plan, use subagents, and leverage file systems for complex tasks`
+- `libs/core/langchain_core/messages/utils.py:450:            has_tool_calls = isinstance(m, AIMessage) and m.tool_calls`
+- `libs/core/langchain_core/messages/utils.py:457:            if has_tool_calls or has_function_call:`
+- `libs/core/langchain_core/messages/utils.py:465:                if has_tool_calls:`
+- `libs/core/langchain_core/runnables/base.py:2645:    def as_tool(`
+- `libs/core/langchain_core/runnables/base.py:2655:        `as_tool` will instantiate a `BaseTool` with a name, description, and`
+- `libs/core/langchain_core/runnables/base.py:2692:            as_tool = runnable.as_tool()`
+- `libs/core/langchain_core/runnables/base.py:2693:            as_tool.invoke({"a": 3, "b": [1, 2]})`
+- `libs/core/langchain_core/runnables/base.py:2713:            as_tool = runnable.as_tool(FSchema)`
+- `libs/core/langchain_core/runnables/base.py:2714:            as_tool.invoke({"a": 3, "b": [1, 2]})`
+- `libs/core/langchain_core/runnables/base.py:2729:            as_tool = runnable.as_tool(arg_types={"a": int, "b": list[int]})`
+- `libs/core/langchain_core/runnables/base.py:2730:            as_tool.invoke({"a": 3, "b": [1, 2]})`
+- `libs/core/langchain_core/runnables/base.py:2748:            as_tool = runnable.as_tool()`
+- `libs/core/langchain_core/runnables/base.py:2749:            as_tool.invoke("b")`
+- `libs/core/langchain_core/tools/convert.py:412:                f"arg_types into `.as_tool` to specify. {e}"`
+- `libs/core/langchain_core/tracers/langchain.py:47:so nested callers (e.g. a subagent) can replace a value inherited from an`
+- `libs/core/langchain_core/tracers/langchain.py:478:        # so a nested caller (e.g. a subagent) can override a parent-set value.`
+- `libs/core/tests/unit_tests/language_models/test_compat_bridge.py:344:                        "args": '{"subagent_type": "haiku"',`
+- `libs/core/tests/unit_tests/language_models/test_compat_bridge.py:359:                        "args": '{"subagent_type": "limerick"',`
+- `libs/core/tests/unit_tests/language_models/test_compat_bridge.py:416:        "subagent_type": "haiku",`
+- `libs/core/tests/unit_tests/language_models/test_compat_bridge.py:421:        "subagent_type": "limerick",`
+- `libs/core/tests/unit_tests/runnables/test_tracing_interops.py:118:def test_config_traceable_handoff() -> None:`
+- `libs/core/tests/unit_tests/runnables/test_tracing_interops.py:202:async def test_config_traceable_async_handoff() -> None:`
+- `libs/core/tests/unit_tests/test_tools.py:1260:    as_tool = tool(foo3, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1261:    args_schema = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1283:    as_tool = tool(foo4, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1284:    args_schema = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1291:    as_tool = tool(foo5, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1292:    args_schema = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1318:    as_tool = tool(foo, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1319:    args_schema = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1335:    as_tool = tool(foo2, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1336:    args_schema2 = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1355:    as_tool = tool(foo3, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1356:    args_schema3 = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1369:    as_tool = tool(foo4, parse_docstring=True)`
+- `libs/core/tests/unit_tests/test_tools.py:1370:    args_schema4 = _schema(as_tool.args_schema)`
+- `libs/core/tests/unit_tests/test_tools.py:1573:    as_tool = runnable.as_tool()`
+- `libs/core/tests/unit_tests/test_tools.py:1574:    args_schema = as_tool.args_schema`
+- `libs/core/tests/unit_tests/test_tools.py:1585:    assert as_tool.description`
+- `libs/core/tests/unit_tests/test_tools.py:1586:    result = as_tool.invoke({"a": 3, "b": [1, 2]})`
+- `libs/core/tests/unit_tests/test_tools.py:1589:    as_tool = runnable.as_tool(name="my tool", description="test description")`
+- `libs/core/tests/unit_tests/test_tools.py:1590:    assert as_tool.name == "my tool"`
+- `libs/core/tests/unit_tests/test_tools.py:1591:    assert as_tool.description == "test description"`
+- `libs/core/tests/unit_tests/test_tools.py:1605:    as_tool2 = runnable2.as_tool(GSchema)`
+- `libs/core/tests/unit_tests/test_tools.py:1606:    as_tool2.invoke({"a": 3, "b": [1, 2]})`
+- `libs/core/tests/unit_tests/test_tools.py:1610:    as_tool3 = runnable3.as_tool(arg_types={"a": int, "b": list[int]})`
+- `libs/core/tests/unit_tests/test_tools.py:1611:    result = as_tool3.invoke({"a": 3, "b": [1, 2]})`
+- `libs/core/tests/unit_tests/test_tools.py:1621:    as_tool4 = runnable4.as_tool(arg_types={"a": int, "b": list[int]})`
+
+## langchain-ai/langgraph (13 relevant)
+
+- `README.md:31:> If you're looking to quickly build agents, check out **[Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview)** — a higher-level package built on LangGraph for agents that can plan, use subagents, and leverage file systems for complex tasks.`
+- `README.md:54:- [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview) – Build agents that can plan, use subagents, and leverage file systems for complex tasks.`
+- `docs/redirects.json:44:  "/how-tos/agent-handoffs": "https://docs.langchain.com/oss/python/langgraph/graph-api",`
+- `docs/redirects.json:100:  "/tutorials/multi_agent/hierarchical_agent_teams": "https://docs.langchain.com/oss/python/langchain/supervisor",`
+- `docs/redirects.json:227:  "/tutorials/multi_agent/agent_supervisor": "https://docs.langchain.com/oss/python/langgraph/workflows-agents",`
+- `docs/redirects.json:251:  "/reference/supervisor": "https://reference.langchain.com/python/langgraph/supervisor/",`
+- `docs/redirects.json:252:  "/reference/swarm": "https://reference.langchain.com/python/langgraph/swarm/",`
+- `libs/langgraph/pyproject.toml:128:ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque,langgraph,langchain,pydantic,typing,async,await,coroutine,iterable,iterables,serializable,deserializable,checkpointer,checkpointing,stateful,statefulness,prebuilt,prebuilt,supervisor,supervisory,s`
+- `libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py:621:        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls`
+- `libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py:631:            elif remaining_steps < 2 and has_tool_calls:`
+- `libs/prebuilt/langgraph/prebuilt/tool_node.py:981:        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)`
+- `libs/prebuilt/langgraph/prebuilt/tool_node.py:1128:        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)`
+- `libs/sdk-py/langgraph_sdk/_async/client.py:89:            subagent_result = await client.runs.wait(`
+
+## letta-ai/letta (61 relevant)
+
+- `.github/scripts/model-sweep/conftest.py:237:    The agent is named 'supervisor' and is configured with base tools and the roll_dice tool.`
+- `.github/scripts/model-sweep/conftest.py:243:        name="supervisor",`
+- `.github/scripts/model-sweep/conftest.py:248:        tags=["supervisor"],`
+- `.github/scripts/model-sweep/model_sweep.py:748:        tags=["supervisor"],`
+- `PRIVACY.md:143:You also have the right to make a complaint to a government supervisory authority.`
+- `README.md:17:Letta Code supports [skills](https://docs.letta.com/letta-code/skills) and [subagents](https://docs.letta.com/letta-code/subagents), and bundles pre-built skills/subagents for advanced memory and continual learning. Letta is fully model-agnostic, though we recommend Opus 4.5 and GPT-5.2`
+- `alembic/versions/9fa274fb0b83_backfill_hidden_for_subagent_role_tag.py:1:"""backfill hidden for role:subagent agents`
+- `alembic/versions/9fa274fb0b83_backfill_hidden_for_subagent_role_tag.py:28:          AND at.tag = 'role:subagent'`
+- `fern/openapi.json:20014:                        "supervisor",`
+- `fern/openapi.json:37240:                "supervisor": "#/components/schemas/SupervisorManager",`
+- `fern/openapi.json:37333:                "supervisor": "#/components/schemas/SupervisorManagerSchema",`
+- `fern/openapi.json:37442:                    "supervisor": "#/components/schemas/SupervisorManagerUpdate",`
+- `fern/openapi.json:39123:                "supervisor": "#/components/schemas/SupervisorManager",`
+- `fern/openapi.json:41423:          "supervisor",`
+- `fern/openapi.json:41427:          "swarm"`
+- `fern/openapi.json:47002:            "const": "supervisor",`
+- `fern/openapi.json:47005:            "default": "supervisor"`
+- `fern/openapi.json:47025:            "const": "supervisor",`
+- `fern/openapi.json:47028:            "default": "supervisor"`
+- `fern/openapi.json:47044:            "const": "supervisor",`
+- `fern/openapi.json:47047:            "default": "supervisor"`
+- `letta/constants.py:39:SUBAGENT_ROLE_TAG = "role:subagent"`
+- `letta/groups/helpers.py:54:        case ManagerType.supervisor:`
+- `letta/groups/helpers.py:55:            from letta.groups.supervisor_multi_agent import SupervisorMultiAgent`
+- `letta/groups/supervisor_multi_agent.py:44:#        # Prepare supervisor agent`
+- `letta/groups/supervisor_multi_agent.py:84:#            # Load supervisor agent`
+- `letta/groups/supervisor_multi_agent.py:85:#            supervisor_agent = Agent(`
+- `letta/groups/supervisor_multi_agent.py:91:#            # Perform supervisor step`
+- `letta/groups/supervisor_multi_agent.py:92:#            usage_stats = supervisor_agent.step(`
+- `letta/llm_api/baseten_client.py:74:                    has_tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)`
+- `letta/llm_api/baseten_client.py:75:                    if role == "assistant" and has_tool_calls:`
+- `letta/llm_api/fireworks_client.py:79:                    has_tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)`
+- `letta/llm_api/fireworks_client.py:80:                    if role == "assistant" and has_tool_calls:`
+- `letta/llm_api/zai_client.py:120:                    has_tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)`
+- `letta/llm_api/zai_client.py:121:                    if role == "assistant" and has_tool_calls:`
+- `letta/schemas/agent_file.py:222:    manager_type: Literal[ManagerType.supervisor] = Field(ManagerType.supervisor, description="")`
+- `letta/schemas/group.py:13:    supervisor = "supervisor"`
+- `letta/schemas/group.py:17:    swarm = "swarm"`
+- `letta/schemas/group.py:64:            case ManagerType.supervisor:`
+- `letta/schemas/group.py:96:    manager_type: Literal[ManagerType.supervisor] = Field(ManagerType.supervisor, description="")`
+- `letta/schemas/group.py:101:    manager_type: Literal[ManagerType.supervisor] = Field(ManagerType.supervisor, description="")`
+- `letta/schemas/group.py:158:#   manager_type: Literal[ManagerType.swarm] = Field(ManagerType.swarm, description="")`
+- `letta/services/agent_manager.py:445:        force_hidden_for_subagent = SUBAGENT_ROLE_TAG in tag_values`
+- `letta/services/agent_manager.py:529:                    hidden=True if force_hidden_for_subagent else agent_create.hidden,`
+- `letta/services/group_manager.py:91:                case ManagerType.supervisor:`
+- `letta/services/group_manager.py:92:                    new_group.manager_type = ManagerType.supervisor`
+- `letta/services/group_manager.py:148:                    case ManagerType.supervisor:`
+- `tests/integration_test_send_message.py:832:    has_tool_calls = any(isinstance(msg, ToolCallMessage) for msg in messages)`
+- `tests/integration_test_send_message.py:835:        model_handle, model_settings, tool_call=has_tool_calls, streaming=streaming, from_db=from_db`
+- `tests/integration_test_send_message.py:864:    if has_tool_calls:`
+
+## mastra-ai/mastra (72 relevant)
+
+- `.claude/commands/gh-bulk-issues.md:3:Orchestrate parallel `mc` (mastracode) headless instances to debug and fix multiple GitHub issues simultaneously. You act as the supervisor — spawning workers, monitoring progress, reviewing output, and creating PRs.`
+- `.claude/commands/gh-bulk-issues.md:90:- **Review all `mc` output before creating PRs** — subagent work is untrusted`
+- `.claude/skills/mastra-smoke-test/references/release-scope-discovery.md:85:| Mastra Code/TUI                    | `mastracode`, subagents, slash commands                                    | Separate Mastra Code smoke; default create-mastra does not cover it    |`
+- `.claude/skills/mastra-smoke-test/references/targeted-feature-smoke.md:25:- **Forked subagents changed:** create or use a Mastra Code/subagent scenario that proves parent thread/resource inheritance and prompt cache prefix behavior. Do not assume a normal agent run covers forked subagents.`
+- `.cursor/commands/gh-bulk-issues.md:3:Orchestrate parallel `mc` (mastracode) headless instances to debug and fix multiple GitHub issues simultaneously. You act as the supervisor — spawning workers, monitoring progress, reviewing output, and creating PRs.`
+- `.cursor/commands/gh-bulk-issues.md:90:- **Review all `mc` output before creating PRs** — subagent work is untrusted`
+- `.github/prompts/gh-bulk-issues.prompt.md:3:Orchestrate parallel `mc` (mastracode) headless instances to debug and fix multiple GitHub issues simultaneously. You act as the supervisor — spawning workers, monitoring progress, reviewing output, and creating PRs.`
+- `.github/prompts/gh-bulk-issues.prompt.md:90:- **Review all `mc` output before creating PRs** — subagent work is untrusted`
+- `.mastracode/commands/gh-bulk-issues.md:3:Orchestrate parallel `mc` (mastracode) headless instances to debug and fix multiple GitHub issues simultaneously. You act as the supervisor — spawning workers, monitoring progress, reviewing output, and creating PRs.`
+- `.mastracode/commands/gh-bulk-issues.md:90:- **Review all `mc` output before creating PRs** — subagent work is untrusted`
+- `.opencode/command/gh-bulk-issues.md:3:Orchestrate parallel `mc` (mastracode) headless instances to debug and fix multiple GitHub issues simultaneously. You act as the supervisor — spawning workers, monitoring progress, reviewing output, and creating PRs.`
+- `.opencode/command/gh-bulk-issues.md:90:- **Review all `mc` output before creating PRs** — subagent work is untrusted`
+- `client-sdks/ai-sdk/CHANGELOG.md:262:- Fixed toAISdkStream() crashing when resumed supervisor and subagent streams continue with nested tool results after a suspended tool call. ([#14675](https://github.com/mastra-ai/mastra/pull/14675))`
+- `client-sdks/ai-sdk/CHANGELOG.md:284:- Fixed toAISdkStream() crashing when resumed supervisor and subagent streams continue with nested tool results after a suspended tool call. ([#14675](https://github.com/mastra-ai/mastra/pull/14675))`
+- `client-sdks/ai-sdk/CHANGELOG.md:853:  - Agent networks now correctly stream text responses when the routing agent decides to handle a request itself instead of delegating to sub-agents, workflows, or tools`
+- `client-sdks/ai-sdk/CHANGELOG.md:1108:  - Agent networks now correctly stream text responses when the routing agent decides to handle a request itself instead of delegating to sub-agents, workflows, or tools`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:22:  it('handles resumed nested sub-agent streams that continue with tool-result chunks', async () => {`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:60:                input: '{"query":"supervisor test query"}',`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:92:      id: 'suspending-sub-agent',`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:100:    let supervisorCallCount = 0;`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:101:    const supervisorModel = new MockLanguageModelV2({`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:103:        supervisorCallCount++;`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:105:        if (supervisorCallCount === 1) {`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:114:                toolCallId: 'supervisor-call-1',`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:147:    const supervisorAgent = new Agent({`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:148:      id: 'suspension-supervisor',`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:150:      instructions: 'You orchestrate sub-agents.',`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:151:      model: supervisorModel,`
+- `client-sdks/ai-sdk/src/__tests__/resume-stream.test.ts:156:      agents: { suspensionSupervisor: supervisorAgent },`
+- `client-sdks/ai-sdk/src/__tests__/transformers.test.ts:1353:  it('should emit text fallback when sub-agent delegation has no text events', async () => {`
+- `client-sdks/ai-sdk/src/__tests__/transformers.test.ts:1354:    // The fallback should still work when a sub-agent was selected (not none/none)`
+- `client-sdks/ai-sdk/src/__tests__/transformers.test.ts:1418:    // Fallback SHOULD work for non-none routing (sub-agent delegation)`
+- `client-sdks/client-js/CHANGELOG.md:3039:  The clone serializes the agent's full resolved configuration — model, instructions, tools, workflows, sub-agents, memory, input/output processors, and scorers — using the caller's `requestContext` and persists it as a new stored agent.`
+- `client-sdks/client-js/CHANGELOG.md:3142:  The clone serializes the agent's full resolved configuration — model, instructions, tools, workflows, sub-agents, memory, input/output processors, and scorers — using the caller's `requestContext` and persists it as a new stored agent.`
+- `client-sdks/client-js/CHANGELOG.md:3261:  - **Dependency Resolution**: Automatically resolves and instantiates all agent dependencies (tools, workflows, sub-agents, etc.) from the Mastra registry`
+- `client-sdks/client-js/CHANGELOG.md:3353:  - **Dependency Resolution**: Automatically resolves and instantiates all agent dependencies (tools, workflows, sub-agents, etc.) from the Mastra registry`
+- `client-sdks/client-js/CHANGELOG.md:3466:  - Agent creation modal with comprehensive configuration options (model selection, instructions, tools, workflows, sub-agents, memory)`
+- `client-sdks/client-js/CHANGELOG.md:3633:  - Agent creation modal with comprehensive configuration options (model selection, instructions, tools, workflows, sub-agents, memory)`
+- `client-sdks/client-js/src/resources/stored-agent.test.ts:146:        agents: ['sub-agent-1'],`
+- `client-sdks/client-js/src/route-types.generated.ts:73888:  /** Version overrides for sub-agent delegation during experiment execution */`
+- `client-sdks/react/CHANGELOG.md:1076:- Fix restored subagent tool results so approval cards and nested tool state appear correctly in the dev server. ([#14348](https://github.com/mastra-ai/mastra/pull/14348))`
+- `client-sdks/react/CHANGELOG.md:1116:- Fix restored subagent tool results so approval cards and nested tool state appear correctly in the dev server. ([#14348](https://github.com/mastra-ai/mastra/pull/14348))`
+- `client-sdks/react/CHANGELOG.md:1532:- Added generic Harness class to @mastra/core for orchestrating agents with modes, state management, built-in tools (ask_user, submit_plan), subagent support, Observational Memory integration, model discovery, and permission-aware tool approval. The Harness provid`
+- `client-sdks/react/CHANGELOG.md:1536:- Migrated MastraCode from the prototype harness to the generic CoreHarness from @mastra/core. The createMastraCode function is now fully configurable with optional parameters for modes, subagents, storage, tools, and more. Removed the deprecated prototype harness`
+- `client-sdks/react/CHANGELOG.md:1552:- Added generic Harness class to @mastra/core for orchestrating agents with modes, state management, built-in tools (ask_user, submit_plan), subagent support, Observational Memory integration, model discovery, and permission-aware tool approval. The Harness provid`
+- `client-sdks/react/CHANGELOG.md:1556:- Migrated MastraCode from the prototype harness to the generic CoreHarness from @mastra/core. The createMastraCode function is now fully configurable with optional parameters for modes, subagents, storage, tools, and more. Removed the deprecated prototype harness`
+- `client-sdks/react/CHANGELOG.md:2023:  - Agent networks now correctly stream text responses when the routing agent decides to handle a request itself instead of delegating to sub-agents, workflows, or tools`
+- `client-sdks/react/CHANGELOG.md:2249:  - Agent networks now correctly stream text responses when the routing agent decides to handle a request itself instead of delegating to sub-agents, workflows, or tools`
+- `client-sdks/react/src/lib/ai-sdk/utils/toUIMessage.test.ts:2713:    it('should preserve streamed childMessages when agent tool-result adds backend subagent data', () => {`
+- `docs/src/content/en/docs/agents/a2a.mdx:160:## Use remote agents as subagents`
+
+## microsoft/autogen (75 relevant)
+
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:9:/// <param name="target">The name of the target agent receiving the handoff.</param>`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:10:/// <param name="description">The description of the handoff such as the condition under which it should happen and the target`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:12:/// <param name="name">The name of this handoff configuration. If not provided, it is generated from the target agent's name.</param>`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:27:    /// The name of the target agent receiving the handoff.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:32:    /// The description of the handoff such as the condition under which it should happen and the target.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:37:    /// The name of this handoff configuration.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Handoff.cs:47:    /// Handoff Tool to execute the handoff.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Messages.cs:442:/// A message requesting handoff of a conversation to another agent.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Messages.cs:447:    /// The name of the target agent to handoff to.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Abstractions/Messages.cs:452:    /// The handoff message to the target agent.`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Terminations/HandoffTermination.cs:17:    /// <param name="target">The target of the handoff message.</param>`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Terminations/HandoffTermination.cs:36:            if (item is HandoffMessage handoffMessage && handoffMessage.Target == this.Target)`
+- `dotnet/src/Microsoft.AutoGen/AgentChat/Terminations/HandoffTermination.cs:40:                string message = $"Handoff to {handoffMessage.Target} from {handoffMessage.Source} detected.";`
+- `dotnet/test/Microsoft.AutoGen.AgentChat.Tests/AgentChatSmokeTest.cs:69:                    case HandoffMessage handoffMessage:`
+- `dotnet/test/Microsoft.AutoGen.AgentChat.Tests/AgentChatSmokeTest.cs:70:                        content = $"Terminating; got handoff: {handoffMessage.Context}";`
+- `python/docs/src/conf.py:178:    "user-guide/agentchat-user-guide/tutorial/swarm.ipynb": "user-guide/agentchat-user-guide/swarm.ipynb",`
+- `python/docs/src/user-guide/agentchat-user-guide/index.md:58::link: ./swarm.html`
+- `python/docs/src/user-guide/agentchat-user-guide/index.md:146:swarm`
+- `python/docs/src/user-guide/agentchat-user-guide/serialize-components.ipynb:86:        "    handoffs=[\"flights_refunder\", \"user\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/serialize-components.ipynb:188:        "    handoffs=[\"flights_refunder\", \"user\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:12:                "[Swarm](https://github.com/openai/swarm).\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:21:                "at the [Handoff Pattern](../core-user-guide/design-patterns/handoffs.ipynb)\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:41:                "`handoffs` argument to specify which agents it can hand off to. You can\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:43:                "content and handoff behavior.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:48:                "   to signal which other agents it can hand off to. For {py:class}`~autogen_agentchat.agents.AssistantAgent`, this means setting the `handoffs` argument.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:55:                "capability of the model to generate handoffs. This means that the model must\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:56:                "support tool calling. If the model does parallel tool calling, multiple handoffs\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:66:                "1. A customer support team with human-in-the-loop handoff.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:88:                "Additionally, we let the user interact with the agents, when agents handoff to `\"user\"`.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:156:                "    handoffs=[\"flights_refunder\", \"user\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:159:                "    If you need information from the user, you must first send your message, then you can handoff to the user.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:166:                "    handoffs=[\"travel_agent\", \"user\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:171:                "    If you need information from the user, you must first send your message, then you can handoff to the user.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:172:                "    When the transaction is complete, handoff to the travel agent to finalize.\"\"\",\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:356:                "    handoffs=[\"financial_analyst\", \"news_analyst\", \"writer\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:362:                "    Always send your plan first, then handoff to appropriate agent.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:363:                "    Always handoff to a single agent at a time.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:370:                "    handoffs=[\"planner\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:375:                "    Always handoff back to planner when analysis is complete.\"\"\",\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:381:                "    handoffs=[\"planner\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:386:                "    Always handoff back to planner when analysis is complete.\"\"\",\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:392:                "    handoffs=[\"planner\"],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/swarm.ipynb:395:                "    Always handoff back to planner when writing is complete.\"\"\",\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:313:    "with a handoff setting, and run the team with a task that requires additional input from the user\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:318:    "to use the handoff feature.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:377:    "    handoffs=[Handoff(target=\"user\", message=\"Transfer to user.\")],\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:381:    "# Define a termination condition that checks for handoff messages.\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:382:    "handoff_termination = HandoffTermination(target=\"user\")\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:387:    "lazy_agent_team = RoundRobinGroupChat([lazy_agent], termination_condition=handoff_termination | text_termination)\n",`
+- `python/docs/src/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.ipynb:398:    "You can see the team stopped due to the handoff message was detected.\n",`
+
+## microsoft/semantic-kernel (79 relevant)
+
+- `docs/decisions/0071-multi-agent-orchestration.md:537:The handoff orchestration works in the following steps:`
+- `dotnet/samples/AgentFrameworkMigration/AgentOrchestrations/Step03_Handoff/Program.cs:28:// This sample compares running handoff orchestrations using`
+- `dotnet/samples/AgentFrameworkMigration/AgentOrchestrations/Step03_Handoff/Program.cs:75:    // Create orchestration with handoffs`
+- `dotnet/samples/AgentFrameworkMigration/AgentOrchestrations/Step03_Handoff/Program.cs:197:    // Create workflow with handoffs`
+- `dotnet/samples/AgentFrameworkMigration/AgentOrchestrations/Step03_Handoff/Program.cs:198:    var handoffAgentWorkflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(triageAgent)`
+- `dotnet/samples/AgentFrameworkMigration/AgentOrchestrations/Step03_Handoff/Program.cs:212:        await using var run = await InProcessExecution.RunStreamingAsync(handoffAgentWorkflow, messages);`
+- `dotnet/samples/AgentFrameworkMigration/README.md:361:|[AgentOrchestrations](./AgentOrchestrations/)|Agent orchestration patterns including concurrent, sequential, and handoff workflows|`
+- `dotnet/samples/Concepts/Resources/EnglishRoberta/encoder.json:21279:  "\u0120supervisor": 21277,`
+- `dotnet/samples/Concepts/Resources/EnglishRoberta/encoder.json:30079:  "\u0120swarm": 30077,`
+- `dotnet/samples/Concepts/Resources/EnglishRoberta/encoder.json:36522:  "\u0120supervisors": 36520,`
+- `dotnet/samples/GettingStartedWithAgents/README.md:84:[Step04_Handoff](./Orchestration/Step04_Handoff.cs)|How to use handoff orchestration.`
+- `dotnet/samples/GettingStartedWithAgents/README.md:85:[Step04b_HandoffWithStructuredInput](./Orchestration/Step04b_HandoffWithStructuredInput.cs)|How to use structured input (with handoff orchestration).`
+- `dotnet/src/Agents/Orchestration/AgentOrchestration.cs:130:        AgentType orchestrationType = await this.RegisterAsync(runtime, context, completion, handoff: null).ConfigureAwait(false);`
+- `dotnet/src/Agents/Orchestration/AgentOrchestration.cs:176:    /// <param name="handoff">The actor type used for handoff.  Only defined for nested orchestrations.</param>`
+- `dotnet/src/Agents/Orchestration/AgentOrchestration.cs:178:    private async ValueTask<AgentType> RegisterAsync(IAgentRuntime runtime, OrchestrationContext context, TaskCompletionSource<TOutput> completion, AgentType? handoff)`
+- `dotnet/src/Agents/Orchestration/Concurrent/ConcurrentActor.cs:15:    private readonly AgentType _handoffActor;`
+- `dotnet/src/Agents/Orchestration/Concurrent/ConcurrentActor.cs:29:        this._handoffActor = resultActor;`
+- `dotnet/src/Agents/Orchestration/Concurrent/ConcurrentActor.cs:41:        await this.PublishMessageAsync(response.AsResultMessage(), this._handoffActor, messageContext.CancellationToken).ConfigureAwait(false);`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:23:    private readonly HandoffLookup _handoffs;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:27:    private string? _handoffAgent;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:37:    /// <param name="handoffs">The handoffs available to this agent</param>`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:38:    /// <param name="resultHandoff">The handoff agent for capturing the result.</param>`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:40:    public HandoffActor(AgentId id, IAgentRuntime runtime, OrchestrationContext context, Agent agent, HandoffLookup handoffs, AgentType resultHandoff, ILogger<HandoffActor>? logger = null)`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:43:        if (handoffs.ContainsKey(agent.Name ?? agent.Id))`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:45:            throw new ArgumentException($"The agent {agent.Name ?? agent.Id} cannot have a handoff to itself.", nameof(handoffs));`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:49:        this._handoffs = handoffs;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:125:            // which will terminate the conversation when a function from the handoff plugin is called.`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:132:            if (this._handoffAgent != null)`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:134:                AgentType handoffType = this._handoffs[this._handoffAgent].AgentType;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:135:                await this.PublishMessageAsync(new HandoffMessages.Request(), handoffType, messageContext.CancellationToken).ConfigureAwait(false);`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:137:                this._handoffAgent = null;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:149:            await this.EndAsync(response.Content ?? "No handoff or human response function requested. Ending task.", messageContext.CancellationToken).ConfigureAwait(false);`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:164:            foreach (KeyValuePair<string, (AgentType _, string Description)> handoff in this._handoffs)`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:168:                        (CancellationToken cancellationToken) => this.HandoffAsync(handoff.Key, cancellationToken),`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:169:                        functionName: $"transfer_to_{handoff.Key}",`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:170:                        description: handoff.Value.Description);`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffActor.cs:180:        this._handoffAgent = agentName;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffInvocationFilter.cs:17:        // Signal termination if the function is part of the handoff plugin`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffMessages.cs:40:    /// Signals the handoff to another agent.`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.String.cs:14:    /// <param name="handoffs">Defines the handoff connections for each agent.</param>`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.String.cs:16:    public HandoffOrchestration(OrchestrationHandoffs handoffs, params Agent[] members)`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.String.cs:17:        : base(handoffs, members)`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:19:    private readonly OrchestrationHandoffs _handoffs;`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:24:    /// <param name="handoffs">Defines the handoff connections for each agent.</param>`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:26:    public HandoffOrchestration(OrchestrationHandoffs handoffs, params Agent[] agents)`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:32:            handoffs.FirstAgentName`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:34:        // Extract names from handoffs that don't align with a member agent.`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:35:        string[] badNames = [.. handoffs.Keys.Concat(handoffs.Values.SelectMany(h => h.Keys)).Where(name => !agentNames.Contains(name))];`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:39:            throw new ArgumentException($"The following agents are not defined in the orchestration: {string.Join(", ", badNames)}", nameof(handoffs));`
+- `dotnet/src/Agents/Orchestration/Handoff/HandoffOrchestration.cs:42:        this._handoffs = handoffs;`
+
+## openai/codex (80 relevant)
+
+- `.codex/skills/babysit-pr/SKILL.md:13:- Optional handoff milestone: the PR is currently green + mergeable + review-clean. Treat this as a progress state, not a watcher stop, so late-arriving review comments are still surfaced promptly while the PR remains open.`
+- `.codex/skills/code-review/SKILL.md:6:Use subagents to review code using all code-review-* skills in this repository other than this orchestrator. One subagent per skill. Pass full skill path to subagents. Use xhigh reasoning.`
+- `.codex/skills/code-review/SKILL.md:8:You must return every single issue from every subagent. You can return an unlimited number of findings.`
+- `.github/workflows/issue-labeler.yml:67:            20. subagent - Issues involving subagents, sub-agents, or multi-agent behavior, including spawn_agent, wait_agent, close_agent, worker/explorer roles, delegation, agent teams, lifecycle, model/config inheritance, quotas, and orchestration.`
+- `.github/workflows/issue-labeler.yml:79:            32. agent - Fallback only for core agent loop or agent-related issues that do not fit app-server, connectivity, subagent, session, config, plan, computer-use, browser, memory, imagen, remote, performance, automations, or pets.`
+- `.github/workflows/rust-release.yml:9:# sign the unsigned macOS artifacts in a secure enclave, upload the signed handoff`
+- `.github/workflows/rust-release.yml:12:# The signed handoff archive should contain target or artifact directories such`
+- `.github/workflows/rust-release.yml:23:        description: "build_unsigned creates unsigned macOS handoff artifacts; promote_signed finishes a release from signed macOS handoff artifacts."`
+- `.github/workflows/rust-release.yml:40:        description: "For promote_signed: exact GitHub Release asset name containing signed macOS handoff artifacts."`
+- `.github/workflows/rust-release.yml:630:    name: Stage signed macOS handoff - ${{ matrix.target }} - ${{ matrix.bundle }}`
+- `.github/workflows/rust-release.yml:669:      - name: Download signed macOS handoff`
+- `.github/workflows/rust-release.yml:679:          handoff_dir="${RUNNER_TEMP}/signed-macos-handoff"`
+- `.github/workflows/rust-release.yml:680:          rm -rf "$download_dir" "$handoff_dir"`
+- `.github/workflows/rust-release.yml:681:          mkdir -p "$download_dir" "$handoff_dir"`
+- `.github/workflows/rust-release.yml:690:            echo "Expected exactly one signed macOS handoff asset named ${SIGNED_MACOS_ASSET}; found ${asset_count}"`
+- `.github/workflows/rust-release.yml:710:              zstd -dc "$asset_path" | tar -C "$handoff_dir" -xf -`
+- `.github/workflows/rust-release.yml:713:              tar -C "$handoff_dir" -xzf "$asset_path"`
+- `.github/workflows/rust-release.yml:716:              ditto -x -k "$asset_path" "$handoff_dir"`
+- `.github/workflows/rust-release.yml:719:              echo "Unsupported signed macOS handoff archive format: ${asset_name}"`
+- `.github/workflows/rust-release.yml:724:          echo "SIGNED_MACOS_HANDOFF_DIR=$handoff_dir" >> "$GITHUB_ENV"`
+- `.github/workflows/rust-release.yml:744:            echo "Signed macOS handoff is missing ${artifact_name}/"`
+- `.github/workflows/rust-release.yml:763:              echo "Signed macOS handoff is missing ${binary} for ${artifact_name}"`
+- `.github/workflows/rust-release.yml:775:          # handoff can opt back in by flipping matrix.build_dmg if needed.`
+- `.github/workflows/rust-release.yml:780:              echo "Signed macOS handoff is missing ${dmg_name} for ${artifact_name}"`
+- `.github/workflows/rust-release.yml:1195:      - name: Clean up signed promotion handoff assets`
+- `codex-rs/agent-graph-store/src/lib.rs:1://! Storage-neutral parent/child topology for thread-spawned agents.`
+- `codex-rs/agent-graph-store/src/types.rs:8:    /// The child thread is still live or resumable as an open spawned agent.`
+- `codex-rs/analytics/src/analytics_client_tests.rs:39:use crate::events::subagent_thread_started_event_request;`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1218:            /*subagent_source*/ None,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1246:                "subagent_source": null,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1318:            subagent_source: None,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1349:                "subagent_source": null,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1380:                subagent_source: None,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1429:                "subagent_source": null,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1479:            subagent_source: Some("thread_spawn".to_string()),`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1516:                "thread_source": "subagent",`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1517:                "subagent_source": "thread_spawn",`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1793:    assert_eq!(payload[0]["event_params"]["thread_source"], "subagent");`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1795:        payload[0]["event_params"]["subagent_source"],`
+- `codex-rs/analytics/src/analytics_client_tests.rs:1905:        "delegated_subagent"`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2388:fn subagent_thread_started_review_serializes_expected_shape() {`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2389:    let event = TrackEventRequest::ThreadInitialized(subagent_thread_started_event_request(`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2398:            subagent_source: SubAgentSource::Review,`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2403:    let payload = serde_json::to_value(&event).expect("serialize review subagent event");`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2404:    assert_eq!(payload["event_params"]["thread_source"], "subagent");`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2423:    assert_eq!(payload["event_params"]["subagent_source"], "review");`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2428:fn subagent_thread_started_thread_spawn_serializes_parent_thread_id() {`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2432:    let event = TrackEventRequest::ThreadInitialized(subagent_thread_started_event_request(`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2441:            subagent_source: SubAgentSource::ThreadSpawn {`
+- `codex-rs/analytics/src/analytics_client_tests.rs:2452:    let payload = serde_json::to_value(&event).expect("serialize thread spawn subagent event");`
+
+## openai/swarm (73 relevant)
+
+- `README.md:15:pip install git+ssh://git@github.com/openai/swarm.git`
+- `README.md:21:pip install git+https://github.com/openai/swarm.git`
+- `README.md:27:from swarm import Swarm, Agent`
+- `README.md:65:  - [Running Swarm](#running-swarm)`
+- `README.md:76:It accomplishes this through two primitive abstractions: `Agent`s and **handoffs**. An `Agent` encompasses `instructions` and `tools`, and can at any point choose to hand off a conversation to another `Agent`.`
+- `README.md:93:- [`basic`](examples/basic): Simple examples of fundamentals like setup, function calling, handoffs, and context variables`
+- `README.md:102:![Swarm Diagram](assets/swarm_diagram.png)`
+- `README.md:109:from swarm import Swarm`
+- `README.md:139:Once `client.run()` is finished (after potentially multiple calls to agents and tools) it will return a `Response` containing all the relevant updated state. Specifically, the new `messages`, the last `Agent` to be called, and the most up-to-date `context_variables`. You can pass these`
+- `README.md:167:`Agent` `instructions` are directly converted into the `system` prompt of a conversation (as the first message). Only the `instructions` of the active `Agent` will be present at any given time (e.g. if there is an `Agent` handoff, the `system` prompt will change, but the chat history w`
+- `README.md:279:> If an `Agent` calls multiple functions to hand-off to an `Agent`, only the last handoff function will be used.`
+- `README.md:329:Uses the same events as [Chat Completions API streaming](https://platform.openai.com/docs/api-reference/streaming). See `process_and_print_streaming_response` in `/swarm/repl/repl.py` as an example.`
+- `README.md:338:Evaluations are crucial to any project, and we encourage developers to bring their own eval suites to test the performance of their swarms. For reference, we have some examples for how to eval swarm in the `airline`, `weather_agent` and `triage_agent` quickstart examples. See the READM`
+- `README.md:342:Use the `run_demo_loop` to test out your swarm! This will run a REPL on your command line. Supports streaming.`
+- `README.md:345:from swarm.repl import run_demo_loop`
+- `examples/airline/configs/agents.py:6:from swarm import Agent`
+- `examples/airline/data/routines/baggage/policies.py:13:Note: If the user demands to talk to a supervisor, or a human agent, call the escalate_to_agent function.`
+- `examples/airline/data/routines/flight_modification/policies.py:12:Note: If the user demands to talk to a supervisor, or a human agent, call the escalate_to_agent function.`
+- `examples/airline/data/routines/prompts.py:11:Note: If the user demands to talk to a supervisor, or a human agent, call the escalate_to_agent function.`
+- `examples/airline/evals/eval_utils.py:5:from swarm import Swarm`
+- `examples/airline/main.py:2:from swarm.repl import run_demo_loop`
+- `examples/basic/README.md:7:1. **agent_handoff.py**`
+- `examples/basic/agent_handoff.py:1:from swarm import Swarm, Agent`
+- `examples/basic/bare_minimum.py:1:from swarm import Swarm, Agent`
+- `examples/basic/context_variables.py:1:from swarm import Swarm, Agent`
+- `examples/basic/function_calling.py:1:from swarm import Swarm, Agent`
+- `examples/basic/simple_loop_no_helpers.py:1:from swarm import Swarm, Agent`
+- `examples/customer_service_streaming/configs/general.py:15:tasks_path = 'configs/swarm_tasks.json'`
+- `examples/customer_service_streaming/main.py:3:from src.swarm.swarm import Swarm`
+- `examples/customer_service_streaming/main.py:18:    swarm = Swarm(`
+- `examples/customer_service_streaming/main.py:27:        swarm = Swarm(engine_name='local')`
+- `examples/customer_service_streaming/main.py:28:        swarm.deploy(test_mode=True, test_file_paths=test_file_paths)`
+- `examples/customer_service_streaming/main.py:56:            swarm.add_task(new_task)`
+- `examples/customer_service_streaming/main.py:59:            swarm.deploy()`
+- `examples/customer_service_streaming/main.py:60:            swarm.tasks.clear()`
+- `examples/customer_service_streaming/main.py:65:        swarm.load_tasks()`
+- `examples/customer_service_streaming/main.py:66:        swarm.deploy()`
+- `examples/customer_service_streaming/src/swarm/engines/assistants_engine.py:7:from src.swarm.assistants import Assistant`
+- `examples/customer_service_streaming/src/swarm/engines/assistants_engine.py:305:        #Initialize swarm first`
+- `examples/customer_service_streaming/src/swarm/engines/assistants_engine.py:308:            print("\nTesting the swarm\n\n")`
+- `examples/customer_service_streaming/src/swarm/engines/assistants_engine.py:311:            print("\n🐝🐝🐝 Deploying the swarm 🐝🐝🐝\n\n")`
+- `examples/customer_service_streaming/src/swarm/engines/assistants_engine.py:340:            print("Completed testing the swarm\n\n")`
+- `examples/customer_service_streaming/src/swarm/engines/local_engine.py:7:from src.swarm.assistants import Assistant`
+- `examples/customer_service_streaming/src/swarm/engines/local_engine.py:8:from src.swarm.tool import Tool`
+- `examples/customer_service_streaming/src/swarm/engines/local_engine.py:351:        print("Completed testing the swarm\n\n")`
+- `examples/customer_service_streaming/src/swarm/engines/local_engine.py:359:            print("\nTesting the swarm\n\n")`
+- `examples/customer_service_streaming/src/swarm/engines/local_engine.py:367:            print("\n🐝🐝🐝 Deploying the swarm 🐝🐝🐝\n\n")`
+- `examples/customer_service_streaming/src/swarm/swarm.py:4:from src.swarm.engines.assistants_engine import AssistantsEngine`
+- `examples/customer_service_streaming/src/swarm/swarm.py:5:from src.swarm.engines.local_engine import LocalEngine`
+- `examples/customer_service_streaming/src/swarm/swarm.py:8:# This class represents the main control unit for deploying and managing tasks within the swarm system.`
+
+## pydantic/pydantic-ai (48 relevant)
+
+- `docs/capabilities.md:25:| [`ImageGeneration`][pydantic_ai.capabilities.ImageGeneration] | Image generation — native when supported, subagent fallback via `fallback_model` | Yes |`
+- `docs/capabilities.md:138:        # Native when supported; falls back to a subagent running an`
+- `docs/capabilities.md:363:[`ReinjectSystemPrompt`][pydantic_ai.capabilities.ReinjectSystemPrompt] ensures the agent's configured [`system_prompt`](agent.md#system-prompts) is at the head of the first [`ModelRequest`][pydantic_ai.messages.ModelRequest] on every model request. By default, if any [`Syst`
+- `docs/capabilities.md:1224:Capabilities for spawning and delegating to specialized subagents help agents tackle complex, parallelizable work:`
+- `docs/capabilities.md:1226:* [`subagents-pydantic-ai`](https://github.com/vstorm-co/subagents-pydantic-ai) - `SubAgentCapability` adds tools for multi-agent delegation: `task` (spawn a subagent), `check_task`, `wait_tasks`, `list_active_tasks`, `soft_cancel_task`, `hard_cancel_task`, and `answer_suba`
+- `docs/evals/evaluators/span-based.md:325:    # Agent delegated to sub-agent`
+- `docs/multi-agent-applications.md:183:```python {title="programmatic_handoff.py"}`
+- `docs/multi-agent-applications.md:332:- **Task delegation** — spawning specialized sub-agents for specific tasks, with isolated context to prevent recursive delegation issues. See [Agent Delegation](#agent-delegation) above.`
+- `docs/toolsets.md:535:```python {title="include_return_schemas_toolset.py"}`
+- `examples/pydantic_ai_examples/medical_agent_delegation.py:16:- Master agent coordinating specialized sub-agents`
+- `pydantic_ai_slim/pydantic_ai/_agent_graph.py:511:    has_tool_search_corpus = any(t.with_native == ToolSearchTool.kind for t in function_tools)`
+- `pydantic_ai_slim/pydantic_ai/_agent_graph.py:512:    if not has_tool_search_corpus:`
+- `pydantic_ai_slim/pydantic_ai/capabilities/image_generation.py:26:    delegates to a subagent running the specified image-capable model.`
+- `pydantic_ai_slim/pydantic_ai/capabilities/image_generation.py:30:    both the native and the local fallback subagent. When passing a custom `native``
+- `pydantic_ai_slim/pydantic_ai/capabilities/image_generation.py:31:    instance, its settings are also used for the fallback subagent; capability-level`
+- `pydantic_ai_slim/pydantic_ai/capabilities/image_generation.py:139:                'use `fallback_model` for the default subagent fallback, or `local` for a custom tool'`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:36:# required by the subagent fallback, mapped to suggested LLM alternatives.`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:62:    """Local image generation tool that delegates to a subagent.`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:64:    Uses a subagent with the specified model and builtin tool configuration`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:73:    """The image generation tool configuration to pass to the subagent."""`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:76:    """Instructions for the subagent that generates the image."""`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:79:        """Generate an image using a subagent.`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:131:    """Creates an image generation tool backed by a subagent.`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:136:        native_tool: The image generation tool configuration to pass to the subagent.`
+- `pydantic_ai_slim/pydantic_ai/common_tools/image_generation.py:137:        instructions: Instructions for the subagent that generates the image.`
+- `pydantic_ai_slim/pydantic_ai/models/google.py:1250:    _has_tool_invocations: bool = field(default=False, init=False)`
+- `pydantic_ai_slim/pydantic_ai/models/google.py:1337:                # `_has_tool_invocations` reflects parts seen in *prior* chunks because we can't peek`
+- `pydantic_ai_slim/pydantic_ai/models/google.py:1344:                if not self._has_tool_invocations:`
+- `pydantic_ai_slim/pydantic_ai/models/google.py:1359:                if not self._has_tool_invocations:`
+- `pydantic_ai_slim/pydantic_ai/models/google.py:1360:                    self._has_tool_invocations = _has_native_tool_invocations(parts)`
+- `pydantic_ai_slim/pydantic_ai/models/google.py:1442:                if not self._has_tool_invocations:`
+- `pydantic_ai_slim/pydantic_ai/models/openai.py:2314:        client_tool_search = _has_tool_search(model_request_parameters)`
+- `pydantic_ai_slim/pydantic_ai/models/openai.py:2587:        client_tool_search_active = _has_tool_search(model_request_parameters)`
+- `pydantic_ai_slim/pydantic_ai/models/openai.py:4171:def _has_tool_search(model_request_parameters: ModelRequestParameters) -> bool:`
+- `pydantic_ai_slim/pydantic_ai/ui/vercel_ai/_adapter.py:374:                            has_tool_output = isinstance(`
+- `pydantic_ai_slim/pydantic_ai/ui/vercel_ai/_adapter.py:378:                            if has_tool_output:`
+- `pydantic_ai_slim/pydantic_ai/ui/vercel_ai/_adapter.py:392:                            if has_tool_output:`
+- `tests/test_agent.py:2043:def test_output_type_handoff_to_agent():`
+- `tests/test_agent.py:2059:    handoff_result = None`
+- `tests/test_agent.py:2061:    async def handoff(city: str) -> Weather:`
+- `tests/test_agent.py:2063:        nonlocal handoff_result`
+- `tests/test_agent.py:2064:        handoff_result = result`
+- `tests/test_agent.py:2067:    def call_handoff_tool(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:`
+- `tests/test_agent.py:2073:    supervisor_agent = Agent(FunctionModel(call_handoff_tool), output_type=handoff)`
+- `tests/test_agent.py:2075:    result = supervisor_agent.run_sync('Mexico City')`
+- `tests/test_agent.py:2099:                model_name='function:call_handoff_tool:',`
+- `tests/test_agent.py:2119:    assert handoff_result is not None`
+- `tests/test_agent.py:2120:    assert handoff_result.all_messages() == snapshot(`
+
+## run-llama/llama_index (72 relevant)
+
+- `CHANGELOG.md:6342:- better enforce agent handoffs in AgentWorkflow (#18399)`
+- `CHANGELOG.md:7180:- Fix agentworkflow handoffs for non-openai llms (#17631)`
+- `docs/examples/agent/agent_workflow_multi.ipynb:148:    "    can_handoff_to=[\"WriteAgent\"],\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:161:    "    can_handoff_to=[\"ReviewAgent\", \"ResearchAgent\"],\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:174:    "    can_handoff_to=[\"WriteAgent\"],\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:239:      "🛠️  Planning to use tools: ['handoff']\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:240:      "🔨 Calling Tool: handoff\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:242:      "🔧 Tool Result (handoff):\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:256:      "🛠️  Planning to use tools: ['handoff']\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:257:      "🔨 Calling Tool: handoff\n",`
+- `docs/examples/agent/agent_workflow_multi.ipynb:259:      "🔧 Tool Result (handoff):\n",`
+- `docs/examples/agent/agents_as_tools.ipynb:93:    "With our tool defined, we can now create our sub-agents.\n",`
+- `docs/examples/agent/agents_as_tools.ipynb:139:    "With our sub-agents defined, we can then convert them into tools that can be used by the top-level agent."`
+- `docs/examples/agent/agents_as_tools.ipynb:213:    "With our sub-agents defined as tools, we can now create our top-level orchestrator agent."`
+- `docs/examples/agent/custom_multi_agent.ipynb:94:    "With our tool defined, we can now create our sub-agents.\n",`
+- `docs/examples/observability/Maxim-Instrumentation.ipynb:413:    "    # - Agent handoffs and communication\n",`
+- `docs/examples/tools/Use_Klavis_with_LlamaIndex.ipynb:313:    "    can_handoff_to=[\"gmail_agent\"],\n",`
+- `docs/src/content/docs/framework/CHANGELOG.md:5819:- better enforce agent handoffs in AgentWorkflow (#18399)`
+- `docs/src/content/docs/framework/CHANGELOG.md:6657:- Fix agentworkflow handoffs for non-openai llms (#17631)`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:9:1. **AgentWorkflow (built-in)** – declare a set of agents and let `AgentWorkflow` manage the hand-offs. [Section](#pattern-1--agentworkflow-ie-linear-swarm-pattern) [Full Notebook](/python/examples/agent/agent_workflow_multi)`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:10:2. **Orchestrator pattern (built-in)** – an "orchestrator" agent chooses which sub-agent to call next; those sub-agents are exposed to it as **tools**. [Section](#pattern-2--orchestrator-agent-sub-agents-as-tools) [Full Notebook](`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:15:<div id="pattern-1--agentworkflow-ie-linear-swarm-pattern"></div>`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:17:## Pattern 1 – AgentWorkflow (i.e. linear "swarm" pattern)`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:25:3. Allow the agent to "handoff" control to another agent when it decides.`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:42:    can_handoff_to=["WriteAgent"],`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:51:    can_handoff_to=["ReviewAgent", "ResearchAgent"],`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:60:    can_handoff_to=["WriteAgent"],`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:84:<div id="pattern-2--orchestrator-agent-sub-agents-as-tools"></div>`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:86:## Pattern 2 – Orchestrator agent (sub-agents as tools)`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:88:**When to use** – you want a single place that decides _every_ step so you can inject custom logic, but you still prefer the declarative _agent as tool_ experience over writing your own planner.`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:92:You can see the full example in the [agents_as_tools notebook](/python/examples/agent/agents_as_tools).`
+- `docs/src/content/docs/framework/understanding/agent/multi_agent.md:409:| Custom planner     | ⭐⭐⭐        | ★★★★★       | Yes (via sub-agents). Top-level is up to you. |`
+- `docs/src/content/docs/framework/understanding/agent/structured_output.md:76:    can_handoff_to=["WeatherAgent"],`
+- `llama-index-core/llama_index/core/agent/workflow/base_agent.py:108:    can_handoff_to: Optional[List[str]] = Field(`
+- `llama-index-core/llama_index/core/agent/workflow/base_agent.py:150:        can_handoff_to: Optional[List[str]] = None,`
+- `llama-index-core/llama_index/core/agent/workflow/base_agent.py:182:            can_handoff_to=can_handoff_to,`
+- `llama-index-core/llama_index/core/agent/workflow/base_agent.py:226:            if tool.metadata.name == "handoff":`
+- `llama-index-core/llama_index/core/agent/workflow/base_agent.py:228:                    "'handoff' is a reserved tool name. Please use a different name."`
+- `llama-index-core/llama_index/core/agent/workflow/base_agent.py:717:            if return_direct_tool.tool_name != "handoff":`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:91:        can_handoff_to: Optional[List[str]] = None,`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:118:            can_handoff_to=can_handoff_to,`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:130:                tool.metadata.name == "handoff"`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:202:        if any(tool.metadata.name == "handoff" for tool in tools):`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:204:                raise ValueError("llm must be a function calling LLM to use handoff")`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:206:            tools = [tool for tool in tools if tool.metadata.name == "handoff"]`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:219:        if any(tool.metadata.name == "handoff" for tool in tools):`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:221:                raise ValueError("llm must be a function calling LLM to use handoff")`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:223:            tools = [tool for tool in tools if tool.metadata.name == "handoff"]`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:360:        # handle code execution and handoff`
+- `llama-index-core/llama_index/core/agent/workflow/codeact_agent.py:371:            elif tool_call_result.tool_name == "handoff":`
+

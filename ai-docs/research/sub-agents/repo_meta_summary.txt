@@ -1,0 +1,32 @@
+ 184372 Significant-Gravitas/AutoGPT             Python       2026-05-17 AutoGPT is the vision of accessible AI for everyone, to use and to build on. Our mission is to provide the tools, so that you can focus on what matters.
+ 161503 anomalyco/opencode                       TypeScript   2026-05-17 The open source coding agent.
+ 136931 langchain-ai/langchain                   Python       2026-05-17 The agent engineering platform.
+ 104161 google-gemini/gemini-cli                 TypeScript   2026-05-16 An open-source AI agent that brings the power of Gemini directly into your terminal.
+  83231 openai/codex                             Rust         2026-05-17 Lightweight coding agent that runs in your terminal
+  73845 OpenHands/OpenHands                      Python       2026-05-17 🙌 OpenHands: AI-Driven Development
+  73845 OpenHands/OpenHands                      Python       2026-05-17 🙌 OpenHands: AI-Driven Development
+  68055 FoundationAgents/MetaGPT                 Python       2026-01-21 🌟 The Multi-Agent Framework: First AI Software Company, Towards Natural Language Programming
+  58103 microsoft/autogen                        Python       2026-04-15 A programming framework for agentic AI
+  51567 crewAIInc/crewAI                         Python       2026-05-16 Framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.
+  49465 run-llama/llama_index                    Python       2026-05-15 LlamaIndex is the leading document agent and OCR platform
+  45363 aaif-goose/goose                         Rust         2026-05-16 an open source, extensible AI agent that goes beyond code suggestions - install, execute, edit, and test with any LLM
+  44918 Aider-AI/aider                           Python       2026-05-16 aider is AI pair programming in your terminal
+  40157 agno-agi/agno                            Python       2026-05-16 Build, run, and manage agent platforms.
+  32231 langchain-ai/langgraph                   Python       2026-05-17 Build resilient agents.
+  27920 microsoft/semantic-kernel                C#           2026-05-14 Integrate cutting-edge LLM technology quickly and easily into your apps
+  24436 QwenLM/qwen-code                         TypeScript   2026-05-17 An open-source AI agent that lives in your terminal.
+  23953 mastra-ai/mastra                         TypeScript   2026-05-17 From the team behind Gatsby, Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+  22879 langchain-ai/deepagents                  Python       2026-05-17 The batteries-included agent harness.
+  22762 letta-ai/letta                           Python       2026-05-14 Letta is the platform for building stateful agents: AI with advanced memory that can learn and self-improve over time.
+  21493 openai/swarm                             Python       2026-04-15 Educational framework exploring ergonomic, lightweight multi-agent orchestration. Managed by OpenAI Solution team.
+  17526 TransformerOptimus/SuperAGI              Python       2025-01-22 <⚡️> SuperAGI - A dev-first open source autonomous AI agent framework. Enabling developers to build, manage & run useful autonomous agents quickly and reliably.
+  17108 pydantic/pydantic-ai                     Python       2026-05-17 AI Agent Framework, the Pydantic way
+  16976 camel-ai/camel                           Python       2026-05-15 🐫 CAMEL: The first and the best multi-agent framework. Finding the Scaling Law of Agents. https://www.camel-ai.org
+  12629 HKUDS/OpenHarness                        Python       2026-05-17 "OpenHarness: Open Agent Harness with a Built-in Personal Agent--Ohmo!"
+  10495 microsoft/agent-framework                Python       2026-05-15 A framework for building, orchestrating and deploying AI agents and multi-agent workflows with support for Python and .NET.
+   8979 VoltAgent/voltagent                      TypeScript   2026-05-11 AI Agent Engineering Platform built on an Open Source TypeScript AI Agent Framework
+   4391 SWE-agent/mini-swe-agent                 Python       2026-05-07 The 100 line AI agent that solves GitHub issues or helps you in your command line. Radically simple, no huge configs, no giant monorepo—but scores >74% on SWE-bench verified!
+     85 nauvalazhar/build-your-own-ai-coding-agent TypeScript   2026-04-05 Learn how AI coding agents work by building one from scratch.
+     39 vstorm-co/subagents-pydantic-ai          Python       2026-05-17 Subagent Delegation framework for Pydantic AI, enabling nested subagents that can spawn their own specialists on-the-fly, with smart sync/async/auto mode selection, runtime agent creation, and clean multi-agent architecture. Adds specialization, parallel execution, and task cancellation.
+
+Missing/errors:
