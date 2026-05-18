@@ -131,6 +131,7 @@ function wrapHttpClient(http: AcpHttpClient) {
 				configId: String(p.configId ?? ""),
 				value: String(p.value ?? ""),
 			}),
-		extMethod: (m: string, p: Record<string, unknown>) => http.extMethod(m, p),
+		extMethod: (m: string, p: Record<string, unknown>) =>
+			m === "_bodhi-pi/subagent/run" ? http.extMethodStreaming(m, p) : http.extMethod(m, p),
 	};
 }

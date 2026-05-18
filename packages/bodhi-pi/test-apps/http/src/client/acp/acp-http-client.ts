@@ -255,6 +255,10 @@ export class AcpHttpClient {
 		return this.call<T>(method, params);
 	}
 
+	extMethodStreaming<T = unknown>(method: string, params: Record<string, unknown>): Promise<T> {
+		return this.sseCall<T>(method, params);
+	}
+
 	private notificationHandlers = new Set<SessionNotificationHandler>();
 	private lifecycleHandlers = new Set<LifecycleEventHandler>();
 

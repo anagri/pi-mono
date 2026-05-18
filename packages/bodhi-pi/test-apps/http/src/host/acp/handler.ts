@@ -82,7 +82,7 @@ function rpcSuccess(id: number | string | null, result: unknown): JsonRpcSuccess
 	return { jsonrpc: "2.0", id, result };
 }
 
-const SSE_METHODS = new Set(["session/prompt", "session/load"]);
+const SSE_METHODS = new Set(["session/prompt", "session/load", "_bodhi-pi/subagent/run"]);
 
 export function createAcpHandler(opts: AcpHandlerOptions) {
 	const inflight = createInflightRegistry();
@@ -270,6 +270,15 @@ async function handleSseMethod(
 				throw new Error("session/load: not supported");
 			}
 			const result = await agent.loadSession(params as never);
+			writeSseEvent(res, { jsonrpc: "2.0", id, result });
+		} else if (method === "_bodhi-pi/subagent/run") {
+			if (!agent.extMethod) {
+				throw new Error("_bodhi-pi/subagent/run: extMethod not supported");
+			}
+			if (sessionId && agent.resumeSession) {
+				await agent.resumeSession({ sessionId, cwd: wired.cwd } as never);
+			}
+			const result = await agent.extMethod(method, params);
 			writeSseEvent(res, { jsonrpc: "2.0", id, result });
 		} else {
 			throw new Error(`SSE method not implemented: ${method}`);

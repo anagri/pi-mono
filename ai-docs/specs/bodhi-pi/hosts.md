@@ -59,6 +59,7 @@ The deployment-portability lens — proves the agent works under per-turn rebuil
   - HTTP+SSE: `AgentSideConnection` instantiated per request in `host/acp/handler.ts`, paired with `createHttpAcpConn()` (`host/acp/http-acp-conn.ts`). Notifications forwarded via `extNotification` to SSE writer.
   - WebSocket sibling: `host/auth/upgrade.ts` + `host/agent/wire-agent-ws.ts` provide a persistent path that doesn't re-build per turn — same `bodhi-pi` agent, different lifetime profile.
   - Client side: `client/acp/acp-http-client.ts` + `client/acp/sse-parser.ts` + `client/acp/ws/transport.ts`.
+  - **`SSE_METHODS` set** (`host/acp/handler.ts`): `session/prompt`, `session/load`, `_bodhi-pi/subagent/run`. JSON dispatch is single-shot and drops `extNotification` calls (the JSON `HttpAcpConn` has no `onExtNotification` channel), so any extension method that emits `LIFECYCLE_EVENT_METHOD` notifications during its run MUST route through SSE. `_bodhi-pi/subagent/run` emits `subagent_start` / `subagent_end` mid-call → SSE. WS does not need this distinction (the persistent stream carries everything). Client-side counterpart: `AcpHttpClient.extMethodStreaming()` uses `sseCall`; `adapter-http.ts::wrapHttpClient.extMethod` routes `_bodhi-pi/subagent/run` to it. New extMethods that emit lifecycle events on the same call MUST be added to `SSE_METHODS` + the client-side routing in lockstep.
 - **Host vs Client (per-file)** — after the split landed in `ab6e356a`:
 
 | File | Side | Role |
@@ -104,6 +105,7 @@ Note: `adapter-http.ts` + `adapter-ws.ts` are two parallel transports — kept a
 - **ACP transport**:
   - HOST (Worker side): `AgentSideConnection` wired to `ndJsonStream(writable, readable)` derived from `createMessagePortStream(agentPort)` (imported from `@bodhiapp/bodhi-pi-test-app-utils/message-port-stream`).
   - Client (main thread): receives `agentPort: MessagePort` from worker init message, runs `ClientSideConnection` to the same ndjson stream.
+  - **Lifecycle events use a separate worker-message channel.** `bootstrap-worker.ts::eventForwardingHandlers()` posts every subscribed `BodhiPiEvent` as a `{type:"bodhi-pi-event", record}` worker message (the `ClientSideConnection` on the main thread does not surface `extNotification`s, so the ACP wire is not the rail for events here). The subscribed set MUST cover `subagent_start` / `subagent_end` for the `AppShell` transcript group; the wire-level `LIFECYCLE_EVENT_METHOD` forwarder in `event-wiring.ts` still runs but its output is currently dropped by the client (kept for parity with the http+ws clients that DO consume it).
 - **Host vs Client (per-file)** — after the split landed in `ebb680a7`:
 
 | File | Side | Role |

@@ -10,7 +10,7 @@ test("subagent fork: parent reads diff, spawns reviewer fork sub-agent via slash
 	await chat.send(
 		"Use the read tool to load diff.md so the contents are in your conversation history. Reply with one short confirmation when done.",
 	);
-	await expect(chat.root.locator('[data-test-message-role="assistant"]').last()).toBeVisible({ timeout: 90_000 });
+	await expect(chat.root.locator('[data-message-role="assistant"]').last()).toBeVisible({ timeout: 90_000 });
 
 	await chat.send("/subagent reviewer Identify the new symbol name from the inherited transcript.");
 	const slashResult = chat.systemMessageWithEvent("run-result", { name: "reviewer" }).last();
@@ -27,6 +27,6 @@ test("subagent fork: parent reads diff, spawns reviewer fork sub-agent via slash
 	await chat.send(
 		"Now use the reviewer sub-agent again, but this time via a natural-language request: ask the reviewer to confirm the new symbol name.",
 	);
-	const finalAssistant = chat.root.locator('[data-test-message-role="assistant"]').last();
+	const finalAssistant = chat.root.locator('[data-message-role="assistant"]').last();
 	await expect.soft(finalAssistant).toContainText("BLUE_FORK_42_handler", { timeout: 120_000 });
 });

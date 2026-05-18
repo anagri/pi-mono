@@ -41,6 +41,6 @@ test("subagent built-ins: natural-language prompt triggers the LLM to invoke the
 		"Use the explore sub-agent to read sentinel.md and report the secret sentinel keyword. Reply with the keyword verbatim.",
 	);
 
-	const finalAssistant = chat.root.locator('[data-test-message-role="assistant"]').last();
+	const finalAssistant = chat.root.locator('[data-message-role="assistant"]').last();
 	await expect(finalAssistant).toContainText("BLUE_SWALLOW_42", { timeout: 120_000 });
 });

@@ -68,6 +68,8 @@ function eventForwardingHandlers(): BodhiPiEventHandlers {
 		tool_call: [post],
 		tool_result: [post],
 		model_select: [post],
+		subagent_start: [post],
+		subagent_end: [post],
 	};
 }
 
