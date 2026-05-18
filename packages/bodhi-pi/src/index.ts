@@ -199,6 +199,11 @@ export {
 export { loadGlobalSettings } from "./settings/settings-global.js";
 export { mergeSettings } from "./settings/settings-merge.js";
 export type { Skill } from "./skills/skill.js";
+export {
+	SUBAGENT_MAX_DEPTH,
+	SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS,
+	SUBAGENT_SUMMARY_MAX_CHARS,
+} from "./subagents/subagent-service.js";
 export type { SubagentFrontmatter, SubagentProfile, SubagentProfileSummary } from "./subagents/types.js";
 export type {
 	Terminal,

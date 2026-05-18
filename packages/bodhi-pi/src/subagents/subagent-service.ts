@@ -22,8 +22,10 @@ import { profileToSummary, type SubagentProfile } from "./types.js";
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
 export const SUBAGENT_MAX_DEPTH = 2;
-const SUMMARY_MAX_CHARS = 4000;
-const PROGRESS_TOOL_PREVIEW_CHARS = 80;
+/** Max chars captured from the child's final assistant message into the parent's tool_result body. */
+export const SUBAGENT_SUMMARY_MAX_CHARS = 4000;
+/** Max chars shown in the parent's progress UI when a child invokes a tool. */
+export const SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS = 80;
 
 export interface SubagentServiceDeps {
 	sessions: Map<string, SessionState>;
@@ -220,7 +222,7 @@ export class SubagentService {
 			type: "subagent_start",
 			parentSessionId: input.parentSessionId,
 			childSessionId,
-			profile: input.profile.name,
+			profileName: input.profile.name,
 			task: input.task,
 			toolCallId: input.toolCallId,
 			depth,
@@ -277,7 +279,7 @@ export class SubagentService {
 			type: "subagent_end",
 			parentSessionId: input.parentSessionId,
 			childSessionId,
-			profile: input.profile.name,
+			profileName: input.profile.name,
 			status,
 			durationMs,
 			toolCount,
@@ -286,17 +288,7 @@ export class SubagentService {
 			...(errorMessage !== undefined ? { error: errorMessage } : {}),
 		});
 
-		switch (status) {
-			case "completed":
-				this.evictChild(childSessionId);
-				break;
-			case "cancelled":
-				this.evictChild(childSessionId);
-				break;
-			case "failed":
-				this.evictChild(childSessionId);
-				break;
-		}
+		this.evictChild(childSessionId);
 
 		return {
 			childSessionId,
@@ -317,8 +309,8 @@ export class SubagentService {
 			if (entry.message.role !== "assistant") continue;
 			const text = extractText(entry.message).trim();
 			if (!text) continue;
-			return text.length > SUMMARY_MAX_CHARS
-				? `${text.slice(0, SUMMARY_MAX_CHARS)}\n\n[... ${text.length - SUMMARY_MAX_CHARS} more characters truncated]`
+			return text.length > SUBAGENT_SUMMARY_MAX_CHARS
+				? `${text.slice(0, SUBAGENT_SUMMARY_MAX_CHARS)}\n\n[... ${text.length - SUBAGENT_SUMMARY_MAX_CHARS} more characters truncated]`
 				: text;
 		}
 		return "";
@@ -333,12 +325,22 @@ export class SubagentService {
 	}
 
 	buildToolResult(result: SubagentSpawnResult, profile: SubagentProfile): AgentToolResult<unknown> {
-		const body =
-			result.status === "completed"
-				? `<subagent_result>\n${result.summary || "(no text output)"}\n</subagent_result>`
-				: result.status === "cancelled"
-					? `<subagent_result status="cancelled">\n${result.summary || ""}\n</subagent_result>`
-					: `<subagent_error>\n${result.error ?? "unknown error"}\n${result.summary ? `\n${result.summary}` : ""}\n</subagent_error>`;
+		let body: string;
+		switch (result.status) {
+			case "completed":
+				body = `<subagent_result>\n${result.summary || "(no text output)"}\n</subagent_result>`;
+				break;
+			case "cancelled":
+				body = `<subagent_result status="cancelled">\n${result.summary || ""}\n</subagent_result>`;
+				break;
+			case "failed":
+				body = `<subagent_error>\n${result.error ?? "unknown error"}\n${result.summary ? `\n${result.summary}` : ""}\n</subagent_error>`;
+				break;
+			default: {
+				const _exhaustive: never = result.status;
+				throw new Error(`buildToolResult: unexpected status ${_exhaustive as string}`);
+			}
+		}
 		const header = `childSessionId: ${result.childSessionId} (load to inspect full transcript)\n\n`;
 		return {
 			content: [{ type: "text", text: `${header}${body}` }],
@@ -403,7 +405,10 @@ function formatToolPreview(toolName: string, args: unknown): string {
 	if (!args || typeof args !== "object") return toolName;
 	const path = (args as { path?: unknown }).path;
 	if (typeof path === "string" && path.length > 0) {
-		const trimmed = path.length > PROGRESS_TOOL_PREVIEW_CHARS ? `…${path.slice(-PROGRESS_TOOL_PREVIEW_CHARS)}` : path;
+		const trimmed =
+			path.length > SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS
+				? `…${path.slice(-SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS)}`
+				: path;
 		return `${toolName} ${trimmed}`;
 	}
 	return toolName;

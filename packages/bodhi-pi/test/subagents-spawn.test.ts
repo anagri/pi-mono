@@ -103,7 +103,7 @@ test("spawn creates a child session linked via parentSessionId + subagent and pe
 	expect(endEvent).toMatchObject({
 		parentSessionId: sessionId,
 		childSessionId: childId,
-		profile: "extractor",
+		profileName: "extractor",
 		status: "completed",
 	});
 });

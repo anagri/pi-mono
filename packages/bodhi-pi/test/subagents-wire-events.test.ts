@@ -54,12 +54,12 @@ test("subagent_start and subagent_end are forwarded over the wire via LIFECYCLE_
 
 	const startEv = lifecycle.find((n) => (n.params as { type?: string }).type === "subagent_start")?.params as {
 		childSessionId?: string;
-		profile?: string;
+		profileName?: string;
 		parentSessionId?: string;
 		contextMode?: string;
 	};
 	expect(startEv?.childSessionId).toBe(result.childSessionId);
-	expect(startEv?.profile).toBe("echo");
+	expect(startEv?.profileName).toBe("echo");
 	expect(startEv?.parentSessionId).toBe(sessionId);
 	expect(startEv?.contextMode).toBe("fresh");
 

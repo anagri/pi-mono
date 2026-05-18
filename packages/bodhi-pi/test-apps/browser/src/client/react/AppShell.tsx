@@ -103,8 +103,8 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 			setEvents((prev) => [...prev, { seq: prev.length + 1, type, payload }]);
 			if (type === "subagent_start") {
 				try {
-					const ev = JSON.parse(payload) as { childSessionId?: string; profile?: string };
-					if (ev.childSessionId && ev.profile) openSubagentGroup(ev.childSessionId, ev.profile);
+					const ev = JSON.parse(payload) as { childSessionId?: string; profileName?: string };
+					if (ev.childSessionId && ev.profileName) openSubagentGroup(ev.childSessionId, ev.profileName);
 				} catch {
 					// nop
 				}

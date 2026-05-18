@@ -190,6 +190,14 @@ extMethod _bodhi-pi/subagent/children → SubagentService.handleChildren → ses
 
 The returned tool result is wrapped as `<subagent_result>…</subagent_result>` for `completed`/`cancelled` and `<subagent_error>…</subagent_error>` for `failed`, prefixed with the `childSessionId` so the parent LLM and Host can navigate into the full transcript.
 
+## Tunables
+
+Exported from `@bodhiapp/bodhi-pi` (`src/subagents/subagent-service.ts`); Hosts can inspect them and Extensions that wrap subagent UX can reference the same values to keep limits consistent:
+
+- `SUBAGENT_MAX_DEPTH = 2` — hard cap on `SessionState.subagentDepth + 1` at spawn time. A child of a child of the root is the deepest reachable state; a fourth-level attempt rejects with `-32603` (`subagent.spawn: max depth 2 exceeded`).
+- `SUBAGENT_SUMMARY_MAX_CHARS = 4000` — max chars captured from the child's final assistant message into the parent's `<subagent_result>` body. Past this, the summary is truncated with a `[... N more characters truncated]` marker.
+- `SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS = 80` — max chars shown in the parent's progress UI when a child invokes a tool (the `→ <tool>(<args-preview>)` snippet streamed via `tool_call_update`).
+
 ## Reference research
 
 External harness implementations surveyed in `ai-docs/research/sub-agents/`:

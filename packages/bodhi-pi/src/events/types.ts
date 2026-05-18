@@ -298,7 +298,7 @@ export interface SubagentStartEvent {
 	type: "subagent_start";
 	parentSessionId: string;
 	childSessionId: string;
-	profile: string;
+	profileName: string;
 	task: string;
 	toolCallId: string;
 	depth: number;
@@ -309,7 +309,7 @@ export interface SubagentEndEvent {
 	type: "subagent_end";
 	parentSessionId: string;
 	childSessionId: string;
-	profile: string;
+	profileName: string;
 	status: "completed" | "cancelled" | "failed";
 	durationMs: number;
 	toolCount: number;
