@@ -287,7 +287,6 @@ class BodhiPiAcpAgent implements AcpAgent {
 			sessionStore: config.sessionStore,
 			events: this.events,
 			conn: this.conn,
-			config: this.config,
 			logger,
 			mcpService: this.mcpService,
 			bootstrapDeps: () => this.bootstrapDeps(),

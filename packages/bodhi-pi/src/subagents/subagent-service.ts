@@ -1,7 +1,7 @@
 import { type AgentSideConnection, RequestError } from "@agentclientprotocol/sdk";
 import type { AgentMessage, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import { randomUUID } from "@/_internal/uuid.js";
-import type { BodhiPiConfig, BodhiPiLogger } from "@/acp/agent.js";
+import type { BodhiPiLogger } from "@/acp/agent.js";
 import type { PromptLoopDeps } from "@/acp/prompt-loop.js";
 import { runPromptLoop } from "@/acp/prompt-loop.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
@@ -30,7 +30,6 @@ export interface SubagentServiceDeps {
 	sessionStore: SessionStore;
 	events: EventDispatcher;
 	conn: AgentSideConnection;
-	config: BodhiPiConfig;
 	logger: BodhiPiLogger;
 	mcpService: McpService;
 	bootstrapDeps: () => BootstrapDeps;
@@ -70,7 +69,6 @@ export class SubagentService {
 	private readonly sessionStore: SessionStore;
 	private readonly events: EventDispatcher;
 	private readonly conn: AgentSideConnection;
-	private readonly config: BodhiPiConfig;
 	private readonly logger: BodhiPiLogger;
 	private readonly mcpService: McpService;
 	private readonly bootstrapDeps: () => BootstrapDeps;
@@ -82,7 +80,6 @@ export class SubagentService {
 		this.sessionStore = deps.sessionStore;
 		this.events = deps.events;
 		this.conn = deps.conn;
-		this.config = deps.config;
 		this.logger = deps.logger;
 		this.mcpService = deps.mcpService;
 		this.bootstrapDeps = deps.bootstrapDeps;
