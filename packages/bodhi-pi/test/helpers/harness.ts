@@ -38,6 +38,7 @@ export interface TestHarnessOptions {
 export interface TestHarness {
 	clientConn: ReturnType<typeof createInProcessAcpPair>["clientConn"];
 	updates: SessionNotification[];
+	extNotifications: Array<{ method: string; params: unknown }>;
 	filesystem: Filesystem;
 	sessionStore: SessionStore;
 	kvStore: KvStore;
@@ -49,6 +50,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 	const sessionStore = opts.sessionStore ?? createInMemorySessionStore();
 	const kvStore = opts.kvStore ?? createInMemoryKvStore();
 	const updates: SessionNotification[] = [];
+	const extNotifications: Array<{ method: string; params: unknown }> = [];
 	const { clientConn } = createInProcessAcpPair(
 		createBodhiPiAgent({
 			models: opts.models,
@@ -78,7 +80,10 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 				updates.push(params);
 			},
 			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+			extNotification: async (method, params) => {
+				extNotifications.push({ method, params });
+			},
 		}),
 	);
-	return { clientConn, updates, filesystem, sessionStore, kvStore };
+	return { clientConn, updates, extNotifications, filesystem, sessionStore, kvStore };
 }

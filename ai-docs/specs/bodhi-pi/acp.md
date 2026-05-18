@@ -121,11 +121,13 @@ The wire-level streaming surface. Sent via `conn.sessionUpdate(...)`. Internal h
 
 ## `LIFECYCLE_EVENT_METHOD` notifications
 
-Non-`sessionUpdate` notifications under a single method name `LIFECYCLE_EVENT_METHOD` (`src/wire/constants.ts`). Used for MCP status fan-outs that aren't strictly session-update-shaped:
+Non-`sessionUpdate` notifications under a single method name `LIFECYCLE_EVENT_METHOD` (`src/wire/constants.ts`). Used for status fan-outs that aren't strictly session-update-shaped. Translation surface is `src/acp/event-wiring.ts`:
 
 - `{type:"mcp_status_change", sessionId, slug, status, errorMessage?}`
 - `{type:"mcp_tools_change", sessionId, slug, toolNames}`
 - `{type:"mcp_oauth_status_change", sessionId, slug, status: "started" \| "completed" \| "failed" \| "cancelled", errorMessage?}` — own channel (separate from `mcp_status_change`) so UIs can render the "click to authenticate" affordance independently of connect/disconnect. When no session is loaded (e.g. callback lands between session closes), `sessionId` is the empty string `""`.
+- `{type:"subagent_start", parentSessionId, childSessionId, profile, task, toolCallId, depth}` — emitted when `SubagentService.spawn` creates a child session and is about to run its prompt loop. Lets clients open a transcript group keyed by `childSessionId` and route subsequent `sessionUpdate` notifications whose `sessionId === childSessionId` into that group.
+- `{type:"subagent_end", parentSessionId, childSessionId, profile, status: "completed" \| "cancelled" \| "failed", durationMs, toolCount, summary?, error?}` — emitted after the child's prompt loop terminates (regardless of status) and before the `evictChild` cleanup. Lets clients close their open transcript group and record the terminal status.
 
 **Mapping policy**: every wire-bound event flows through `src/acp/event-wiring.ts`. Services emit domain events on `EventDispatcher`; `event-wiring.ts` is the sole translation surface that calls `conn.sessionUpdate(...)` / `conn.notification(...)`. `McpConnectionLifecycle` emits `mcp_status_change` / `mcp_tools_change` to the dispatcher only — event-wiring registers handlers that forward them as `LIFECYCLE_EVENT_METHOD` notifications. This keeps SDK extraction tractable (one module owns wire translation) and lets extensions observe the same domain events without subscribing to a wire-shape.
 
