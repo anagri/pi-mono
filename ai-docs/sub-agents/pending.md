@@ -9,10 +9,13 @@ Both items below shipped in v2 (P2c + P2d). See [v2-retrospective.md](./v2-retro
 - ~~**Extension-registered profiles** — added to `ExtensionAPI.registerSubagentProfile(def)`. Roadmap: P2d.~~
 - ~~**Bundled built-in profiles** — `src/subagents/profiles/<name>.md` or similar. Roadmap: P2c.~~
 
-## Context modes
+## Context modes — ✅ fork mode resolved in P2a
 
-- **Forked context** — child inherits parent's conversation slice. v1 only supports `fresh`. Profile schema already accepts `context: "fork"` to keep the future API stable; v1 throws "not yet supported" if `fork` is requested. Roadmap: P2a.
-- **Selected transcript slice** — child gets a curated subset of parent messages. Future. Not in current roadmap.
+`context: "fork"` shipped in P2a. See [p2a-retrospective.md](./p2a-retrospective.md).
+
+- ~~**Forked context** — child inherits parent's conversation slice. v1 only supports `fresh`. Profile schema already accepts `context: "fork"` to keep the future API stable; v1 throws "not yet supported" if `fork` is requested. Roadmap: P2a.~~
+- **Selected transcript slice** — child gets a curated subset of parent messages (per-call `slice: {...}` override). Future. Not in current roadmap.
+- **Mid-pair pair-completeness hardening** — placeholder-injection for slicing that lands mid `tool_call`/`tool_result`. P2a inherits the existing `_bodhi-pi/session/fork` gap. Revisit if it bites.
 
 ## Execution modes
 
@@ -68,7 +71,7 @@ Both items below shipped in v2 (P2c + P2d). See [v2-retrospective.md](./v2-retro
 | Cancellation regression test | **In v2** | C3a |
 | `subagentDepth` cached on SessionState | **In v2** | C3b |
 | `evictChild` lifecycle per-status | **In v2** | C3c |
-| Forked context | Deferred | P2a |
+| Forked context | **In P2a** | C3 — `context: "fork"` accepted in schema + spawn flow wired |
 | Parallel batch | Deferred | P2b |
 | Background mode | Deferred | P3a |
 | Worktree | Deferred | P4a (cli-only) |

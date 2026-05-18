@@ -4,26 +4,19 @@ V1 landed 2026-05-18 across three commits (`f7d7d421`, `532ee5fc`, `c8e06bf1`). 
 
 **V2 landed 2026-05-18** across eight commits (`9b67f7b4` C0 → `e2a3e93d` C1 → `cea50e87` C2 → `ea70a10e` e2e refresh → `121ba066` C3a → `d2a2fc51` C3b → `d963a049` C3c → C4 + C5). V2 shipped: bundled built-in profiles (P2c), extension-registered profiles (P2d), and the three v1 carry-forward fixes (cancellation test, `subagentDepth` caching, `evictChild` lifecycle per-status). It also folded in C0 — a pre-existing v1 schema bug on the `subagent` tool — surfaced during plan review. Retrospective in [v2-retrospective.md](./v2-retrospective.md).
 
-**Next candidate**: P2a (forked context). It's the largest remaining Phase 2 item and unblocks "review this diff"-style usage. Suggested order from here: **P2a → P2b → P3a → ...**.
+**P2a landed 2026-05-18** across five commits (`87ab9b2e` C1 → `7d5bfd18` C2 → `764cb275` C3 → `0200ffda` C4 → C5). P2a shipped: `context: "fork"` profile mode, shared `cloneTranscriptSlice` helper, `SUBAGENT_FORK_FILTER`, spawn-flow fork branch, `contextMode` lineage on `SubagentLinkEntry` + lifecycle events, refreshed LLM tool description, e2e + e2e-ui specs. Retrospective in [p2a-retrospective.md](./p2a-retrospective.md).
 
-The phases below are refined with what v1 + v2 surfaced; each one still goes through its own brainstorming + planning + execution cycle before implementation. Order is a current guess at value × effort, not a commitment.
+**Next candidate**: P2b (parallel batch). With fork-mode landed, the next high-leverage UX win is "run reviewers in parallel". Suggested order from here: **P2b → P3a → ...**.
+
+The phases below are refined with what v1 + v2 + P2a surfaced; each one still goes through its own brainstorming + planning + execution cycle before implementation. Order is a current guess at value × effort, not a commitment.
 
 ## Phase 2 candidates (one picks next)
 
-### P2a — Forked context (parent history clone into child)
+### P2a — Forked context ✅ landed in P2a
 
-**Why**: Lets the child see the parent's conversation when the task isn't self-contained. Critical for "review this diff", "continue this thread"-style delegation. Mastra's data suggests forked is the more common usage in practice.
+Shipped 2026-05-18. `context: "fork"` profile mode clones the parent's transcript (filtered to drop `mcp_inclusion_set`/`extension`/`subagent_link`/`subagent_complete` noise) into the child via the shared `cloneTranscriptSlice` helper. Distinct from `_bodhi-pi/session/fork` sibling — see `subagents.md` "Fork mode".
 
-**Refs to re-read**:
-- Mastra's forked path (`tools.ts` lines 893–989) — clones parent thread, reuses parent agent for prompt-cache stability, patches recursive `subagent` to a stub.
-- cc's `forkSubagent.ts` and `buildForkedMessages` — preserves exact tool definitions, blocks recursion via boilerplate detection.
-- bodhi-pi's existing `_bodhi-pi/session/fork` handler in `SessionGraphService` — interaction surface.
-
-**Key design questions** (decide during brainstorming, do not pre-commit):
-- Snapshot parent's leaf at fork time vs continuous mirror?
-- How does this interact with bodhi-pi's existing `_bodhi-pi/session/fork`? Subset, superset, or sibling?
-- Prompt-cache stability: do we go far enough to byte-match the parent's request prefix, or accept some cache misses for simpler semantics?
-- Profile field: `context: "fork"` already typed in v1 — wire it to a real implementation here.
+See [p2a-retrospective.md](./p2a-retrospective.md) for what shipped and what's deferred to v3.
 
 ### P2b — Parallel batch
 

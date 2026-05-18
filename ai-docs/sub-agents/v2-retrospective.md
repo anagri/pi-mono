@@ -55,7 +55,7 @@ A pre-flight `4d07c27b` committed the v2 kickoff plan.
 
 ## Items for v3 / future
 
-These came out of v2 work; fold them into the relevant phase plan before implementation:
+These came out of v2 work; fold them into the relevant phase plan before implementation. **Update 2026-05-18: P2a landed** (forked context — `context: "fork"`); see [p2a-retrospective.md](./p2a-retrospective.md).
 
 - **Lint `.bodhi-pi/agents/<name>.md` for orphan `disabled: true`** — silently no-ops if the name doesn't match any built-in or extension entry. A `subagents-doctor`-style helper could flag it.
 - **`buildChildSessionState` still duplicates `buildSessionState`** — the divergence will grow when P3c (MCP allow/deny) and P3d (skill inheritance) land. Worth a shared helper at that point, not now.
