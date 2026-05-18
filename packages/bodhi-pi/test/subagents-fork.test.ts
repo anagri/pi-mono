@@ -2,7 +2,6 @@ import {
 	type Api,
 	type FauxProviderRegistration,
 	fauxAssistantMessage,
-	fauxToolCall,
 	type Model,
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
@@ -11,6 +10,7 @@ import { createInMemoryFilesystem, EXT_SUBAGENT_RUN } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { seedSubagent } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";
+import { scriptSubagentRun } from "./helpers/script-subagent-run.js";
 
 let providers: FauxProviderRegistration[] = [];
 
@@ -44,15 +44,19 @@ test("context: fork spawns a child whose initial messages include the parent's t
 	let capturedChildMessages: unknown[] = [];
 	const faux = newProvider();
 	const model = faux.getModel() as Model<Api>;
-	faux.setResponses([
-		fauxAssistantMessage([fauxToolCall("read", { path: "/proj/diff.md" })], { stopReason: "toolUse" }),
-		fauxAssistantMessage("The diff renames fooHandler to BLUE_FORK_42_handler."),
-		(ctx) => {
-			capturedChildMessageCount.push(ctx.messages.length);
-			capturedChildMessages = ctx.messages as unknown[];
-			return fauxAssistantMessage("Reviewer sees BLUE_FORK_42_handler in the inherited transcript.");
-		},
-	]);
+	scriptSubagentRun(faux, {
+		parentTurns: [
+			{ tool: "read", args: { path: "/proj/diff.md" } },
+			{ text: "The diff renames fooHandler to BLUE_FORK_42_handler." },
+		],
+		childResponses: [
+			(ctx) => {
+				capturedChildMessageCount.push(ctx.messages.length);
+				capturedChildMessages = ctx.messages as unknown[];
+				return fauxAssistantMessage("Reviewer sees BLUE_FORK_42_handler in the inherited transcript.");
+			},
+		],
+	});
 
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
 	await harness.clientConn.initialize(stdInitParams);
@@ -98,7 +102,9 @@ test("subagent_link entry on the child carries contextMode='fork' when spawned v
 
 	const faux = newProvider();
 	const model = faux.getModel() as Model<Api>;
-	faux.setResponses([() => fauxAssistantMessage("reviewer done")]);
+	scriptSubagentRun(faux, {
+		childResponses: [() => fauxAssistantMessage("reviewer done")],
+	});
 
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
 	await harness.clientConn.initialize(stdInitParams);
@@ -122,7 +128,9 @@ test("subagent_link entry on the child carries contextMode='fresh' when spawned 
 
 	const faux = newProvider();
 	const model = faux.getModel() as Model<Api>;
-	faux.setResponses([() => fauxAssistantMessage("ok")]);
+	scriptSubagentRun(faux, {
+		childResponses: [() => fauxAssistantMessage("ok")],
+	});
 
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
 	await harness.clientConn.initialize(stdInitParams);
@@ -151,13 +159,15 @@ test("fork excludes mcp_inclusion_set and subagent_link entries from the child's
 	let capturedChildMessages: unknown[] = [];
 	const faux = newProvider();
 	const model = faux.getModel() as Model<Api>;
-	faux.setResponses([
-		fauxAssistantMessage("parent text turn"),
-		(ctx) => {
-			capturedChildMessages = ctx.messages as unknown[];
-			return fauxAssistantMessage("child done");
-		},
-	]);
+	scriptSubagentRun(faux, {
+		parentTurns: [{ text: "parent text turn" }],
+		childResponses: [
+			(ctx) => {
+				capturedChildMessages = ctx.messages as unknown[];
+				return fauxAssistantMessage("child done");
+			},
+		],
+	});
 
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
 	await harness.clientConn.initialize(stdInitParams);

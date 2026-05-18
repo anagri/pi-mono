@@ -2,7 +2,6 @@ import {
 	type Api,
 	type FauxProviderRegistration,
 	fauxAssistantMessage,
-	fauxToolCall,
 	type Model,
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
@@ -11,6 +10,7 @@ import { createInMemoryFilesystem } from "@/index.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { seedSubagent } from "./helpers/filesystem.js";
 import { createTestHarness } from "./helpers/harness.js";
+import { scriptSubagentRun } from "./helpers/script-subagent-run.js";
 
 let providers: FauxProviderRegistration[] = [];
 
@@ -41,16 +41,16 @@ test("client.cancel mid-spawn lands status='cancelled' on the child session + pa
 
 	const faux = newProvider();
 	const model = faux.getModel() as Model<Api>;
-	faux.setResponses([
-		fauxAssistantMessage([fauxToolCall("subagent", { agent: "slowpoke", task: "take your time" })], {
-			stopReason: "toolUse",
-		}),
-		async () => {
-			await sleep(1500);
-			return fauxAssistantMessage("child finally finished");
-		},
-		fauxAssistantMessage("parent wraps up"),
-	]);
+	scriptSubagentRun(faux, {
+		parentTurns: [{ tool: "subagent", args: { agent: "slowpoke", task: "take your time" } }],
+		childResponses: [
+			async () => {
+				await sleep(1500);
+				return fauxAssistantMessage("child finally finished");
+			},
+		],
+		finalText: "parent wraps up",
+	});
 
 	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
 	await harness.clientConn.initialize(stdInitParams);
