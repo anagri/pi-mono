@@ -1,8 +1,9 @@
-import type { SubagentFrontmatter, SubagentProfile, SubagentSource } from "./types.js";
+import type { SubagentContextMode, SubagentFrontmatter, SubagentProfile, SubagentSource } from "./types.js";
 
 const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
 const DEFAULT_MAX_TURNS = 50;
+const VALID_CONTEXT_MODES = new Set<SubagentContextMode>(["fresh", "fork"]);
 
 export function validateSubagentName(name: string): boolean {
 	return (
@@ -36,11 +37,19 @@ export function validateAndNormalizeProfile(input: ValidateProfileInput): Subage
 		typeof frontmatter["max-turns"] === "number" && frontmatter["max-turns"] > 0
 			? frontmatter["max-turns"]
 			: DEFAULT_MAX_TURNS;
+	let context: SubagentContextMode;
+	if (frontmatter.context === undefined) {
+		context = "fresh";
+	} else if (VALID_CONTEXT_MODES.has(frontmatter.context)) {
+		context = frontmatter.context;
+	} else {
+		return null;
+	}
 	return {
 		name,
 		description,
 		...(frontmatter.model ? { model: frontmatter.model } : {}),
-		context: "fresh",
+		context,
 		...(Array.isArray(frontmatter.tools) ? { tools: frontmatter.tools } : {}),
 		maxTurns,
 		body: trimmedBody,

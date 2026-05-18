@@ -1,10 +1,12 @@
 export type SubagentSource = "project" | "extension" | "builtin";
 
+export type SubagentContextMode = "fresh" | "fork";
+
 export interface SubagentProfile {
 	name: string;
 	description: string;
 	model?: string;
-	context: "fresh";
+	context: SubagentContextMode;
 	tools?: string[];
 	maxTurns: number;
 	body: string;
@@ -17,7 +19,7 @@ export interface SubagentFrontmatter {
 	name?: string;
 	description?: string;
 	model?: string;
-	context?: "fresh";
+	context?: SubagentContextMode;
 	tools?: string[];
 	"max-turns"?: number;
 	disabled?: boolean;
@@ -27,7 +29,7 @@ export interface SubagentProfileSummary {
 	name: string;
 	description: string;
 	model?: string;
-	context: "fresh";
+	context: SubagentContextMode;
 	tools?: string[];
 	maxTurns: number;
 	source: SubagentSource;

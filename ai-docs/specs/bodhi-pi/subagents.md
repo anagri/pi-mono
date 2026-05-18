@@ -32,7 +32,7 @@ subagent({
 }) -> AgentToolResult with childSessionId + summary
 ```
 
-The tool params schema declares `additionalProperties: false`. Context mode is fixed at `"fresh"` internally (see [`SubagentProfile.context`](#profile-frontmatter)) and is intentionally NOT exposed as an LLM-facing parameter — single-const optional fields attract free-text from LLMs and trigger validation failures. A real `context` discriminator returns when P2a (forked context) ships ≥2 valid modes; it will be named to avoid the `context` attractor (e.g. `isolation`, `mode`).
+The tool params schema declares `additionalProperties: false`. Context mode is decided by the profile (see [`SubagentProfile.context`](#profile-frontmatter)) and is intentionally NOT exposed as an LLM-facing parameter — single-const optional fields attract free-text from LLMs and trigger validation failures; even with ≥2 valid values, a profile-level decision is more useful than asking the LLM to choose at call time (P2a chose to keep the LLM tool surface unchanged).
 
 ### Profile frontmatter
 
@@ -41,7 +41,10 @@ The tool params schema declares `additionalProperties: false`. Context mode is f
 name: extractor                 # optional, defaults to file basename
 description: ...                # required, ≤1024 chars
 model: gpt-4o-mini              # optional, inherits parent's current model when omitted
-context: fresh                  # v1: "fresh" only; "fork" lands in P2a
+context: fresh                  # "fresh" (default) or "fork". Fresh starts the child with an empty
+                                # message history; fork clones a filtered slice of the parent's
+                                # transcript so the child sees prior context (e.g. read tool results).
+                                # See the "Fork mode" subsection below.
 tools:                          # optional allowlist over built-ins; omitted = all built-ins (minus `subagent`)
   - read
   - grep
@@ -75,6 +78,12 @@ Both are loaded as TS modules from `src/subagents/profiles/{explore,planner}.ts`
 ### Extension-registered profiles
 
 Extensions register profiles via `ExtensionAPI.registerSubagentProfile(def)` (P2d). The runner aggregates them into `runner.getSubagentProfiles()` and the bootstrap merger places them between project (highest precedence) and built-in (lowest). Registration shares the markdown validation pipeline; a registration that supplies `disabled: true` throws synchronously.
+
+### Fork mode
+
+`context: "fork"` makes the child see a sliced copy of the parent's transcript so tasks like "review this diff" don't need to re-feed context the parent already loaded. P2a accepts the value in the profile schema and wires the spawn flow in a later commit (see `ai-docs/plans/2026-05-18-bodhi-pi-sub-agents-p2a-forked-context.md`).
+
+Distinct from `_bodhi-pi/session/fork` (`SessionGraphService.handleSessionFork`): session-fork preserves the full session shape (tools / skills / MCP / settings); sub-agent fork is profile-constrained and drops session-management entry types (`mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`) from the child's view.
 
 ### Extension methods
 
