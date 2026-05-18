@@ -30,6 +30,15 @@ Practical implications when working in this repo:
 
 **Reuse dependency types.** Use `pi-agent-core`'s `AgentOptions`, `pi-ai`'s `Model<Api>`, ACP SDK's types directly — no wrapper types until a real semantic mismatch.
 
+**Major components expose lifecycle events on both rails.** When a new domain service (sub-agent spawn, MCP connect/disconnect, OAuth flow, future "background job runner", etc.) has lifecycle moments (start, end, status-change), it MUST:
+
+1. Define a typed event on `EventDispatcher` (`src/events/types.ts`) and emit it from the service.
+2. Forward that event to the wire in `src/acp/event-wiring.ts` via `notifyLifecycle(...) → conn.extNotification(LIFECYCLE_EVENT_METHOD, params)`.
+3. Document the wire shape in `ai-docs/specs/bodhi-pi/acp.md` under the `LIFECYCLE_EVENT_METHOD notifications` section, same commit.
+4. Add a regression test in `test/` that captures `harness.extNotifications` and asserts the event shape — internal event handlers passing is NOT proof the wire forwarder runs.
+
+Both rails matter. The in-process `pi.on("subagent_start", …)` hook lets extensions react inside the agent process; the wire-level `LIFECYCLE_EVENT_METHOD` notification lets remote clients (web UIs, chrome-ext panels, third-party host integrations) react across the ACP boundary. Skipping the wire forwarder is invisible from the agent's own tests and surfaces only as missing-UI-grouping bugs (cf. v2 subagent transcript grouping shipped grouping-blind because the forwarder was never wired; commit `bafdb900` retro-fixed it).
+
 ## Reference Hosts
 
 `bodhi-pi` is **runtime-agnostic** — Filesystem, SessionStore, KvStore, ScriptExecutor, Terminal, McpConnectionProvider are all Host-injected. Four reference Hosts under `test-apps/` prove every feature works across the runtime matrix; shared adapter sets live as sibling infrastructure packages.
