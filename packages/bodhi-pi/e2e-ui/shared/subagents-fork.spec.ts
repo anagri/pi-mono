@@ -13,7 +13,7 @@ test("subagent fork: parent reads diff, spawns reviewer fork sub-agent via slash
 	await expect(chat.root.locator('[data-test-message-role="assistant"]').last()).toBeVisible({ timeout: 90_000 });
 
 	await chat.send("/subagent reviewer Identify the new symbol name from the inherited transcript.");
-	const slashResult = chat.root.locator('[data-subagent-event="run-result"][data-subagent-name="reviewer"]').last();
+	const slashResult = chat.systemMessageWithEvent("run-result", { name: "reviewer" }).last();
 	await expect(slashResult).toBeVisible({ timeout: 120_000 });
 	await expect.soft(slashResult).toHaveAttribute("data-subagent-status", "completed");
 	await expect.soft(slashResult).toContainText("BLUE_FORK_42_handler");

@@ -62,6 +62,12 @@ export class ChatPanelPage {
 		return this.messages("system");
 	}
 
+	systemMessageWithEvent(eventName: string, options: { name?: string } = {}): Locator {
+		let selector = `[data-testid="chat-message"][data-message-role="system"][data-subagent-event="${eventName}"]`;
+		if (options.name) selector += `[data-subagent-name="${options.name}"]`;
+		return this.root.locator(selector);
+	}
+
 	lastSystemText(): Promise<string> {
 		return this.systemMessages().last().innerText();
 	}

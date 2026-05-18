@@ -8,12 +8,12 @@ test("subagent: /agents lists the profile and /subagent <name> <task> reports th
 	await startApp({ seedXml: scenarioSeedXml("subagents-extractor") });
 
 	await chat.send("/agents");
-	const listMsg = chat.root.locator('[data-subagent-event="list"]');
+	const listMsg = chat.systemMessageWithEvent("list");
 	await expect(listMsg).toBeVisible({ timeout: 30_000 });
 	await expect(listMsg).toContainText("extractor");
 
 	await chat.send("/subagent extractor summarize doc.md");
-	const resultMsg = chat.root.locator('[data-subagent-event="run-result"]');
+	const resultMsg = chat.systemMessageWithEvent("run-result");
 	await expect(resultMsg).toBeVisible({ timeout: 120_000 });
 	await expect(resultMsg).toHaveAttribute("data-subagent-status", "completed");
 	await expect(resultMsg).toHaveAttribute("data-subagent-name", "extractor");
