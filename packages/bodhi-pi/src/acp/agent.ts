@@ -132,6 +132,7 @@ export interface BodhiPiConfig {
 
 export interface BodhiPiLogger {
 	error(message: string, ...args: unknown[]): void;
+	warn(message: string, ...args: unknown[]): void;
 }
 
 function _resolveProviderStreamOptions(provider: string, merged: BodhiPiProjectSettings): ResolvedRetryOptions {

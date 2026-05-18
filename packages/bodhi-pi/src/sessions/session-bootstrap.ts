@@ -71,11 +71,12 @@ export async function loadProjectArtifacts(
 	globalSettingsResult: Awaited<ReturnType<typeof loadGlobalSettings>> | undefined;
 	mergedFileSettings: BodhiPiProjectSettings;
 }> {
+	const loaderOptions = config.logger ? { logger: config.logger } : {};
 	const [projectCommands, skills, projectSubagents, contextFiles, projectSettingsResult, globalSettingsResult] =
 		await Promise.all([
-			loadProjectCommands(config.filesystem, cwd),
-			loadProjectSkills(config.filesystem, cwd),
-			loadProjectSubagents(config.filesystem, cwd),
+			loadProjectCommands(config.filesystem, cwd, loaderOptions),
+			loadProjectSkills(config.filesystem, cwd, loaderOptions),
+			loadProjectSubagents(config.filesystem, cwd, loaderOptions),
 			loadProjectContextFiles(config.filesystem, cwd),
 			loadProjectSettings(config.filesystem, cwd),
 			config.homeDir

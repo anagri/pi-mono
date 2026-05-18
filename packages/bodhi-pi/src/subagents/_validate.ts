@@ -24,15 +24,19 @@ export interface ValidateProfileInput {
 	filePath: string;
 }
 
-export function validateAndNormalizeProfile(input: ValidateProfileInput): SubagentProfile | null {
+export type ValidateProfileResult = { profile: SubagentProfile } | { reason: string };
+
+export function validateAndNormalizeProfile(input: ValidateProfileInput): ValidateProfileResult {
 	const { frontmatter, body, defaultName, source, filePath } = input;
 	const description = frontmatter.description?.trim();
-	if (!description) return null;
-	if (description.length > MAX_DESCRIPTION_LENGTH) return null;
-	const name = (frontmatter.name?.trim() || defaultName?.trim() || "").trim();
-	if (!validateSubagentName(name)) return null;
+	if (!description) return { reason: "missing description" };
+	if (description.length > MAX_DESCRIPTION_LENGTH) {
+		return { reason: `description exceeds ${MAX_DESCRIPTION_LENGTH} chars` };
+	}
+	const rawName = (frontmatter.name?.trim() || defaultName?.trim() || "").trim();
+	if (!validateSubagentName(rawName)) return { reason: `invalid name "${rawName}"` };
 	const trimmedBody = body.trim();
-	if (!trimmedBody) return null;
+	if (!trimmedBody) return { reason: "empty body" };
 	const maxTurns =
 		typeof frontmatter["max-turns"] === "number" && frontmatter["max-turns"] > 0
 			? frontmatter["max-turns"]
@@ -43,18 +47,20 @@ export function validateAndNormalizeProfile(input: ValidateProfileInput): Subage
 	} else if (VALID_CONTEXT_MODES.has(frontmatter.context)) {
 		context = frontmatter.context;
 	} else {
-		return null;
+		return { reason: `invalid context "${frontmatter.context}"` };
 	}
 	return {
-		name,
-		description,
-		...(frontmatter.model ? { model: frontmatter.model } : {}),
-		context,
-		...(Array.isArray(frontmatter.tools) ? { tools: frontmatter.tools } : {}),
-		maxTurns,
-		body: trimmedBody,
-		filePath,
-		source,
-		...(frontmatter.disabled === true ? { disabled: true } : {}),
+		profile: {
+			name: rawName,
+			description,
+			...(frontmatter.model ? { model: frontmatter.model } : {}),
+			context,
+			...(Array.isArray(frontmatter.tools) ? { tools: frontmatter.tools } : {}),
+			maxTurns,
+			body: trimmedBody,
+			filePath,
+			source,
+			...(frontmatter.disabled === true ? { disabled: true } : {}),
+		},
 	};
 }

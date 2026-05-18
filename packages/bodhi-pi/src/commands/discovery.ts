@@ -1,6 +1,8 @@
 import { join } from "pathe";
+import { discoveryDirWarn, discoveryWarn } from "@/_internal/discovery-warn.js";
 import { parseFrontmatter } from "@/_internal/frontmatter.js";
 import { byName } from "@/_internal/sort.js";
+import type { BodhiPiLogger } from "@/acp/agent.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { PromptTemplate } from "./prompt-templates.js";
 
@@ -8,18 +10,24 @@ export const COMMANDS_SUBDIR = ".bodhi-pi/commands";
 
 const DESCRIPTION_TRUNCATE = 60;
 
+export interface LoadProjectCommandsOptions {
+	logger?: BodhiPiLogger;
+}
+
 interface CommandFrontmatter {
 	description?: string;
 	"argument-hint"?: string;
 }
 
-function loadTemplate(filePath: string, raw: string): PromptTemplate | null {
+type LoadTemplateResult = { template: PromptTemplate } | { reason: string };
+
+function loadTemplate(filePath: string, raw: string): LoadTemplateResult {
 	let frontmatter: CommandFrontmatter;
 	let body: string;
 	try {
 		({ frontmatter, body } = parseFrontmatter<CommandFrontmatter>(raw));
-	} catch {
-		return null;
+	} catch (err) {
+		return { reason: `parse error: ${err instanceof Error ? err.message : String(err)}` };
 	}
 
 	const fileName = filePath.split("/").pop() ?? filePath;
@@ -37,22 +45,30 @@ function loadTemplate(filePath: string, raw: string): PromptTemplate | null {
 	const argumentHint = frontmatter["argument-hint"];
 
 	return {
-		name,
-		description,
-		...(argumentHint ? { argumentHint } : {}),
-		content: body,
-		filePath,
+		template: {
+			name,
+			description,
+			...(argumentHint ? { argumentHint } : {}),
+			content: body,
+			filePath,
+		},
 	};
 }
 
-export async function loadProjectCommands(fs: Filesystem, cwd: string): Promise<PromptTemplate[]> {
+export async function loadProjectCommands(
+	fs: Filesystem,
+	cwd: string,
+	options: LoadProjectCommandsOptions = {},
+): Promise<PromptTemplate[]> {
+	const { logger } = options;
 	const dir = join(cwd, COMMANDS_SUBDIR);
 	if (!(await fs.exists(dir))) return [];
 
 	let entries: Awaited<ReturnType<Filesystem["list"]>>;
 	try {
 		entries = await fs.list(dir);
-	} catch {
+	} catch (err) {
+		discoveryDirWarn(logger, "command", dir, err instanceof Error ? err.message : String(err));
 		return [];
 	}
 
@@ -63,11 +79,16 @@ export async function loadProjectCommands(fs: Filesystem, cwd: string): Promise<
 		let raw: string;
 		try {
 			raw = await fs.readTextFile(filePath);
-		} catch {
+		} catch (err) {
+			discoveryWarn(logger, "command", filePath, `read error: ${err instanceof Error ? err.message : String(err)}`);
 			continue;
 		}
-		const template = loadTemplate(filePath, raw);
-		if (template) out.push(template);
+		const result = loadTemplate(filePath, raw);
+		if ("reason" in result) {
+			discoveryWarn(logger, "command", filePath, result.reason);
+			continue;
+		}
+		out.push(result.template);
 	}
 
 	out.sort(byName);

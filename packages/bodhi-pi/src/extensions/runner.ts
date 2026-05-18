@@ -53,6 +53,7 @@ export type RequestSlashableRefresh = (sessionId?: string) => Promise<void>;
 
 export interface RunnerLogger {
 	error(message: string, ...args: unknown[]): void;
+	warn(message: string, ...args: unknown[]): void;
 }
 
 export class ExtensionRunner {
@@ -163,7 +164,7 @@ export class ExtensionRunner {
 						`extension '${extensionName}' cannot register subagent profile '${def.name}' with disabled:true — disabled only applies to project markdown overrides`,
 					);
 				}
-				const normalized = validateAndNormalizeProfile({
+				const result = validateAndNormalizeProfile({
 					frontmatter: {
 						name: def.name,
 						description: def.description,
@@ -176,11 +177,12 @@ export class ExtensionRunner {
 					source: "extension",
 					filePath: `extension:${extensionName}/${def.name}`,
 				});
-				if (!normalized) {
+				if ("reason" in result) {
 					throw new Error(
-						`extension '${extensionName}' subagent profile '${def.name}' failed validation (check name regex, description, body)`,
+						`extension '${extensionName}' subagent profile '${def.name}' failed validation: ${result.reason}`,
 					);
 				}
+				const normalized = result.profile;
 				self.subagentProfiles.push(normalized);
 				return () => {
 					const idx = self.subagentProfiles.indexOf(normalized);
