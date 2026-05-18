@@ -1,8 +1,12 @@
 # Sub-agents roadmap (rough)
 
-V1 landed 2026-05-18 across three commits (`f7d7d421`, `532ee5fc`, `c8e06bf1`). Retrospective in [retrospective.md](./retrospective.md). The phases below are refined with what v1 surfaced; each one still goes through its own brainstorming + planning + execution cycle before implementation. Order is a current guess at value × effort, not a commitment.
+V1 landed 2026-05-18 across three commits (`f7d7d421`, `532ee5fc`, `c8e06bf1`). Retrospective in [retrospective.md](./retrospective.md).
 
-**Reordering after v1 retrospective**: P2c (bundled profiles) is the lowest-effort highest-leverage next step because v1 de-risked discovery + tool registration + spawn. P2d (extension-registered profiles) is similarly low effort — half-a-commit estimate. P2a (forked context) is the bigger semantic change but unblocks "review this diff"-style usage. Suggested order: **P2c → P2d → P2a → P2b → P3a → ...**.
+**V2 landed 2026-05-18** across eight commits (`9b67f7b4` C0 → `e2a3e93d` C1 → `cea50e87` C2 → `ea70a10e` e2e refresh → `121ba066` C3a → `d2a2fc51` C3b → `d963a049` C3c → C4 + C5). V2 shipped: bundled built-in profiles (P2c), extension-registered profiles (P2d), and the three v1 carry-forward fixes (cancellation test, `subagentDepth` caching, `evictChild` lifecycle per-status). It also folded in C0 — a pre-existing v1 schema bug on the `subagent` tool — surfaced during plan review. Retrospective in [v2-retrospective.md](./v2-retrospective.md).
+
+**Next candidate**: P2a (forked context). It's the largest remaining Phase 2 item and unblocks "review this diff"-style usage. Suggested order from here: **P2a → P2b → P3a → ...**.
+
+The phases below are refined with what v1 + v2 surfaced; each one still goes through its own brainstorming + planning + execution cycle before implementation. Order is a current guess at value × effort, not a commitment.
 
 ## Phase 2 candidates (one picks next)
 
@@ -35,37 +39,17 @@ V1 landed 2026-05-18 across three commits (`f7d7d421`, `532ee5fc`, `c8e06bf1`). 
 - Failure modes: fail-fast vs collect-all?
 - How do parallel child events interleave on the parent's `tool_call_update` channel?
 
-### P2c — Bundled built-in profiles (**RECOMMENDED NEXT**)
+### P2c — Bundled built-in profiles ✅ landed in v2
 
-**Why**: New installs get value with zero config. Matches cc/opencode/Mastra UX. Reduces "what do I put in `.bodhi-pi/agents/`?" friction. **De-risked by v1**: discovery + tool registration + spawn flow are all proven; adding a profile file is a one-file change.
+Shipped `explore` + `planner` as TS modules under `src/subagents/profiles/`. Tool-locked to `{read, ls, find, grep}`. Runtime-neutral; works in cli + http + browser + chrome-ext with no bundler glue. Disable mechanism: project markdown override with `disabled: true`.
 
-**Refs to re-read**:
-- cc's `Explore/Plan/Execute/audit-tests`.
-- Mastra's `explore/plan/execute/audit-tests`.
-- pi-subagents' `scout/researcher/planner/worker/reviewer/oracle/context-builder/delegate`.
+See [v2-retrospective.md](./v2-retrospective.md) for what shipped and what's deferred to v3.
 
-**Key design questions**:
-- Which profiles to ship? Start with `explore` (read-only) + `planner` (planning prose only)? Skip `worker` (too generic, easy to ship a bad default)?
-- Where do they live: `src/subagents/profiles/<name>.md` bundled as TS imports (works in all runtimes — no FS scan needed for built-ins)? Or runtime-loaded from a known path?
-- How do users override / disable? `subagents.disableBuiltins` in settings? Override by name in `.bodhi-pi/agents/`?
-- Should bundled profiles ship with `inheritProjectContext` / `inheritSkills` semantics (pi-subagents pattern)? (v1 doesn't have either; P3d adds skill inheritance.)
+### P2d — Extension-registered profiles ✅ landed in v2
 
-**Estimated commits**: 1 (profile definitions + merge into discovery + tests).
+`ExtensionAPI.registerSubagentProfile(def)` added as peer of `registerTool`/`registerCommand`/`registerProvider`. Precedence project > extension > built-in via `mergeSubagentProfiles` in `src/extensions/merge.ts`. Shares the `validateAndNormalizeProfile` pipeline with markdown discovery so no source can bypass invariants.
 
-### P2d — Extension-registered profiles
-
-**Why**: Lets third-party extensions ship subagent profiles. Closes the contribution model gap so subagent is a true peer with Commands/Skills/Extensions.
-
-**Refs to re-read**:
-- Existing `registerTool` / `registerCommand` API in `src/extensions/types.ts`.
-- v1's `loadProjectArtifacts` in `src/sessions/session-bootstrap.ts:58` for the merge insertion point.
-
-**Key design questions**:
-- Add `registerSubagentProfile(def)` to ExtensionAPI — straightforward.
-- Profile merge precedence with markdown: `mergeSubagentProfiles(markdownProfiles, extensionProfiles)` — first-registered wins on name collision (matches commands merge)? Or project markdown beats extension?
-- How does this interact with hot-reload (markdown profiles re-walk per session boot; extension profiles fixed at runner build)?
-
-**Estimated commits**: 1 (ExtensionAPI method + merge in bootstrap + tests). Pattern identical to `mergeCommands`/`mergeTools`.
+See [v2-retrospective.md](./v2-retrospective.md).
 
 ## Phase 3 candidates
 
@@ -154,17 +138,17 @@ V1 landed 2026-05-18 across three commits (`f7d7d421`, `532ee5fc`, `c8e06bf1`). 
 
 **Key note**: Far-future. Depends on A2A spec maturity in our ecosystem. Likely needs a new `SubagentExecutor` interface (local vs remote) and a Host-injected dependency.
 
-## Carry-forward from v1 retrospective
+## Carry-forward from v1 + v2 retrospectives
 
-These items came out of `retrospective.md`'s "Design decisions that should change" section. Fold them into the relevant phase plan before implementation:
+V2 landed three of the v1 carry-forward items (cancellation test, subagentDepth cache, evictChild lifecycle per-status). What remains, deferred to a future phase:
 
-- **`SubagentService.evictChild` lifecycle** — currently in the unconditional finally of `spawn()`. For background runs (P3a) this is wrong; the child must stay alive across parent turns. Move the eviction into the "completion" branch only.
-- **`computeChildDepth` is O(n entries)** per spawn — cache on `SessionState.subagentDepth` populated at `buildChildSessionState`. Worth doing in P2c or P3a, whichever lands first.
 - **Progress mirroring is one global handler** filtering by sessionId. Works for foreground single-child but parallel batch (P2b) needs per-child UI accumulation in the Host — design the parallel-render UI before implementation.
-- **`buildChildSessionState` duplicates `buildSessionState`** — acceptable now, will diverge with profile inheritance features. Worth a shared helper in a later cleanup.
-- **Faux provider scripting helper** — add a `scriptSubagentRun({parentToolCalls, childToolCalls, finalText})` test helper so future spawn tests don't off-by-one on the queue.
-- **`ChatPanelPage.systemMessageWithEvent(event)`** Playwright helper — avoids the `.last()` after `waitForIdle()` race documented in retrospective.
-- **`SubagentService.config`** field is declared but unused in C2 — keep for symmetry, drop in cleanup if YAGNI wins.
+- **`buildChildSessionState` duplicates `buildSessionState`** — acceptable now, will diverge with profile inheritance features. Worth a shared helper in a later cleanup, likely alongside P3c/P3d.
+- **Faux provider scripting helper** — add a `scriptSubagentRun({parentToolCalls, childToolCalls, finalText})` test helper so future spawn tests don't off-by-one on the queue. (Still deferred; v2's cancellation + LLM-invocation tests both hand-script.)
+- **`ChatPanelPage.systemMessageWithEvent(event)`** Playwright helper — avoids the `.last()` after `waitForIdle()` race documented in retrospective. (Still deferred; the new C4 spec uses the same pattern.)
+- **`SubagentService.config`** field is declared but unused — keep for symmetry, drop in cleanup if YAGNI wins.
+- **Lint `.bodhi-pi/agents/<name>.md` for orphan `disabled: true`** — v2 introduced. Silently no-ops if the name doesn't match any built-in or extension. A `subagents-doctor`-style helper could flag it.
+- **Pre-v2 SessionStore rehydration of child sessions reads `subagentDepth: 0`** — acceptable today (no production). Documented in the C3b commit body.
 
 ## Notes for re-reading
 

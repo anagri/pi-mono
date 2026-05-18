@@ -2,10 +2,12 @@
 
 Each entry: what, why deferred, where it will be picked up. Update this file as items move into a phase or get resolved.
 
-## Profile sources beyond markdown
+## Profile sources beyond markdown — ✅ resolved in v2
 
-- **Extension-registered profiles** — added to `ExtensionAPI.registerSubagentProfile(def)`. Roadmap: P2d.
-- **Bundled built-in profiles** — `src/subagents/profiles/<name>.md` or similar. Roadmap: P2c.
+Both items below shipped in v2 (P2c + P2d). See [v2-retrospective.md](./v2-retrospective.md).
+
+- ~~**Extension-registered profiles** — added to `ExtensionAPI.registerSubagentProfile(def)`. Roadmap: P2d.~~
+- ~~**Bundled built-in profiles** — `src/subagents/profiles/<name>.md` or similar. Roadmap: P2c.~~
 
 ## Context modes
 
@@ -61,7 +63,11 @@ Each entry: what, why deferred, where it will be picked up. Update this file as 
 | Slash UX `/agents`, `/subagent` | In v1 | C3 |
 | Child session in SessionStore with parentSessionId | In v1 | C1 plumbing + C2 use |
 | Recursion depth 2 cap | In v1 | C2 |
-| Bundled profiles | Deferred | P2c |
+| Bundled profiles | **In v2** | P2c — `explore` + `planner` ship in `src/subagents/profiles/` |
+| Extension-registered profiles | **In v2** | P2d — `ExtensionAPI.registerSubagentProfile(def)` |
+| Cancellation regression test | **In v2** | C3a |
+| `subagentDepth` cached on SessionState | **In v2** | C3b |
+| `evictChild` lifecycle per-status | **In v2** | C3c |
 | Forked context | Deferred | P2a |
 | Parallel batch | Deferred | P2b |
 | Background mode | Deferred | P3a |
