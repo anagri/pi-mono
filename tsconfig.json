@@ -45,6 +45,7 @@
 		"packages/bodhi-pi-ws-frontend/**/*",
 		"packages/bodhi-pi-ws-server/**/*",
 		"packages/bodhi-pi-http/**/*",
-		"packages/bodhi-pi-chrome-ext/**/*"
+		"packages/bodhi-pi-chrome-ext/**/*",
+		"packages/bodhi-pi-coding-agent/**/*"
 	]
 }
