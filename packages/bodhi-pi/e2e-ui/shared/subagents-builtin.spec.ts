@@ -23,6 +23,12 @@ test("subagent built-ins: /subagent explore <task> spawns the bundled explore pr
 	await expect(resultMsg).toHaveAttribute("data-subagent-status", "completed");
 	await expect(resultMsg).toHaveAttribute("data-subagent-name", "explore");
 	await expect(resultMsg).toContainText("BLUE_SWALLOW_42");
+
+	const group = chat.root.locator('[data-testid="subagent-group"][data-subagent-name="explore"]');
+	await expect(group).toBeVisible();
+	await expect(group).toHaveAttribute("data-subagent-status", "completed");
+	await expect(group).toHaveAttribute("open", "");
+	await expect(group.locator('[data-testid="subagent-group-body"]')).toContainText("BLUE_SWALLOW_42");
 });
 
 test("subagent built-ins: natural-language prompt triggers the LLM to invoke the subagent tool, sentinel reaches the final assistant message", async ({

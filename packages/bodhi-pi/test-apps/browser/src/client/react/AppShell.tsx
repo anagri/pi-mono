@@ -52,6 +52,7 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	const connRef = useRef<ClientSideConnection | null>(null);
 	const cwdRef = useRef<string>("");
 	const sessionIdRef = useRef<string>("");
+	const activeSubagentGroupsRef = useRef<Set<string>>(new Set());
 
 	useEffect(() => {
 		return () => {
@@ -64,30 +65,90 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		seqRef.current += 1;
 	}, []);
 
-	const pushEvent = useCallback((type: string, payload: string) => {
-		setEvents((prev) => [...prev, { seq: prev.length + 1, type, payload }]);
-		if (type === "mcp_oauth_status_change") {
-			// HTTP+WS server-side /oauth/callback path completes silently — there's no popup-to-opener
-			// postMessage path. Forward the lifecycle event to the in-process bus so the chat slash
-			// command can resolve its in-flight promise on it.
-			try {
-				const event = JSON.parse(payload) as {
-					slug?: string;
-					status?: "started" | "completed" | "failed" | "cancelled";
-					errorMessage?: string;
-				};
-				if (event.slug && event.status) {
-					emitOauthStatusEvent({
-						slug: event.slug,
-						status: event.status,
-						...(event.errorMessage !== undefined ? { errorMessage: event.errorMessage } : {}),
-					});
-				}
-			} catch {
-				// payload not JSON or malformed — silently drop; slash command will rely on postMessage or time out.
-			}
-		}
+	const openSubagentGroup = useCallback((childSessionId: string, profileName: string) => {
+		activeSubagentGroupsRef.current.add(childSessionId);
+		setChatMessages((prev) => [
+			...prev,
+			{
+				id: `subagent-${childSessionId}`,
+				role: "system",
+				text: "",
+				toolCalls: [],
+				subagentGroup: {
+					childSessionId,
+					profileName,
+					status: "running",
+					messages: [],
+				},
+			},
+		]);
 	}, []);
+
+	const closeSubagentGroup = useCallback(
+		(childSessionId: string, status: "completed" | "cancelled" | "failed") => {
+			activeSubagentGroupsRef.current.delete(childSessionId);
+			setChatMessages((prev) =>
+				prev.map((m) =>
+					m.subagentGroup && m.subagentGroup.childSessionId === childSessionId
+						? { ...m, subagentGroup: { ...m.subagentGroup, status } }
+						: m,
+				),
+			);
+		},
+		[],
+	);
+
+	const pushEvent = useCallback(
+		(type: string, payload: string) => {
+			setEvents((prev) => [...prev, { seq: prev.length + 1, type, payload }]);
+			if (type === "subagent_start") {
+				try {
+					const ev = JSON.parse(payload) as { childSessionId?: string; profile?: string };
+					if (ev.childSessionId && ev.profile) openSubagentGroup(ev.childSessionId, ev.profile);
+				} catch {
+					// nop
+				}
+				return;
+			}
+			if (type === "subagent_end") {
+				try {
+					const ev = JSON.parse(payload) as { childSessionId?: string; status?: string };
+					if (ev.childSessionId) {
+						const s =
+							ev.status === "completed" || ev.status === "cancelled" || ev.status === "failed"
+								? ev.status
+								: "completed";
+						closeSubagentGroup(ev.childSessionId, s);
+					}
+				} catch {
+					// nop
+				}
+				return;
+			}
+			if (type === "mcp_oauth_status_change") {
+				// HTTP+WS server-side /oauth/callback path completes silently — there's no popup-to-opener
+				// postMessage path. Forward the lifecycle event to the in-process bus so the chat slash
+				// command can resolve its in-flight promise on it.
+				try {
+					const event = JSON.parse(payload) as {
+						slug?: string;
+						status?: "started" | "completed" | "failed" | "cancelled";
+						errorMessage?: string;
+					};
+					if (event.slug && event.status) {
+						emitOauthStatusEvent({
+							slug: event.slug,
+							status: event.status,
+							...(event.errorMessage !== undefined ? { errorMessage: event.errorMessage } : {}),
+						});
+					}
+				} catch {
+					// payload not JSON or malformed — silently drop; slash command will rely on postMessage or time out.
+				}
+			}
+		},
+		[openSubagentGroup, closeSubagentGroup],
+	);
 
 	const applyContentBlocks = (blocks: ContentBlock[] | undefined): string => {
 		if (!blocks) return "";
@@ -111,55 +172,67 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		}
 		setChatMessages((prev) => {
 			const next = [...prev];
-			const upsertLast = (role: "user" | "assistant" | "system", text: string) => {
-				const last = next[next.length - 1];
-				if (last && last.role === role && last.toolCalls.length === 0) {
-					next[next.length - 1] = { ...last, text: last.text + text };
-				} else {
-					next.push({ id: `${role}-${next.length}`, role, text, toolCalls: [] });
-				}
-			};
-			const addToolCall = (tc: ChatToolCall) => {
-				const last = next[next.length - 1];
-				if (last && last.role === "assistant") {
-					next[next.length - 1] = { ...last, toolCalls: [...last.toolCalls, tc] };
-				} else {
-					next.push({ id: `assistant-${next.length}`, role: "assistant", text: "", toolCalls: [tc] });
-				}
-			};
-			const updateToolCall = (id: string, patch: Partial<ChatToolCall>) => {
-				for (let i = next.length - 1; i >= 0; i--) {
-					const m = next[i];
-					if (!m) continue;
-					const idx = m.toolCalls.findIndex((t) => t.id === id);
-					if (idx !== -1) {
-						const updated = [...m.toolCalls];
-						const existing = updated[idx]!;
-						updated[idx] = { ...existing, ...patch };
-						next[i] = { ...m, toolCalls: updated };
-						return;
+			const isGrouped = activeSubagentGroupsRef.current.has(n.sessionId);
+			const applyTo = (arr: ChatMessage[]): ChatMessage[] => {
+				const out = [...arr];
+				const upsertLast = (role: "user" | "assistant" | "system", text: string) => {
+					const last = out[out.length - 1];
+					if (last && last.role === role && last.toolCalls.length === 0 && !last.subagentGroup) {
+						out[out.length - 1] = { ...last, text: last.text + text };
+					} else {
+						out.push({ id: `${role}-${out.length}`, role, text, toolCalls: [] });
 					}
+				};
+				const addToolCall = (tc: ChatToolCall) => {
+					const last = out[out.length - 1];
+					if (last && last.role === "assistant" && !last.subagentGroup) {
+						out[out.length - 1] = { ...last, toolCalls: [...last.toolCalls, tc] };
+					} else {
+						out.push({ id: `assistant-${out.length}`, role: "assistant", text: "", toolCalls: [tc] });
+					}
+				};
+				const updateToolCall = (id: string, patch: Partial<ChatToolCall>) => {
+					for (let i = out.length - 1; i >= 0; i--) {
+						const m = out[i];
+						if (!m) continue;
+						const idx = m.toolCalls.findIndex((t) => t.id === id);
+						if (idx !== -1) {
+							const updated = [...m.toolCalls];
+							const existing = updated[idx]!;
+							updated[idx] = { ...existing, ...patch };
+							out[i] = { ...m, toolCalls: updated };
+							return;
+						}
+					}
+				};
+				switch (u.sessionUpdate) {
+					case "user_message_chunk":
+						upsertLast("user", applyContentBlocks([u.content]));
+						break;
+					case "agent_message_chunk":
+						upsertLast("assistant", applyContentBlocks([u.content]));
+						break;
+					case "tool_call":
+						addToolCall({
+							id: u.toolCallId,
+							name: u.title ?? u.kind ?? "tool",
+							status: mapToolStatus(u.status),
+						});
+						break;
+					case "tool_call_update":
+						updateToolCall(u.toolCallId, u.status ? { status: mapToolStatus(u.status) } : {});
+						break;
 				}
+				return out;
 			};
-			switch (u.sessionUpdate) {
-				case "user_message_chunk":
-					upsertLast("user", applyContentBlocks([u.content]));
-					break;
-				case "agent_message_chunk":
-					upsertLast("assistant", applyContentBlocks([u.content]));
-					break;
-				case "tool_call":
-					addToolCall({
-						id: u.toolCallId,
-						name: u.title ?? u.kind ?? "tool",
-						status: mapToolStatus(u.status),
-					});
-					break;
-				case "tool_call_update":
-					updateToolCall(u.toolCallId, u.status ? { status: mapToolStatus(u.status) } : {});
-					break;
+			if (isGrouped) {
+				return next.map((m) =>
+					m.subagentGroup && m.subagentGroup.childSessionId === n.sessionId
+						? { ...m, subagentGroup: { ...m.subagentGroup, messages: applyTo(m.subagentGroup.messages) } }
+						: m,
+				);
 			}
-			return next;
+			return applyTo(next);
 		});
 	}, []);
 
