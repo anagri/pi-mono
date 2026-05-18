@@ -58,9 +58,6 @@ function buildSubagentSchema(profiles: SubagentProfile[]) {
 			task: Type.String({
 				description: "Self-contained task description. The sub-agent does NOT see the parent conversation.",
 			}),
-			context: Type.Optional(
-				Type.Literal("fresh", { description: "Context mode. Only 'fresh' is supported in v1." }),
-			),
 			model: Type.Optional(
 				Type.String({
 					description:

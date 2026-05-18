@@ -22,12 +22,11 @@ The built-in `subagent` tool (`src/tools/subagent.ts`) is registered by `createB
 subagent({
   agent: "<one of the discovered profile names>",
   task: string,
-  context?: "fresh",   // v1: "fresh" only
   model?: string,
-}) -> (C2: AgentToolResult with childSessionId + summary)
+}) -> AgentToolResult with childSessionId + summary
 ```
 
-C1 stub: the tool is registered (so the LLM sees it in its tool list and the system prompt's "Available tools" includes it), but `execute` throws "spawn path lands in C2".
+The tool params schema declares `additionalProperties: false`. Context mode is fixed at `"fresh"` internally (see [`SubagentProfile.context`](#profile-frontmatter)) and is intentionally NOT exposed as an LLM-facing parameter — single-const optional fields attract free-text from LLMs and trigger validation failures. A real `context` discriminator returns when P2a (forked context) ships ≥2 valid modes; it will be named to avoid the `context` attractor (e.g. `isolation`, `mode`).
 
 ### Profile frontmatter
 
