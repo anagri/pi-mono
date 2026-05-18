@@ -20,7 +20,6 @@ export interface ToolDeps {
 	cwd: string;
 	scriptExecutor?: ScriptExecutor;
 	terminal?: Terminal;
-	/** When present (and `profiles.length > 0`), the first-party `subagent` tool is registered. */
 	subagent?: {
 		sessionId: string;
 		profiles: SubagentProfile[];

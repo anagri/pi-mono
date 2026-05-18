@@ -60,7 +60,6 @@ export interface SessionState {
 	/** Project-discovered commands frozen at session hydration; combined with extension commands at refresh time. */
 	projectCommands: PromptTemplate[];
 	skills: Skill[];
-	/** Sub-agent profiles discovered under `<cwd>/.bodhi-pi/agents/*.md`. Drives `_bodhi-pi/subagent/list` and the conditional `subagent` built-in tool registration. */
 	subagentProfiles: SubagentProfile[];
 	appendSystemPrompt: string | null;
 	contextFiles: ContextFile[];

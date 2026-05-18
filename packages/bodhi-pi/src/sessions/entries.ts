@@ -91,10 +91,6 @@ export interface CustomMessageEntry extends BaseEntry {
 	details?: unknown;
 }
 
-/**
- * Lineage record for a sub-agent child session. Appended as the first entry of a child session
- * by `SubagentService.spawn`. Never appears in a parent's session log.
- */
 export interface SubagentLinkEntry extends BaseEntry {
 	type: "subagent_link";
 	parentSessionId: string;
@@ -104,11 +100,6 @@ export interface SubagentLinkEntry extends BaseEntry {
 	depth: number;
 }
 
-/**
- * Terminal marker for a sub-agent child run. Appended after `runPromptLoop` returns (or aborts).
- * `summary` is the child's last assistant text (truncated to a bounded size); `error` is set when
- * `status === "failed"`.
- */
 export interface SubagentCompleteEntry extends BaseEntry {
 	type: "subagent_complete";
 	status: "completed" | "cancelled" | "failed";

@@ -135,19 +135,6 @@ export const EXT_MCP_OAUTH_DISCOVER = "_bodhi-pi/mcp/oauth/discover";
  */
 export const EXT_MCP_OAUTH_REGISTER = "_bodhi-pi/mcp/oauth/register";
 
-/**
- * List discovered sub-agent profiles for the given session's cwd. Params: `{sessionId}`.
- * Returns `{profiles: SubagentProfileSummary[]}`.
- */
 export const EXT_SUBAGENT_LIST = "_bodhi-pi/subagent/list";
-/**
- * Invoke a sub-agent profile with a task. Used by `/subagent <name> <task>` slash dispatch;
- * the LLM-facing path is the first-party `subagent` built-in tool. Params: `{sessionId, agent, task, context?, model?}`.
- * Returns `{childSessionId, status, summary?, error?, durationMs, toolCount}`.
- */
 export const EXT_SUBAGENT_RUN = "_bodhi-pi/subagent/run";
-/**
- * List sub-agent child sessions for the given parent. Params: `{sessionId}` (the parent).
- * Returns `{children: SessionInfo[]}`.
- */
 export const EXT_SUBAGENT_CHILDREN = "_bodhi-pi/subagent/children";

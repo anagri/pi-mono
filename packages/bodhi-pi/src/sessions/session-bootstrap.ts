@@ -53,9 +53,6 @@ export interface BootstrapDeps {
 /**
  * Read all per-cwd bootstrap inputs in parallel: discovered tools, project + global settings,
  * and the merged file-settings view. Pure I/O — no Agent construction yet.
- *
- * `builtinTools` is built per `sessionId` so the conditional `subagent` tool can close over the
- * parent's id (the tool needs it to create child sessions linked back).
  */
 export async function loadProjectArtifacts(
 	config: BodhiPiConfig,
@@ -349,7 +346,7 @@ export async function rehydrateSession(
 				? record.entries[record.entries.length - 1].id
 				: null;
 	const requested = ctx.currentModelId ?? deps.config.defaultModelId ?? null;
-	const restoredModel = await deps.modelRegistry.resolveSessionModel(requested);
+	const restoredModel = requested ? await deps.modelRegistry.resolveSessionModel(requested) : null;
 	await buildSessionState(deps, {
 		sessionId,
 		model: restoredModel,
