@@ -9,7 +9,7 @@ import type { McpService } from "@/mcp/mcp-service.js";
 import { extractText } from "@/sessions/_shared.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
 import { cloneTranscriptSlice } from "@/sessions/clone-slice.js";
-import type { SubagentCompleteEntry, SubagentLinkEntry } from "@/sessions/entries.js";
+import type { SessionEntry, SubagentBatchEntry, SubagentCompleteEntry, SubagentLinkEntry } from "@/sessions/entries.js";
 import { requireLiveSession } from "@/sessions/resolution.js";
 import type { BootstrapDeps } from "@/sessions/session-bootstrap.js";
 import type { SessionState } from "@/sessions/session-state.js";
@@ -20,12 +20,15 @@ import { buildChildSessionState } from "./build-child-state.js";
 import { profileToSummary, type SubagentProfile } from "./types.js";
 
 type ExtHandler = (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
+type AppendEntry = (sessionId: string, session: SessionState, entry: SessionEntry) => Promise<void>;
 
 export const SUBAGENT_MAX_DEPTH = 2;
 /** Max chars captured from the child's final assistant message into the parent's tool_result body. */
 export const SUBAGENT_SUMMARY_MAX_CHARS = 4000;
 /** Max chars shown in the parent's progress UI when a child invokes a tool. */
 export const SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS = 80;
+/** Default maximum number of children spawnable in a single `subagent_batch` dispatch. */
+export const SUBAGENT_DEFAULT_MAX_BATCH_CONCURRENCY = 5;
 
 export interface SubagentServiceDeps {
 	sessions: Map<string, SessionState>;
@@ -36,6 +39,8 @@ export interface SubagentServiceDeps {
 	mcpService: McpService;
 	bootstrapDeps: () => BootstrapDeps;
 	promptLoopDeps: () => PromptLoopDeps;
+	appendEntry: AppendEntry;
+	maxBatchConcurrency?: number;
 }
 
 interface ActiveRun {
@@ -55,6 +60,10 @@ export interface SubagentSpawnInput {
 	modelOverride?: string;
 	signal?: AbortSignal;
 	onUpdate?: AgentToolUpdateCallback;
+	/** Pre-computed fork slice. When provided, `spawn` skips the per-child slice computation. */
+	inheritedMessages?: AgentMessage[];
+	/** When provided, `spawn` reuses this child session id instead of creating a new one. */
+	preCreatedChildSessionId?: string;
 }
 
 export interface SubagentSpawnResult {
@@ -66,6 +75,19 @@ export interface SubagentSpawnResult {
 	error?: string;
 }
 
+export interface SubagentSpawnBatchInput {
+	parentSessionId: string;
+	batchToolCallId: string;
+	tasks: Array<{ profile: SubagentProfile; task: string; modelOverride?: string }>;
+	failFast?: boolean;
+	signal?: AbortSignal;
+}
+
+export interface SubagentSpawnBatchResult {
+	batchToolCallId: string;
+	results: SubagentSpawnResult[];
+}
+
 export class SubagentService {
 	private readonly sessions: Map<string, SessionState>;
 	private readonly sessionStore: SessionStore;
@@ -75,6 +97,8 @@ export class SubagentService {
 	private readonly mcpService: McpService;
 	private readonly bootstrapDeps: () => BootstrapDeps;
 	private readonly promptLoopDeps: () => PromptLoopDeps;
+	private readonly appendEntry: AppendEntry;
+	private readonly maxBatchConcurrency: number;
 	private readonly activeRuns = new Map<string, ActiveRun>();
 
 	constructor(deps: SubagentServiceDeps) {
@@ -86,6 +110,8 @@ export class SubagentService {
 		this.mcpService = deps.mcpService;
 		this.bootstrapDeps = deps.bootstrapDeps;
 		this.promptLoopDeps = deps.promptLoopDeps;
+		this.appendEntry = deps.appendEntry;
+		this.maxBatchConcurrency = deps.maxBatchConcurrency ?? SUBAGENT_DEFAULT_MAX_BATCH_CONCURRENCY;
 
 		this.events.appendHandlers("tool_execution_start", [
 			async (e) => {
@@ -149,12 +175,17 @@ export class SubagentService {
 			throw new RequestError(-32603, `subagent.spawn: max depth ${SUBAGENT_MAX_DEPTH} exceeded (would be ${depth})`);
 		}
 
-		const childRecord = await this.sessionStore.create({
-			cwd: parent.cwd,
-			parentSessionId: input.parentSessionId,
-			subagent: { profileName: input.profile.name },
-		});
-		const childSessionId = childRecord.id;
+		let childSessionId: string;
+		if (input.preCreatedChildSessionId !== undefined) {
+			childSessionId = input.preCreatedChildSessionId;
+		} else {
+			const childRecord = await this.sessionStore.create({
+				cwd: parent.cwd,
+				parentSessionId: input.parentSessionId,
+				subagent: { profileName: input.profile.name },
+			});
+			childSessionId = childRecord.id;
+		}
 
 		const linkEntry: SubagentLinkEntry = {
 			type: "subagent_link",
@@ -171,8 +202,8 @@ export class SubagentService {
 		await this.sessionStore.append(childSessionId, linkEntry);
 		await this.sessionStore.setLeafId(childSessionId, linkEntry.id);
 
-		let inheritedMessages: AgentMessage[] = [];
-		if (input.profile.context === "fork") {
+		let inheritedMessages: AgentMessage[] = input.inheritedMessages ?? [];
+		if (input.profile.context === "fork" && input.inheritedMessages === undefined) {
 			const parentRecord = await this.sessionStore.load(input.parentSessionId);
 			if (!parentRecord) {
 				throw new RequestError(
@@ -322,6 +353,152 @@ export class SubagentService {
 		session.runtime.piAgent.abort();
 		this.mcpService.closeSession(sessionId);
 		this.sessions.delete(sessionId);
+	}
+
+	get batchConcurrencyCap(): number {
+		return this.maxBatchConcurrency;
+	}
+
+	async spawnBatch(input: SubagentSpawnBatchInput): Promise<SubagentSpawnBatchResult> {
+		const parent = this.sessions.get(input.parentSessionId);
+		if (!parent) {
+			throw new RequestError(-32603, `subagent.spawnBatch: parent session ${input.parentSessionId} not loaded`);
+		}
+		if (input.tasks.length === 0) {
+			throw new RequestError(-32602, "subagent.spawnBatch: tasks must be a non-empty array");
+		}
+		if (input.tasks.length > this.maxBatchConcurrency) {
+			throw new RequestError(
+				-32602,
+				`subagent.spawnBatch: batch size ${input.tasks.length} exceeds maxBatchConcurrency=${this.maxBatchConcurrency}; reduce tasks or raise config.subagents.maxBatchConcurrency`,
+			);
+		}
+
+		const failFast = input.failFast === true;
+		const startTime = Date.now();
+
+		let cachedForkMessages: AgentMessage[] | undefined;
+		if (input.tasks.some((t) => t.profile.context === "fork")) {
+			const parentRecord = await this.sessionStore.load(input.parentSessionId);
+			if (!parentRecord) {
+				throw new RequestError(
+					-32603,
+					`subagent.spawnBatch: parent session ${input.parentSessionId} record disappeared mid-spawn`,
+				);
+			}
+			const sliced = cloneTranscriptSlice(parentRecord.entries, {
+				leafOrFromEntryId: parentRecord.leafId,
+				excludeEntryTypes: SUBAGENT_FORK_FILTER,
+			});
+			cachedForkMessages = buildSessionContext({ entries: sliced, leafId: null }).messages;
+		}
+
+		const childSessionIds: string[] = [];
+		for (const t of input.tasks) {
+			const rec = await this.sessionStore.create({
+				cwd: parent.cwd,
+				parentSessionId: input.parentSessionId,
+				subagent: { profileName: t.profile.name },
+			});
+			childSessionIds.push(rec.id);
+		}
+
+		await this.events.emit({
+			type: "subagent_batch_start",
+			parentSessionId: input.parentSessionId,
+			batchToolCallId: input.batchToolCallId,
+			childSessionIds: [...childSessionIds],
+			profileNames: input.tasks.map((t) => t.profile.name),
+			tasks: input.tasks.map((t) => t.task),
+			failFast,
+		});
+
+		const batchAC = new AbortController();
+		const wrappedSignals = input.tasks.map(() =>
+			input.signal ? AbortSignal.any([input.signal, batchAC.signal]) : batchAC.signal,
+		);
+
+		const promises = input.tasks.map((t, i) =>
+			this.spawn({
+				parentSessionId: input.parentSessionId,
+				profile: t.profile,
+				task: t.task,
+				toolCallId: `${input.batchToolCallId}#${i}`,
+				preCreatedChildSessionId: childSessionIds[i],
+				signal: wrappedSignals[i],
+				...(t.modelOverride !== undefined ? { modelOverride: t.modelOverride } : {}),
+				...(t.profile.context === "fork" && cachedForkMessages !== undefined
+					? { inheritedMessages: cachedForkMessages }
+					: {}),
+			}).then((result) => {
+				if (failFast && result.status !== "completed" && !batchAC.signal.aborted) batchAC.abort();
+				return result;
+			}),
+		);
+
+		const results = await Promise.all(promises);
+		const durationMs = Date.now() - startTime;
+
+		const batchEntry: SubagentBatchEntry = {
+			type: "subagent_batch",
+			id: randomUUID(),
+			parentId: null,
+			timestamp: Date.now(),
+			batchToolCallId: input.batchToolCallId,
+			childSessionIds: results.map((r) => r.childSessionId),
+			profileNames: input.tasks.map((t) => t.profile.name),
+			statuses: results.map((r) => r.status),
+			durationMs,
+		};
+		try {
+			await this.appendEntry(input.parentSessionId, parent, batchEntry);
+		} catch (err) {
+			this.logger.error("[bodhi-pi subagent] failed to append batch entry on parent", err);
+		}
+
+		await this.events.emit({
+			type: "subagent_batch_end",
+			parentSessionId: input.parentSessionId,
+			batchToolCallId: input.batchToolCallId,
+			childSessionIds: results.map((r) => r.childSessionId),
+			profileNames: input.tasks.map((t) => t.profile.name),
+			statuses: results.map((r) => r.status),
+			durationMs,
+		});
+
+		return { batchToolCallId: input.batchToolCallId, results };
+	}
+
+	buildBatchToolResult(batch: SubagentSpawnBatchResult, profileNames: string[]): AgentToolResult<unknown> {
+		const lines: string[] = [];
+		lines.push(`<subagent_batch_result count="${batch.results.length}" batchToolCallId="${batch.batchToolCallId}">`);
+		batch.results.forEach((r, i) => {
+			const profile = profileNames[i] ?? "?";
+			lines.push(
+				`<child index="${i}" profile="${profile}" status="${r.status}" childSessionId="${r.childSessionId}" durationMs="${r.durationMs}" toolCount="${r.toolCount}">`,
+			);
+			if (r.error !== undefined) {
+				lines.push(`<error>${r.error}</error>`);
+			}
+			lines.push(r.summary || "(no text output)");
+			lines.push("</child>");
+		});
+		lines.push("</subagent_batch_result>");
+		return {
+			content: [{ type: "text", text: lines.join("\n") }],
+			details: {
+				kind: "subagent_batch_result",
+				batchToolCallId: batch.batchToolCallId,
+				children: batch.results.map((r, i) => ({
+					childSessionId: r.childSessionId,
+					profile: profileNames[i] ?? "?",
+					status: r.status,
+					durationMs: r.durationMs,
+					toolCount: r.toolCount,
+					...(r.error !== undefined ? { error: r.error } : {}),
+				})),
+			},
+		};
 	}
 
 	buildToolResult(result: SubagentSpawnResult, profile: SubagentProfile): AgentToolResult<unknown> {

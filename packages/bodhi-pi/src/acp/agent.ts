@@ -128,6 +128,11 @@ export interface BodhiPiConfig {
 	 * exceptions, branch-summarisation fall-through). Defaults to `console.error` when unset.
 	 */
 	logger?: BodhiPiLogger;
+	/** Sub-agent service knobs. */
+	subagents?: {
+		/** Max children dispatchable in a single `subagent_batch` call. Defaults to 5. */
+		maxBatchConcurrency?: number;
+	};
 }
 
 export interface BodhiPiLogger {
@@ -291,6 +296,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 			mcpService: this.mcpService,
 			bootstrapDeps: () => this.bootstrapDeps(),
 			promptLoopDeps: () => this.promptLoopDeps(),
+			appendEntry: this.appendEntry.bind(this),
+			...(config.subagents?.maxBatchConcurrency !== undefined
+				? { maxBatchConcurrency: config.subagents.maxBatchConcurrency }
+				: {}),
 		});
 
 		this.extHandlers = new Map<string, ExtHandler>([

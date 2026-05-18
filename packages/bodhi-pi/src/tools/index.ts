@@ -13,6 +13,7 @@ import { createLsTool } from "./ls.js";
 import { createReadTool } from "./read.js";
 import { createRunScriptTool } from "./run-script.js";
 import { createSubagentTool } from "./subagent.js";
+import { createSubagentBatchTool } from "./subagent-batch.js";
 import { createWriteTool } from "./write.js";
 
 export interface ToolDeps {
@@ -44,6 +45,7 @@ export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
 	}
 	if (deps.subagent && deps.subagent.profiles.length > 0) {
 		tools.push(createSubagentTool(deps.subagent));
+		tools.push(createSubagentBatchTool(deps.subagent));
 	}
 	return tools;
 }
@@ -63,6 +65,7 @@ export const BUILTIN_TOOL_SNIPPETS: Record<string, string> = {
 	run_script: "Execute a JavaScript file at PATH with positional ARGS; returns stdout/stderr and exit code",
 	bash: "Execute a bash command; returns stdout, stderr, exit code, signal, durationMs, timedOut, truncated",
 	subagent: "Delegate a focused task to a specialized sub-agent profile; returns its findings as text",
+	subagent_batch: "Dispatch 2+ sub-agents concurrently from one tool call; returns per-child results in input order",
 };
 
 /**
@@ -88,6 +91,7 @@ export function toolKindFor(name: string): "read" | "edit" | "search" | "execute
 		case "run_script":
 		case "bash":
 		case "subagent":
+		case "subagent_batch":
 			return "execute";
 		default:
 			return "other";
