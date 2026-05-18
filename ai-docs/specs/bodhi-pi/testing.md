@@ -68,6 +68,10 @@ Cross-host parity is enforced by feature: every shipped feature must reach every
 | http per-turn rebuild preserves MCP inclusion across requests | Per-Host e2e (`test-apps/http/e2e/`) — server-side via real LLM |
 | Chrome extension sandbox script executor runs a skill | Per-Host e2e (`test-apps/chrome-ext/e2e/`) |
 | MCP OAuth (pre-registered or DCR) end-to-end against a PKCE-validating server | Integration (`test/mcp-oauth*.test.ts`) + cli-headless e2e (`e2e/cli-headless/mcp-oauth*.e2e.ts`) + UI e2e (`e2e-ui/shared/mcp-oauth.spec.ts`) — fixture lives in `e2e/helpers/oauth-mcp-server.ts`, spawned by both `e2e/global-setup.ts` and `e2e-ui/global-setup.ts` so every layer can drive a deterministic OAuth flow. The fixture serves RFC 9728 + 8414 + 7591 + `/authorize` (with `?auto=1` for headless auto-approval) + `/token` (validates PKCE) + `/mcp` (Bearer-gated). |
+| Sub-agent profile discovery + `_bodhi-pi/subagent/list` returns parsed profiles | Integration (`test/subagents-discovery.test.ts`, `test/subagents-list-extmethod.test.ts`) + Agent e2e (`e2e/shared/subagents-list.e2e.ts`) across in-memory/cli/http/ws |
+| Sub-agent spawn end-to-end — parent LLM calls `subagent` tool, child runs, returns summary | Integration (`test/subagents-spawn.test.ts`, faux providers for both parent + child) + Agent e2e (`e2e/shared/subagents.e2e.ts`, canonical extractor scenario with real `gpt-4o-mini`) + UI e2e (`e2e-ui/shared/subagents.spec.ts` Playwright across browser/chrome-ext/http/ws) |
+| Sub-agent recursion guard rejects spawn at depth > 2 | Integration (`test/subagents-spawn.test.ts`) |
+| Sub-agent child filtering — default `session/list` excludes children, `includeSubagentChildren: true` includes them | Integration (`test/sessions-subagent-filter.test.ts`) |
 
 ## Adding a new test
 

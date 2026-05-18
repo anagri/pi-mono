@@ -58,7 +58,7 @@ In single-process Hosts (cli, browser-worker, chrome-ext) Host and Client run in
 
 ## Agent internal composition
 
-The `BodhiPiAcpAgent` class at `src/acp/agent.ts:162-555` is a façade that delegates to six services constructed in its constructor:
+The `BodhiPiAcpAgent` class at `src/acp/agent.ts:162-555` is a façade that delegates to seven services constructed in its constructor:
 
 | Service | File | Owns |
 |---|---|---|
@@ -69,6 +69,7 @@ The `BodhiPiAcpAgent` class at `src/acp/agent.ts:162-555` is a façade that dele
 | `SessionInfoService` | `src/sessions/session-info-service.ts` | `_bodhi-pi/session/{config,setName,stats,export}` |
 | `SessionGraphService` | `src/sessions/session-graph-service.ts` | `_bodhi-pi/session/{tree,navigate,entries,fork,clone,delete}` + cross-branch summarization |
 | `CompactionOrchestrator` | `src/sessions/compaction-orchestrator.ts` | `_bodhi-pi/session/compact` + proactive `prepareNextTurn` hook + overflow recovery |
+| `SubagentService` | `src/subagents/subagent-service.ts` | `_bodhi-pi/subagent/{list,run,children}` + in-process child-session spawn + progress mirroring + recursion guard |
 
 Each service exposes `register(): Array<[method, handler]>`; the façade flattens them into `extHandlers` at `src/acp/agent.ts:256-264` and dispatches via `extMethod` at `src/acp/agent.ts:481-485`.
 
@@ -105,8 +106,11 @@ src/
 │                     + SessionInfoService + SessionGraphService + CompactionOrchestrator
 ├── settings/         layered settings (defaults/global/project/host/session) + SettingsService
 ├── skills/           skill discovery (.bodhi-pi/skills/*.md) + Skill type
+├── subagents/        sub-agent profile discovery (.bodhi-pi/agents/*.md)
+│                     + SubagentService (spawn + handlers) + buildChildSessionState
+│                     + composeSubagentSystemPrompt — see subagents.md
 ├── terminal/         Terminal interface
-├── tools/            built-in tools (read/write/edit/ls/find/grep/run_script/bash)
+├── tools/            built-in tools (read/write/edit/ls/find/grep/run_script/bash/subagent)
 │                     + _accumulate + _text-encoding + file-mutation-queue
 ├── wire/             leaf protocol module (constants, validators, converters)
 │                     — only this module knows ACP method names

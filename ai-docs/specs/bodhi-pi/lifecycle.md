@@ -17,8 +17,12 @@ Canonical persistence unit. Discriminated by `type`. Source: `src/sessions/entri
 | `session_info` | `{name?}` | `_bodhi-pi/session/setName` |
 | `extension` | `{extensionName, customType, data}` | Extension via `ExtensionAPI.appendEntry` |
 | `custom_message` | `{extensionName, customType, content, display, details?}` | Extension via `ExtensionAPI.sendMessage` |
+| `subagent_link` | `{parentSessionId, profileName, task, toolCallId, depth}` | `SubagentService.spawn` — appended as the FIRST entry of a child session (parent is the spawning session, not a sibling SessionEntry). See [subagents.md](./subagents.md). |
+| `subagent_complete` | `{status: "completed"\|"cancelled"\|"failed", summary, durationMs, error?}` | `SubagentService.spawn` — appended after the child's `runPromptLoop` returns (or aborts). Terminal marker for the child run. |
 
 Every entry has `id` (UUID), `parentId` (optional; `null` = root), `timestamp` (ms). The `parentId` chain forms the **Session DAG**.
+
+> `subagent_link` + `subagent_complete` never appear in the parent's session log — they live in the child session, bracketing its transcript. `buildSessionContext` filters both before assembling LLM messages, so they don't reach the model.
 
 > Naming note: `ExtensionEntry.type = "extension"` is what coding-agent calls `custom`. Rename deferred — see CONTEXT.md "Flagged ambiguities".
 

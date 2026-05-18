@@ -34,7 +34,7 @@ All four host packages are `private: true`. None is published to npm.
 | `src/host/agent.ts` | host | `createBodhiPiAgent` + Node-adapter wiring |
 | `src/host/config.ts` | host | CLI arg parsing for Host construction |
 | `src/client/acp/repl.ts` | client | Interactive REPL loop; constructs `BodhiPiClient` via `createBodhiPiClient(clientConn,{cwd})` |
-| `src/client/acp/headless.ts` | client | Non-interactive Client variant; uses `BodhiPiClient` for one-shot prompts |
+| `src/client/acp/headless.ts` | client | Non-interactive Client variant; uses `BodhiPiClient` for one-shot prompts. Dispatches built-in slashes: `/mcp*`, `/agents`, `/subagent <name> <task>`, `/subagent children` |
 | `src/client/lib/commands.ts` | client | Slash dispatcher; imports `BodhiPiClient` type |
 | `src/client/lib/render.ts` | client | Terminal output rendering (no React in cli) |
 
@@ -121,7 +121,7 @@ Note: `adapter-http.ts` + `adapter-ws.ts` are two parallel transports — kept a
 | `src/client/index.ts` | client | Top-level Client barrel re-exporting the React panels + transport types from app-utils |
 | `src/client/acp/adapter.ts` | client | `createBrowserAdapter()` — wires the worker via `new URL("../../host/worker.ts", import.meta.url)` |
 | `src/client/runtime/adapter.ts` | client | `createTransportAdapter({workerFactory, createSandboxPort?})` builder. **Runs on the main thread**; parses `seedFiles` (via app-utils `parseSeedFiles`), creates the worker, posts the init message |
-| `src/client/lib/{crypto-shim,frame-log,slash-router,worker-fs-bridge,workspace-constants,commands}.ts` | client | Client-side utilities: SubtleCrypto polyfill, dev frame-log handlers, slash router, page-side FS-bridge to the worker, workspace path constants, client-side slash command bindings |
+| `src/client/lib/{crypto-shim,frame-log,slash-router,worker-fs-bridge,workspace-constants,commands}.ts` | client | Client-side utilities: SubtleCrypto polyfill, dev frame-log handlers, slash router, page-side FS-bridge to the worker, workspace path constants, client-side slash command bindings. `commands.ts` dispatches `/mcp*`, `/agents`, `/subagent <name> <task>`, `/subagent children` (shared with http frontend and chrome-ext via `@bodhiapp/bodhi-pi-test-app-browser/client` subpath import) |
 
 **Cross-package promotions to `test-apps/app-utils/`** (consumed by browser, chrome-ext, and http frontends):
 | Symbol | app-utils file | Notes |
