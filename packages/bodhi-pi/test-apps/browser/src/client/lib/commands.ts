@@ -13,7 +13,11 @@ import {
 	EXT_MCP_RECONNECT,
 	EXT_MCP_REMOVE,
 	EXT_MCP_TOOLS,
+	EXT_SUBAGENT_CHILDREN,
+	EXT_SUBAGENT_LIST,
+	EXT_SUBAGENT_RUN,
 	parseMcpAddArgs,
+	type SubagentProfileSummary,
 } from "@bodhiapp/bodhi-pi";
 import { onOauthStatusEvent } from "./oauth-event-bus.ts";
 
@@ -244,6 +248,91 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 			const sub = parts[1];
 			const rest = parts.slice(2);
 			return await handleMcpSubcommand(sub, rest, ctx);
+		}
+
+		case "/agents": {
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SUBAGENT_LIST, { sessionId: ctx.state.sessionId })) as {
+					profiles: SubagentProfileSummary[];
+				};
+				if (result.profiles.length === 0) {
+					ctx.pushSystemMessage("(no sub-agent profiles in .bodhi-pi/agents/)", { "data-subagent-event": "list-empty" });
+				} else {
+					const lines = ["agents:"];
+					for (const p of result.profiles) lines.push(`  ${p.name}  ${p.description}`);
+					ctx.pushSystemMessage(lines.join("\n"), {
+						"data-subagent-event": "list",
+						"data-subagent-count": String(result.profiles.length),
+					});
+				}
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/subagent": {
+			const sub = parts[1];
+			if (sub === "children") {
+				try {
+					const result = (await ctx.conn.extMethod(EXT_SUBAGENT_CHILDREN, {
+						sessionId: ctx.state.sessionId,
+					})) as { children: Array<{ sessionId: string; subagent?: { profileName: string } }> };
+					if (result.children.length === 0) {
+						ctx.pushSystemMessage("(no sub-agent runs from this session)", {
+							"data-subagent-event": "children-empty",
+						});
+					} else {
+						const lines = ["sub-agent runs:"];
+						for (const c of result.children) {
+							lines.push(`  ${c.sessionId}  ${c.subagent?.profileName ?? "(unknown)"}`);
+						}
+						ctx.pushSystemMessage(lines.join("\n"), {
+							"data-subagent-event": "children",
+							"data-subagent-count": String(result.children.length),
+						});
+					}
+				} catch (err) {
+					ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+				}
+				return { handled: true };
+			}
+			const agent = parts[1];
+			const taskParts = parts.slice(2);
+			if (!agent || taskParts.length === 0) {
+				ctx.pushSystemMessage("usage: /subagent <name> <task...>  |  /subagent children");
+				return { handled: true };
+			}
+			const task = line.trim().slice(`/subagent ${agent} `.length);
+			try {
+				const result = (await ctx.conn.extMethod(EXT_SUBAGENT_RUN, {
+					sessionId: ctx.state.sessionId,
+					agent,
+					task,
+				})) as {
+					childSessionId: string;
+					status: string;
+					summary?: string;
+					durationMs: number;
+					toolCount: number;
+					error?: string;
+				};
+				const lines = [
+					`sub-agent ${agent}: ${result.status} (${result.durationMs}ms, ${result.toolCount} tool calls)`,
+					`childSessionId: ${result.childSessionId}`,
+				];
+				if (result.summary) lines.push("", result.summary);
+				if (result.error) lines.push("", `error: ${result.error}`);
+				ctx.pushSystemMessage(lines.join("\n"), {
+					"data-subagent-event": "run-result",
+					"data-subagent-name": agent,
+					"data-subagent-status": result.status,
+					"data-subagent-child-session-id": result.childSessionId,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
 		}
 
 		default:
