@@ -18,19 +18,11 @@ Shipped 2026-05-18. `context: "fork"` profile mode clones the parent's transcrip
 
 See [p2a-retrospective.md](./p2a-retrospective.md) for what shipped and what's deferred to v3.
 
-### P2b — Parallel batch
+### P2b — Parallel batch ✅ landed 2026-05-18
 
-**Why**: "Run reviewers for correctness, tests, and cleanup in parallel" — the highest-leverage UX win after foreground works. Most coding-agent harnesses prioritize this early.
+Shipped a separate `subagent_batch` LLM tool alongside `subagent` (single). `tasks` array is `minItems: 2`; `failFast?: boolean` per-call (collect-all default); `BodhiPiConfig.subagents.maxBatchConcurrency` cap (default 5) is config-only, never an LLM param, and hard-rejects overflow. `SubagentService.spawnBatch` composes the existing per-child `spawn()` via `Promise.all`; AbortSignal.any chains the parent + batch-internal abort controller so failFast aborts in-flight siblings. New `subagent_batch_start`/`subagent_batch_end` envelope events flow alongside per-child `subagent_start`/`subagent_end` on `LIFECYCLE_EVENT_METHOD`; new `SubagentBatchEntry` lands on the parent. `BatchProgressAccumulator` coalesces N children's events into one `details.children[]` payload per tick — retires the v1-retrospective "progress mirroring is one global handler" debt.
 
-**Refs to re-read**:
-- OpenHands `DelegateTool` — parallel children + result aggregation.
-- pi-subagents `/parallel` slash + `subagent({ tasks: [...] })` tool overload.
-
-**Key design questions**:
-- Separate `subagent_batch` tool vs overload `subagent`?
-- Concurrency cap (config or per-call)?
-- Failure modes: fail-fast vs collect-all?
-- How do parallel child events interleave on the parent's `tool_call_update` channel?
+See [p2b-retrospective.md](./p2b-retrospective.md).
 
 ### P2c — Bundled built-in profiles ✅ landed in v2
 
@@ -135,7 +127,7 @@ See [v2-retrospective.md](./v2-retrospective.md).
 
 V2 landed three of the v1 carry-forward items (cancellation test, subagentDepth cache, evictChild lifecycle per-status). What remains, deferred to a future phase:
 
-- **Progress mirroring is one global handler** filtering by sessionId. Works for foreground single-child but parallel batch (P2b) needs per-child UI accumulation in the Host — design the parallel-render UI before implementation.
+- ~~**Progress mirroring is one global handler** filtering by sessionId.~~ ✅ resolved in P2b — `BatchProgressAccumulator` demuxes per-child events through one coalesced `tool_call_update` with `details.children[]` for batch children; single-child `spawn()` keeps its direct `run.onUpdate` path.
 - **`buildChildSessionState` duplicates `buildSessionState`** — acceptable now, will diverge with profile inheritance features. Worth a shared helper in a later cleanup, likely alongside P3c/P3d.
 - **Faux provider scripting helper** — add a `scriptSubagentRun({parentToolCalls, childToolCalls, finalText})` test helper so future spawn tests don't off-by-one on the queue. (Still deferred; v2's cancellation + LLM-invocation tests both hand-script.)
 - **`ChatPanelPage.systemMessageWithEvent(event)`** Playwright helper — avoids the `.last()` after `waitForIdle()` race documented in retrospective. (Still deferred; the new C4 spec uses the same pattern.)
