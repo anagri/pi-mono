@@ -318,6 +318,26 @@ export interface SubagentEndEvent {
 	error?: string;
 }
 
+export interface SubagentBatchStartEvent {
+	type: "subagent_batch_start";
+	parentSessionId: string;
+	batchToolCallId: string;
+	childSessionIds: string[];
+	profileNames: string[];
+	tasks: string[];
+	failFast: boolean;
+}
+
+export interface SubagentBatchEndEvent {
+	type: "subagent_batch_end";
+	parentSessionId: string;
+	batchToolCallId: string;
+	childSessionIds: string[];
+	profileNames: string[];
+	statuses: ("completed" | "cancelled" | "failed")[];
+	durationMs: number;
+}
+
 // === Discriminated union ===
 
 export type BodhiPiEvent =
@@ -352,7 +372,9 @@ export type BodhiPiEvent =
 	| McpToolsChangeEvent
 	| McpOAuthStatusChangeEvent
 	| SubagentStartEvent
-	| SubagentEndEvent;
+	| SubagentEndEvent
+	| SubagentBatchStartEvent
+	| SubagentBatchEndEvent;
 
 export type BodhiPiEventType = BodhiPiEvent["type"];
 
@@ -403,4 +425,6 @@ export interface BodhiPiEventHandlers {
 	mcp_oauth_status_change?: ((event: McpOAuthStatusChangeEvent) => Awaitable<void>)[];
 	subagent_start?: ((event: SubagentStartEvent) => Awaitable<void>)[];
 	subagent_end?: ((event: SubagentEndEvent) => Awaitable<void>)[];
+	subagent_batch_start?: ((event: SubagentBatchStartEvent) => Awaitable<void>)[];
+	subagent_batch_end?: ((event: SubagentBatchEndEvent) => Awaitable<void>)[];
 }

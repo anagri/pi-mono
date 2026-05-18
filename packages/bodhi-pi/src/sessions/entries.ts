@@ -109,6 +109,15 @@ export interface SubagentCompleteEntry extends BaseEntry {
 	error?: string;
 }
 
+export interface SubagentBatchEntry extends BaseEntry {
+	type: "subagent_batch";
+	batchToolCallId: string;
+	childSessionIds: string[];
+	profileNames: string[];
+	statuses: ("completed" | "cancelled" | "failed")[];
+	durationMs: number;
+}
+
 export type SessionEntry =
 	| MessageEntry
 	| ModelChangeEntry
@@ -120,7 +129,8 @@ export type SessionEntry =
 	| ExtensionEntry
 	| CustomMessageEntry
 	| SubagentLinkEntry
-	| SubagentCompleteEntry;
+	| SubagentCompleteEntry
+	| SubagentBatchEntry;
 
 export interface ReadExtensionEntriesFilter {
 	extensionName?: string;

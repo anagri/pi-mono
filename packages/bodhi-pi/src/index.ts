@@ -100,6 +100,8 @@ export type {
 	SessionStartEvent,
 	SettingsChangeEvent,
 	StopReason,
+	SubagentBatchEndEvent,
+	SubagentBatchStartEvent,
 	SubagentEndEvent,
 	SubagentStartEvent,
 	ToolCallEvent,
@@ -185,6 +187,7 @@ export type {
 	SessionInfoEntry,
 	SessionRecord,
 	SessionStore,
+	SubagentBatchEntry,
 	SubagentCompleteEntry,
 	SubagentLinkEntry,
 } from "./sessions/session-store.js";
