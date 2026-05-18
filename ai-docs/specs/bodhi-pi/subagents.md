@@ -2,7 +2,7 @@
 
 bodhi-pi lets the parent LLM delegate a focused task to a specialized **child session** that returns a summary as a tool result. Each child runs the same `runPromptLoop` machinery the parent uses, but with a profile-constrained system prompt, tool list, and model. The child's full transcript is durable in `SessionStore` and inspectable; the parent only sees the summary.
 
-This spec describes the public surface and the C1 (discovery scaffold) implementation. C2 (spawn + foreground run) and C3 (slash UX + Playwright) extend the same shape; see [`ai-docs/sub-agents/v1-plan.md`](../../sub-agents/v1-plan.md) for the commit boundaries.
+This spec covers the full sub-agents surface as it ships on `main`: discovery (project markdown + bundled built-ins + extension-registered), the LLM-facing `subagent` tool, spawn + foreground run, slash UX, the depth cap, per-status eviction lifecycle, `LIFECYCLE_EVENT_METHOD` wire forwarding of `subagent_start` / `subagent_end`, and `context: "fresh" | "fork"` (fork inherits a filtered slice of the parent transcript via `cloneTranscriptSlice`). Implementation milestones: v1 (discovery + spawn + slash UX), v2 (built-in profiles + `ExtensionAPI.registerSubagentProfile` + cancellation + depth-cache + per-status eviction + wire forwarder), P2a (`context: "fork"` + cloneTranscriptSlice). See [`ai-docs/sub-agents/v1-plan.md`](../../sub-agents/v1-plan.md), [`v2-retrospective.md`](../../sub-agents/v2-retrospective.md), [`p2a-retrospective.md`](../../sub-agents/p2a-retrospective.md) for per-commit context; [`roadmap.md`](../../sub-agents/roadmap.md) sketches what's next.
 
 ## Concepts
 
@@ -10,13 +10,13 @@ This spec describes the public surface and the C1 (discovery scaffold) implement
 
 - **Project markdown** — `<cwd>/.bodhi-pi/agents/<name>.md`, discovered via `loadProjectSubagents(filesystem, cwd)` (`src/subagents/discovery.ts`). `source: "project"`.
 - **Built-in** — bundled with the package under `src/subagents/profiles/`, returned by `getBuiltinSubagentProfiles()` (`src/subagents/profiles/index.ts`). Currently ships `explore` and `planner`. `source: "builtin"`.
-- **Extension-registered** — via `ExtensionAPI.registerSubagentProfile(def)` (P2d); aggregated by `ExtensionRunner.getSubagentProfiles()`. `source: "extension"`.
+- **Extension-registered** — via `ExtensionAPI.registerSubagentProfile(def)`; aggregated by `ExtensionRunner.getSubagentProfiles()`. `source: "extension"`. Extension-registered profiles currently bind `context: "fresh"`; if you need fork-mode behaviour from an extension, ship the profile as a project markdown file under `<cwd>/.bodhi-pi/agents/` instead.
 
 Merged at session bootstrap via `mergeSubagentProfiles(project, extension, builtin)` (`src/extensions/merge.ts`) with precedence **project > extension > built-in**. Entries where the winning entry has `disabled: true` are dropped from the output — that's how a project markdown stub overrides + hides a built-in or extension-registered profile by name.
 
 **Child session**: a real `SessionRecord` created in `SessionStore` with `parentSessionId` set to the parent and `subagent: { profileName }` denormalized for filterability. Default `SessionStore.list()` excludes child sessions to keep the user-visible list clean; opt in with `list({ includeSubagentChildren: true })`.
 
-**Sub-agent depth**: number of `subagent_link` entries in the chain from a child back to its root parent. Hard-capped at 2 in v1 (child of child = depth 2 is the max). Enforced in `SubagentService.spawn` (C2).
+**Sub-agent depth**: number of `subagent_link` entries in the chain from a child back to its root parent. Hard-capped at `SUBAGENT_MAX_DEPTH = 2` (child of child = depth 2 is the max). Enforced in `SubagentService.spawn` and cached on `SessionState.subagentDepth` to avoid walking the entry chain on each spawn.
 
 ## Public surface
 
@@ -77,7 +77,7 @@ Both are loaded as TS modules from `src/subagents/profiles/{explore,planner}.ts`
 
 ### Extension-registered profiles
 
-Extensions register profiles via `ExtensionAPI.registerSubagentProfile(def)` (P2d). The runner aggregates them into `runner.getSubagentProfiles()` and the bootstrap merger places them between project (highest precedence) and built-in (lowest). Registration shares the markdown validation pipeline; a registration that supplies `disabled: true` throws synchronously.
+Extensions register profiles via `ExtensionAPI.registerSubagentProfile(def)`. The runner aggregates them into `runner.getSubagentProfiles()` and the bootstrap merger places them between project (highest precedence) and built-in (lowest). Registration shares the markdown validation pipeline; a registration that supplies `disabled: true` throws synchronously. The `def.context` field is restricted to `"fresh"` at the extension surface — project markdown is the only contribution source that may opt into `context: "fork"` (see [Fork mode](#fork-mode)).
 
 ### Fork mode
 
@@ -105,7 +105,7 @@ Extensions register profiles via `ExtensionAPI.registerSubagentProfile(def)` (P2
 See [acp.md § Sub-agents](./acp.md). Constants in `src/wire/constants.ts`:
 
 - `EXT_SUBAGENT_LIST = "_bodhi-pi/subagent/list"` — drives `/agents` slash
-- `EXT_SUBAGENT_RUN = "_bodhi-pi/subagent/run"` — drives `/subagent <name> <task>` (C2)
+- `EXT_SUBAGENT_RUN = "_bodhi-pi/subagent/run"` — drives `/subagent <name> <task>`
 - `EXT_SUBAGENT_CHILDREN = "_bodhi-pi/subagent/children"` — drives "runs from this session" UI
 
 ### Slash commands
@@ -113,7 +113,7 @@ See [acp.md § Sub-agents](./acp.md). Constants in `src/wire/constants.ts`:
 Two flat, one-shot slashes per the bodhi-pi flat-and-complete slash design (no popups, no cycles):
 
 - `/agents` — calls `_bodhi-pi/subagent/list`, renders the profile list
-- `/subagent <name> <task...>` — calls `_bodhi-pi/subagent/run` (C3)
+- `/subagent <name> <task...>` — calls `_bodhi-pi/subagent/run`
 
 Host's client owns the dispatcher, same pattern as `/mcp ...`.
 
@@ -125,7 +125,7 @@ Two additive fields on `SessionRecord` / `SessionInfo` (`src/sessions/session-st
 interface SessionRecord {
   // ... existing fields ...
   parentSessionId?: string;                  // also used by fork/clone (existing)
-  subagent?: { profileName: string };        // NEW — set by SubagentService.spawn (C2)
+  subagent?: { profileName: string };        // set by SubagentService.spawn — denormalized for filterability
 }
 ```
 
@@ -149,7 +149,7 @@ Implementations:
 
 `SessionState.subagentProfiles: SubagentProfile[]` (`src/sessions/session-state.ts`) — loaded by `loadProjectArtifacts` at session bootstrap. Drives `_bodhi-pi/subagent/list` and the conditional `subagent` tool registration.
 
-## Wiring summary (C1)
+## Wiring summary
 
 ```
 session/new → buildSessionState
@@ -173,10 +173,22 @@ extMethod _bodhi-pi/subagent/run      → SubagentService.spawn        → child
 extMethod _bodhi-pi/subagent/children → SubagentService.handleChildren → sessionStore.list({parentSessionId, includeSubagentChildren:true})
 ```
 
-## C2/C3 sketch (what arrives later)
+## Spawn lifecycle
 
-- C2: `SubagentService.spawn` creates a child Session via `sessionStore.create({ cwd, parentSessionId, subagent: { profileName } })`, appends `subagent_link` SessionEntry, builds a child `SessionState` via `buildChildSessionState`, calls `runPromptLoop` on it, mirrors progress to the parent's `tool_call_update` channel, appends `subagent_complete`, returns formatted tool result wrapped in `<subagent_result>...</subagent_result>`. Recursion guarded at depth 2.
-- C3: each Host's client adds `/agents` and `/subagent` slash entries that call `_bodhi-pi/subagent/list` and `_bodhi-pi/subagent/run`. Playwright e2e-ui validates the user-facing flow.
+`SubagentService.spawn` is the single entry point for both LLM tool invocation and the `_bodhi-pi/subagent/run` extension method:
+
+1. Resolve the profile + reject unknown agent names with `-32602`.
+2. Enforce `SUBAGENT_MAX_DEPTH` via the cached `SessionState.subagentDepth` — at depth 2 the spawn rejects before any state is allocated.
+3. `sessionStore.create({ cwd, parentSessionId, subagent: { profileName } })` creates the child SessionRecord.
+4. Append `subagent_link` SessionEntry to the child (carries `parentSessionId`, `profileName`, `task`, `toolCallId`, `depth`, `contextMode`).
+5. If `profile.context === "fork"`, run `cloneTranscriptSlice(parent.entries, {…})` and build the child `SessionState` from the inherited messages (see [Fork mode](#fork-mode)). Otherwise, build a fresh `SessionState`.
+6. Register the run in `activeRuns` and emit `subagent_start` (in-process via `EventDispatcher`, forwarded to the wire via `notifyLifecycle(LIFECYCLE_EVENT_METHOD, …)` in `src/acp/event-wiring.ts`).
+7. Run `runPromptLoop` on the child; mirror progress to the parent's `tool_call_update` channel.
+8. Append `subagent_complete` SessionEntry (terminal status `completed | cancelled | failed`).
+9. Emit `subagent_end` on both rails.
+10. Evict the child from the live `sessions` map regardless of terminal status — children are durable in `SessionStore` and load on demand via `_bodhi-pi/session/load`; the live map only tracks runs in flight.
+
+The returned tool result is wrapped as `<subagent_result>…</subagent_result>` for `completed`/`cancelled` and `<subagent_error>…</subagent_error>` for `failed`, prefixed with the `childSessionId` so the parent LLM and Host can navigate into the full transcript.
 
 ## Reference research
 
@@ -192,7 +204,7 @@ See [`ai-docs/sub-agents/design.md`](../../sub-agents/design.md) for the full ra
 ## See also
 
 - [acp.md § Sub-agents](./acp.md) — full extension-method reference
-- [lifecycle.md](./lifecycle.md) — where `subagent_link` and `subagent_complete` entries fit (C2)
+- [lifecycle.md](./lifecycle.md) — where `subagent_link` and `subagent_complete` entries fit in the SessionEntry union
 - [extensions-skills-commands.md](./extensions-skills-commands.md) — peer comparison: Extension vs Skill vs Command vs Sub-agent profile
 - [`ai-docs/sub-agents/v1-plan.md`](../../sub-agents/v1-plan.md) — commit-by-commit implementation plan
 - [`ai-docs/sub-agents/roadmap.md`](../../sub-agents/roadmap.md) — rough phase 2+ sketches

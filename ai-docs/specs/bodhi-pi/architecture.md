@@ -69,7 +69,7 @@ The `BodhiPiAcpAgent` class at `src/acp/agent.ts:162-555` is a façade that dele
 | `SessionInfoService` | `src/sessions/session-info-service.ts` | `_bodhi-pi/session/{config,setName,stats,export}` |
 | `SessionGraphService` | `src/sessions/session-graph-service.ts` | `_bodhi-pi/session/{tree,navigate,entries,fork,clone,delete}` + cross-branch summarization |
 | `CompactionOrchestrator` | `src/sessions/compaction-orchestrator.ts` | `_bodhi-pi/session/compact` + proactive `prepareNextTurn` hook + overflow recovery |
-| `SubagentService` | `src/subagents/subagent-service.ts` | `_bodhi-pi/subagent/{list,run,children}` + in-process child-session spawn + progress mirroring + recursion guard |
+| `SubagentService` | `src/subagents/subagent-service.ts` | `_bodhi-pi/subagent/{list,run,children}` + in-process child-session spawn + progress mirroring + `SUBAGENT_MAX_DEPTH` recursion guard (cached on `SessionState.subagentDepth`) + per-status `evictChild` lifecycle + bundled + extension-registered profile registry + `subagent_start` / `subagent_end` lifecycle events forwarded over `LIFECYCLE_EVENT_METHOD` + `context: "fresh" \| "fork"` (fork inherits a filtered parent-transcript slice via `cloneTranscriptSlice`) |
 
 Each service exposes `register(): Array<[method, handler]>`; the façade flattens them into `extHandlers` at `src/acp/agent.ts:256-264` and dispatches via `extMethod` at `src/acp/agent.ts:481-485`.
 
