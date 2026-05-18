@@ -10,7 +10,7 @@ export interface SubagentToolDeps {
 }
 
 export function createSubagentTool(deps: SubagentToolDeps): AgentTool<ReturnType<typeof buildSubagentSchema>> {
-	const profileLines = deps.profiles.map((p) => `- ${p.name}: ${p.description}`).join("\n");
+	const profileLines = deps.profiles.map((p) => `- ${p.name} (context: ${p.context}): ${p.description}`).join("\n");
 	const parameters = buildSubagentSchema(deps.profiles);
 	const profilesByName = new Map(deps.profiles.map((p) => [p.name, p]));
 
@@ -26,7 +26,9 @@ Use this when:
 - The task is self-contained and can be delegated to a specialist
 - You want to isolate a focused investigation from the main conversation
 
-Default context is fresh — the sub-agent does NOT see the parent conversation, so include all relevant context in the task description.`,
+Context behavior is decided by the profile, not by this call:
+- context: fresh — the sub-agent starts with NO parent history; include all relevant context in the task description.
+- context: fork — the sub-agent inherits a filtered slice of the parent's transcript (prior user turns, assistant turns, tool calls + results); the task can refer to that context without repeating it.`,
 		parameters,
 		async execute(toolCallId, params, signal, onUpdate) {
 			const profile = profilesByName.get(params.agent);

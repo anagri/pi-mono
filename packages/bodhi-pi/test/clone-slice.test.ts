@@ -49,6 +49,7 @@ function subagentLinkEntry(id: string, parentId: string | null): SessionEntry {
 		task: "t",
 		toolCallId: "tc",
 		depth: 1,
+		contextMode: "fresh",
 	};
 }
 

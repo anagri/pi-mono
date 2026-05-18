@@ -1,5 +1,5 @@
 import { type AgentSideConnection, RequestError } from "@agentclientprotocol/sdk";
-import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
+import type { AgentMessage, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import { randomUUID } from "@/_internal/uuid.js";
 import type { BodhiPiConfig, BodhiPiLogger } from "@/acp/agent.js";
 import type { PromptLoopDeps } from "@/acp/prompt-loop.js";
@@ -7,12 +7,15 @@ import { runPromptLoop } from "@/acp/prompt-loop.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import type { McpService } from "@/mcp/mcp-service.js";
 import { extractText } from "@/sessions/_shared.js";
+import { buildSessionContext } from "@/sessions/build-context.js";
+import { cloneTranscriptSlice } from "@/sessions/clone-slice.js";
 import type { SubagentCompleteEntry, SubagentLinkEntry } from "@/sessions/entries.js";
 import { requireLiveSession } from "@/sessions/resolution.js";
 import type { BootstrapDeps } from "@/sessions/session-bootstrap.js";
 import type { SessionState } from "@/sessions/session-state.js";
 import type { SessionStore } from "@/sessions/session-store.js";
 import { EXT_SUBAGENT_CHILDREN, EXT_SUBAGENT_LIST, EXT_SUBAGENT_RUN } from "@/wire/constants.js";
+import { SUBAGENT_FORK_FILTER } from "./_clone-slice-filter.js";
 import { buildChildSessionState } from "./build-child-state.js";
 import { profileToSummary, type SubagentProfile } from "./types.js";
 
@@ -164,9 +167,26 @@ export class SubagentService {
 			task: input.task,
 			toolCallId: input.toolCallId,
 			depth,
+			contextMode: input.profile.context,
 		};
 		await this.sessionStore.append(childSessionId, linkEntry);
 		await this.sessionStore.setLeafId(childSessionId, linkEntry.id);
+
+		let inheritedMessages: AgentMessage[] = [];
+		if (input.profile.context === "fork") {
+			const parentRecord = await this.sessionStore.load(input.parentSessionId);
+			if (!parentRecord) {
+				throw new RequestError(
+					-32603,
+					`subagent.spawn: parent session ${input.parentSessionId} record disappeared mid-spawn`,
+				);
+			}
+			const sliced = cloneTranscriptSlice(parentRecord.entries, {
+				leafOrFromEntryId: parentRecord.leafId,
+				excludeEntryTypes: SUBAGENT_FORK_FILTER,
+			});
+			inheritedMessages = buildSessionContext({ entries: sliced, leafId: null }).messages;
+		}
 
 		await buildChildSessionState(this.bootstrapDeps(), {
 			childSessionId,
@@ -174,6 +194,7 @@ export class SubagentService {
 			profile: input.profile,
 			leafId: linkEntry.id,
 			depth,
+			messages: inheritedMessages,
 			...(input.modelOverride !== undefined ? { modelOverride: input.modelOverride } : {}),
 		});
 
@@ -206,6 +227,7 @@ export class SubagentService {
 			task: input.task,
 			toolCallId: input.toolCallId,
 			depth,
+			contextMode: input.profile.context,
 		});
 
 		let status: "completed" | "cancelled" | "failed" = "failed";
@@ -262,6 +284,7 @@ export class SubagentService {
 			status,
 			durationMs,
 			toolCount,
+			contextMode: input.profile.context,
 			...(summary ? { summary } : {}),
 			...(errorMessage !== undefined ? { error: errorMessage } : {}),
 		});

@@ -81,9 +81,24 @@ Extensions register profiles via `ExtensionAPI.registerSubagentProfile(def)` (P2
 
 ### Fork mode
 
-`context: "fork"` makes the child see a sliced copy of the parent's transcript so tasks like "review this diff" don't need to re-feed context the parent already loaded. P2a accepts the value in the profile schema and wires the spawn flow in a later commit (see `ai-docs/plans/2026-05-18-bodhi-pi-sub-agents-p2a-forked-context.md`).
+`context: "fork"` makes the child see a sliced copy of the parent's transcript so tasks like "review this diff" don't need to re-feed context the parent already loaded.
 
-Distinct from `_bodhi-pi/session/fork` (`SessionGraphService.handleSessionFork`): session-fork preserves the full session shape (tools / skills / MCP / settings); sub-agent fork is profile-constrained and drops session-management entry types (`mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`) from the child's view.
+**Slice mechanics** (`SubagentService.spawn` when `profile.context === "fork"`):
+
+1. Load the parent's `SessionRecord` from `sessionStore`.
+2. `cloneTranscriptSlice(record.entries, { leafOrFromEntryId: record.leafId, excludeEntryTypes: SUBAGENT_FORK_FILTER })` (`src/sessions/clone-slice.ts` + `src/subagents/_clone-slice-filter.ts`) walks the parentId chain from root to the parent's current leaf, then drops entries of type:
+   - `mcp_inclusion_set` — session-MCP snapshot; child has its own MCP wiring.
+   - `extension` — extension-author bookkeeping; not part of the user-visible conversation.
+   - `subagent_link` — bracket-of-prior-spawn marker.
+   - `subagent_complete` — bracket-of-prior-spawn terminator.
+3. `buildSessionContext({entries: sliced, leafId: null})` converts the remaining entries to `AgentMessage[]` (reusing the same code path that hydrates loaded sessions). The non-`messages` fields it returns (`currentModelId`, `currentThinkingLevel`, `name`, `mcpInclusion`) are discarded — the child's model + thinking + MCP come from the profile, not parent state.
+4. The resulting `messages` are passed into `buildChildSessionState` as the agent's initial state. The child's first `runPromptLoop` prompt (the task body) is appended as a new user turn after the inherited history.
+
+**Lineage:** the child's `subagent_link` SessionEntry and both `subagent_start` / `subagent_end` lifecycle events carry `contextMode: "fresh" \| "fork"` so the wire surface and persisted log can distinguish how a child was spawned.
+
+**Known limitation — mid-pair slicing:** the slicer does not enforce `tool_call` / `tool_result` pair-completeness. If the parent's current leaf falls between a tool_call and its tool_result, the child's message history can be malformed and pi-agent-core hydration may choke. The existing `_bodhi-pi/session/fork` sibling has the same gap; the practical exposure is small because the parent typically spawns at end-of-turn (the LLM emits the `subagent` tool_use after prior tool_call/result pairs complete). Future work may add placeholder-result injection (cc/Gemini pattern).
+
+**Distinct from `_bodhi-pi/session/fork`** (`SessionGraphService.handleSessionFork`): session-fork preserves the full session shape (tools / skills / MCP / settings); sub-agent fork is profile-constrained and drops the session-management entry types listed above from the child's view.
 
 ### Extension methods
 

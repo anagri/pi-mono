@@ -28,7 +28,7 @@ function newProvider(): FauxProviderRegistration {
 	return p;
 }
 
-test("subagent_start and subagent_end are forwarded over the wire via LIFECYCLE_EVENT_METHOD", async () => {
+test("subagent_start and subagent_end are forwarded over the wire via LIFECYCLE_EVENT_METHOD with contextMode='fresh'", async () => {
 	const filesystem = createInMemoryFilesystem();
 	await seedSubagent(filesystem, "/proj", "echo", "---\ndescription: echo\n---\nYou echo.\n");
 
@@ -56,15 +56,49 @@ test("subagent_start and subagent_end are forwarded over the wire via LIFECYCLE_
 		childSessionId?: string;
 		profile?: string;
 		parentSessionId?: string;
+		contextMode?: string;
 	};
 	expect(startEv?.childSessionId).toBe(result.childSessionId);
 	expect(startEv?.profile).toBe("echo");
 	expect(startEv?.parentSessionId).toBe(sessionId);
+	expect(startEv?.contextMode).toBe("fresh");
 
 	const endEv = lifecycle.find((n) => (n.params as { type?: string }).type === "subagent_end")?.params as {
 		childSessionId?: string;
 		status?: string;
+		contextMode?: string;
 	};
 	expect(endEv?.childSessionId).toBe(result.childSessionId);
 	expect(endEv?.status).toBe("completed");
+	expect(endEv?.contextMode).toBe("fresh");
+});
+
+test("subagent_start and subagent_end carry contextMode='fork' when spawned via a fork profile", async () => {
+	const filesystem = createInMemoryFilesystem();
+	await seedSubagent(filesystem, "/proj", "reviewer", "---\ndescription: review\ncontext: fork\n---\nYou review.\n");
+
+	const faux = newProvider();
+	const model = faux.getModel() as Model<Api>;
+	faux.setResponses([() => fauxAssistantMessage("reviewer done")]);
+
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const result = (await harness.clientConn.extMethod(EXT_SUBAGENT_RUN, {
+		sessionId,
+		agent: "reviewer",
+		task: "do",
+	})) as { childSessionId: string; status: string };
+	expect(result.status).toBe("completed");
+
+	const lifecycle = harness.extNotifications.filter((n) => n.method === LIFECYCLE_EVENT_METHOD);
+	const startEv = lifecycle.find((n) => (n.params as { type?: string }).type === "subagent_start")?.params as {
+		contextMode?: string;
+	};
+	const endEv = lifecycle.find((n) => (n.params as { type?: string }).type === "subagent_end")?.params as {
+		contextMode?: string;
+	};
+	expect(startEv?.contextMode).toBe("fork");
+	expect(endEv?.contextMode).toBe("fork");
 });

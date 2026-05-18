@@ -1,3 +1,4 @@
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import type { BootstrapDeps } from "@/sessions/session-bootstrap.js";
 import { createPiAgent } from "@/sessions/session-bootstrap.js";
@@ -13,6 +14,7 @@ export interface BuildChildSessionStateArgs {
 	leafId: string;
 	depth: number;
 	modelOverride?: string;
+	messages?: AgentMessage[];
 }
 
 export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChildSessionStateArgs): Promise<void> {
@@ -47,7 +49,7 @@ export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChi
 		{
 			sessionId: args.childSessionId,
 			model,
-			messages: [],
+			messages: args.messages ?? [],
 			tools,
 			systemPrompt,
 			thinkingLevel: resolvedThinkingLevel,

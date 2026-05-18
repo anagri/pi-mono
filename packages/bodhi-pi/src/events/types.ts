@@ -302,6 +302,7 @@ export interface SubagentStartEvent {
 	task: string;
 	toolCallId: string;
 	depth: number;
+	contextMode: "fresh" | "fork";
 }
 
 export interface SubagentEndEvent {
@@ -312,6 +313,7 @@ export interface SubagentEndEvent {
 	status: "completed" | "cancelled" | "failed";
 	durationMs: number;
 	toolCount: number;
+	contextMode: "fresh" | "fork";
 	summary?: string;
 	error?: string;
 }

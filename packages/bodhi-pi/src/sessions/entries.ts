@@ -98,6 +98,7 @@ export interface SubagentLinkEntry extends BaseEntry {
 	task: string;
 	toolCallId: string;
 	depth: number;
+	contextMode: "fresh" | "fork";
 }
 
 export interface SubagentCompleteEntry extends BaseEntry {
