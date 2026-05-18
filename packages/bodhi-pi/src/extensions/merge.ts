@@ -13,18 +13,19 @@ export function mergeCommands(project: PromptTemplate[], extensions: PromptTempl
 	return [...project, ...extensions.filter((c) => !projectNames.has(c.name))];
 }
 
-export function mergeSubagentProfiles(project: SubagentProfile[], builtin: SubagentProfile[]): SubagentProfile[] {
+export function mergeSubagentProfiles(
+	project: SubagentProfile[],
+	extension: SubagentProfile[],
+	builtin: SubagentProfile[],
+): SubagentProfile[] {
 	const seen = new Set<string>();
 	const merged: SubagentProfile[] = [];
-	for (const p of project) {
-		if (seen.has(p.name)) continue;
-		seen.add(p.name);
-		merged.push(p);
-	}
-	for (const p of builtin) {
-		if (seen.has(p.name)) continue;
-		seen.add(p.name);
-		merged.push(p);
+	for (const layer of [project, extension, builtin]) {
+		for (const p of layer) {
+			if (seen.has(p.name)) continue;
+			seen.add(p.name);
+			merged.push(p);
+		}
 	}
 	return merged.filter((p) => p.disabled !== true).sort(byName);
 }

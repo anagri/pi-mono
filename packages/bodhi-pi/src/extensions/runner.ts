@@ -6,6 +6,8 @@ import { randomUUID } from "@/_internal/uuid.js";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
 import type { BodhiPiEventHandlers, BodhiPiEventType } from "@/events/types.js";
 import type { SessionStore } from "@/sessions/session-store.js";
+import { validateAndNormalizeProfile } from "@/subagents/_validate.js";
+import type { SubagentProfile } from "@/subagents/types.js";
 import { createExtensionEventBus } from "./events-bus.js";
 import { adaptExtensionTool } from "./tool-adapter.js";
 import type {
@@ -13,6 +15,7 @@ import type {
 	ExtensionCommandDefinition,
 	ExtensionEntryPayload,
 	ExtensionEventHandler,
+	ExtensionSubagentProfileDef,
 	ExtensionToolDefinition,
 	ProviderConfig,
 	RegisteredExtension,
@@ -56,6 +59,7 @@ export class ExtensionRunner {
 	private readonly tools: AgentTool[] = [];
 	private readonly commands: PromptTemplate[] = [];
 	private readonly providers = new Map<string, ProviderConfig>();
+	private readonly subagentProfiles: SubagentProfile[] = [];
 	private readonly eventHandlers: BodhiPiEventHandlers = {};
 	private readonly bus = createExtensionEventBus();
 	private readonly conn: AgentSideConnection;
@@ -153,6 +157,36 @@ export class ExtensionRunner {
 				if (!self.providers.has(name)) self.providers.set(name, config);
 				return () => self.providers.delete(name);
 			},
+			registerSubagentProfile(def: ExtensionSubagentProfileDef): () => void {
+				if (def.disabled === true) {
+					throw new Error(
+						`extension '${extensionName}' cannot register subagent profile '${def.name}' with disabled:true — disabled only applies to project markdown overrides`,
+					);
+				}
+				const normalized = validateAndNormalizeProfile({
+					frontmatter: {
+						name: def.name,
+						description: def.description,
+						...(def.model !== undefined ? { model: def.model } : {}),
+						context: "fresh",
+						...(def.tools !== undefined ? { tools: def.tools } : {}),
+						...(def.maxTurns !== undefined ? { "max-turns": def.maxTurns } : {}),
+					},
+					body: def.body,
+					source: "extension",
+					filePath: `extension:${extensionName}/${def.name}`,
+				});
+				if (!normalized) {
+					throw new Error(
+						`extension '${extensionName}' subagent profile '${def.name}' failed validation (check name regex, description, body)`,
+					);
+				}
+				self.subagentProfiles.push(normalized);
+				return () => {
+					const idx = self.subagentProfiles.indexOf(normalized);
+					if (idx >= 0) self.subagentProfiles.splice(idx, 1);
+				};
+			},
 			events: self.bus,
 			async appendEntry(sessionId: string, entry: ExtensionEntryPayload): Promise<void> {
 				await self.sessionStore.append(sessionId, {
@@ -203,6 +237,11 @@ export class ExtensionRunner {
 	/** Provider models contributed by extensions, in registration order. */
 	getProviderModels(): Model<Api>[] {
 		return [...this.providers.values()].map((p) => p.model);
+	}
+
+	/** Sub-agent profiles contributed by extensions, in registration order. */
+	getSubagentProfiles(): SubagentProfile[] {
+		return [...this.subagentProfiles];
 	}
 
 	/** Per-extension factory failures captured during {@link build}. */

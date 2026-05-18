@@ -6,15 +6,15 @@ Five ways for capabilities to land in a session. They contribute to the same per
 
 | Aspect | **Extension** | **Skill** | **Command** | **MCP server** | **Sub-agent profile** |
 |---|---|---|---|---|---|
-| Lives where | Host-loaded JS factory | `.bodhi-pi/skills/<name>/SKILL.md` | `.bodhi-pi/commands/<name>.md` | KV under `mcp/<slug>`; external process or HTTP endpoint | `.bodhi-pi/agents/<name>.md` |
-| Loaded when | At first `session/new`/`load`/`resume` (lazy `ensureExtensionRunner`) | Per-session at boot (`loadProjectSkills`) | Per-session at boot (`loadProjectCommands`) | At session boot via `mcpService.hydrate` (re-binds existing connections from provider) | Per-session at boot (`loadProjectSubagents`) |
-| Discovery | Host passes `extensionFactories: RegisteredExtension[]` into `BodhiPiConfig` | Walk `<cwd>/.bodhi-pi/skills/*/SKILL.md` via injected `Filesystem` | Walk `<cwd>/.bodhi-pi/commands/*.md` via injected `Filesystem` | KV prefix scan (`mcp/`) | Walk `<cwd>/.bodhi-pi/agents/*.md` via injected `Filesystem` |
-| Can run code? | **Yes** (full TS factory) | No (markdown only; body is prompt content) | No (markdown only; template expansion) | Yes — but in a remote process, not in-agent | No (markdown only; body is the child's system prompt) |
-| Can register tools? | Yes (`registerTool`) | No (an Extension may wrap a Skill; Skills themselves don't expose tools) | No | Yes — surfaced through `mcp-tool-adapter` | Implicit — when any profile exists, the first-party `subagent` built-in tool is registered |
+| Lives where | Host-loaded JS factory | `.bodhi-pi/skills/<name>/SKILL.md` | `.bodhi-pi/commands/<name>.md` | KV under `mcp/<slug>`; external process or HTTP endpoint | Three sources merged: `.bodhi-pi/agents/<name>.md` (project) > `ExtensionAPI.registerSubagentProfile(def)` (extension) > bundled `src/subagents/profiles/` (built-in) |
+| Loaded when | At first `session/new`/`load`/`resume` (lazy `ensureExtensionRunner`) | Per-session at boot (`loadProjectSkills`) | Per-session at boot (`loadProjectCommands`) | At session boot via `mcpService.hydrate` (re-binds existing connections from provider) | Per-session at boot; project via `loadProjectSubagents`, extension via `ExtensionRunner.getSubagentProfiles()` (captured at runner build), built-in via `getBuiltinSubagentProfiles()` |
+| Discovery | Host passes `extensionFactories: RegisteredExtension[]` into `BodhiPiConfig` | Walk `<cwd>/.bodhi-pi/skills/*/SKILL.md` via injected `Filesystem` | Walk `<cwd>/.bodhi-pi/commands/*.md` via injected `Filesystem` | KV prefix scan (`mcp/`) | Walk `<cwd>/.bodhi-pi/agents/*.md`; `pi.registerSubagentProfile(def)` at factory time; bundled TS modules |
+| Can run code? | **Yes** (full TS factory) | No (markdown only; body is prompt content) | No (markdown only; template expansion) | Yes — but in a remote process, not in-agent | No (the body is the child's system prompt) |
+| Can register tools? | Yes (`registerTool`) | No (an Extension may wrap a Skill; Skills themselves don't expose tools) | No | Yes — surfaced through `mcp-tool-adapter` | Implicit — when the merged profile list is non-empty, the first-party `subagent` built-in tool is registered |
 | Can register slash commands? | Yes (`registerCommand`) | Implicit — `skill:<name>` is always advertised when Skill is loaded | Yes (one slash per file) | No — manipulated via `_bodhi-pi/mcp/*` extension methods | No — Hosts implement built-in `/agents` and `/subagent` slashes that call `_bodhi-pi/subagent/*` extMethods |
-| Can append SessionEntry? | Yes (`appendEntry` → `ExtensionEntry`; `sendMessage` → `CustomMessageEntry`) | No | No | Only `mcp_inclusion_set` (written by McpStore) | Indirect (C2): `SubagentService.spawn` appends `subagent_link` + `subagent_complete` entries to the child session |
+| Can append SessionEntry? | Yes (`appendEntry` → `ExtensionEntry`; `sendMessage` → `CustomMessageEntry`) | No | No | Only `mcp_inclusion_set` (written by McpStore) | `SubagentService.spawn` appends `subagent_link` + `subagent_complete` entries to the child session |
 | Hooks lifecycle events? | Yes (`on("tool_call", …)`, `before_provider_request`, …) | No | No | No | No |
-| Hot-reload? | No (factory captured at runner build) | Yes (re-walked at next session boot) | Yes (re-walked at next session boot) | Yes (KV writes immediately visible to next operation) | Yes (re-walked at next session boot) |
+| Hot-reload? | No (factory captured at runner build) | Yes (re-walked at next session boot) | Yes (re-walked at next session boot) | Yes (KV writes immediately visible to next operation) | Project sources re-walked at next session boot; extension + built-in fixed at runner build / process start |
 | Trust boundary | Host code — full agent privileges | Sandboxable text — bounded by skill body + `allowed-tools` | Bounded — template only | Remote — limited by network + auth | Bounded — child runs with profile-constrained tool list (no `subagent` tool; no MCP in v1) |
 
 ## Extensions (`src/extensions/`)
@@ -29,13 +29,14 @@ The factory receives an `ExtensionAPI` (`src/extensions/types.ts:81-97`):
 
 ```ts
 interface ExtensionAPI {
-  on<T>(type: T, handler): () => void;                 // lifecycle hooks
+  on<T>(type: T, handler): () => void;                          // lifecycle hooks
   registerTool<P>(def: ExtensionToolDefinition<P>): () => void;
   registerCommand(name, def: ExtensionCommandDefinition): () => void;
   registerProvider(name, config: ProviderConfig): () => void;
-  events: ExtensionEventBus;                           // inter-extension pub/sub
-  appendEntry(sessionId, payload): Promise<void>;      // → ExtensionEntry
-  sendMessage(sessionId, content): Promise<void>;      // → CustomMessageEntry
+  registerSubagentProfile(def: ExtensionSubagentProfileDef): () => void;
+  events: ExtensionEventBus;                                    // inter-extension pub/sub
+  appendEntry(sessionId, payload): Promise<void>;               // → ExtensionEntry
+  sendMessage(sessionId, content): Promise<void>;               // → CustomMessageEntry
   requestSlashableRefresh(sessionId): Promise<void>;
 }
 ```

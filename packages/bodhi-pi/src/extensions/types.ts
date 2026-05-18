@@ -53,6 +53,22 @@ export interface ExtensionEntryPayload {
 	data: unknown;
 }
 
+/**
+ * Sub-agent profile contributed by an extension. Mirrors the markdown
+ * frontmatter shape so the same validation pipeline (name regex, body
+ * trim, maxTurns default) is applied across all contribution sources.
+ */
+export interface ExtensionSubagentProfileDef {
+	name: string;
+	description: string;
+	body: string;
+	model?: string;
+	context?: "fresh";
+	tools?: string[];
+	maxTurns?: number;
+	disabled?: boolean;
+}
+
 type Awaitable<T> = T | Promise<T>;
 
 /** Type-narrowed event handler matching `BodhiPiEventHandlers`. */
@@ -83,6 +99,7 @@ export interface ExtensionAPI {
 	registerTool<P extends TSchema, D = unknown>(def: ExtensionToolDefinition<P, D>): () => void;
 	registerCommand(name: string, def: ExtensionCommandDefinition): () => void;
 	registerProvider(name: string, config: ProviderConfig): () => void;
+	registerSubagentProfile(def: ExtensionSubagentProfileDef): () => void;
 	events: ExtensionEventBus;
 	appendEntry(sessionId: string, entry: ExtensionEntryPayload): Promise<void>;
 	sendMessage(sessionId: string, content: TextContent | TextContent[] | string): Promise<void>;

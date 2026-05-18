@@ -60,6 +60,7 @@ export async function loadProjectArtifacts(
 	cwd: string,
 	sessionId: string,
 	subagentService: SubagentService,
+	extensionProfiles: SubagentProfile[] = [],
 ): Promise<{
 	builtinTools: ReturnType<typeof createBuiltinTools>;
 	projectCommands: Awaited<ReturnType<typeof loadProjectCommands>>;
@@ -81,7 +82,7 @@ export async function loadProjectArtifacts(
 				? loadGlobalSettings(config.globalFilesystem ?? config.filesystem, config.homeDir)
 				: Promise.resolve(undefined),
 		]);
-	const subagentProfiles = mergeSubagentProfiles(projectSubagents, getBuiltinSubagentProfiles());
+	const subagentProfiles = mergeSubagentProfiles(projectSubagents, extensionProfiles, getBuiltinSubagentProfiles());
 	const builtinTools = createBuiltinTools({
 		filesystem: config.filesystem,
 		cwd,
@@ -239,7 +240,9 @@ export async function buildSessionState(
 	const leafId = args.leafId ?? null;
 	const initialThinkingLevel = args.initialThinkingLevel ?? null;
 
-	const artifacts = await loadProjectArtifacts(config, cwd, sessionId, deps.subagentService);
+	const earlyRunner = extensionRunner();
+	const extensionProfiles = earlyRunner ? earlyRunner.getSubagentProfiles() : [];
+	const artifacts = await loadProjectArtifacts(config, cwd, sessionId, deps.subagentService, extensionProfiles);
 	const {
 		builtinTools,
 		projectCommands,
@@ -254,7 +257,7 @@ export async function buildSessionState(
 	const resolvedModel =
 		args.model ??
 		(await modelRegistry.resolveSessionModel(await modelRegistry.pickDefaultModelIdOrNull(mergedFileSettings)));
-	const runner = extensionRunner();
+	const runner = earlyRunner;
 	const tools = runner ? mergeTools(builtinTools, runner.getTools()) : builtinTools;
 	const commands = runner ? mergeCommands(projectCommands, runner.getCommands()) : projectCommands;
 
