@@ -20,10 +20,17 @@ export function createHttpAdapter(): TransportAdapter {
 			const id = Number(values.userId);
 			if (!Number.isFinite(id)) throw new Error("user-id must be numeric for http transport");
 			const files = parseSeedFiles(values.seed);
+			const cfg = parseProvisionConfig(values.configRaw);
 			const provisionRes = await fetch("/provision", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ id, email: values.userEmail, files }),
+				body: JSON.stringify({
+					id,
+					email: values.userEmail,
+					files,
+					...(cfg.apiKeys ? { apiKeys: cfg.apiKeys } : {}),
+					...(cfg.defaultModelId ? { defaultModelId: cfg.defaultModelId } : {}),
+				}),
 			});
 			if (!provisionRes.ok) {
 				const text = await provisionRes.text();
@@ -54,6 +61,27 @@ export function createHttpAdapter(): TransportAdapter {
 			// AcpHttpClient is stateless beyond in-flight fetch handles; nothing to release.
 		},
 	};
+}
+
+function parseProvisionConfig(raw: string): { apiKeys?: Record<string, string>; defaultModelId?: string } {
+	if (!raw || raw.trim().length === 0) return {};
+	try {
+		const parsed = JSON.parse(raw) as { apiKeys?: unknown; defaultModelId?: unknown };
+		const out: { apiKeys?: Record<string, string>; defaultModelId?: string } = {};
+		if (parsed.apiKeys && typeof parsed.apiKeys === "object" && !Array.isArray(parsed.apiKeys)) {
+			const filtered: Record<string, string> = {};
+			for (const [k, v] of Object.entries(parsed.apiKeys)) {
+				if (typeof v === "string" && v.length > 0) filtered[k] = v;
+			}
+			if (Object.keys(filtered).length > 0) out.apiKeys = filtered;
+		}
+		if (typeof parsed.defaultModelId === "string" && parsed.defaultModelId.length > 0) {
+			out.defaultModelId = parsed.defaultModelId;
+		}
+		return out;
+	} catch {
+		return {};
+	}
 }
 
 function parseRawFrame(direction: "in" | "out", raw: string): Parameters<ConnectCallbacks["onFrame"]>[0] {

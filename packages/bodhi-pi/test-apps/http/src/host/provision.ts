@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { AUTH_PREFIX } from "@bodhiapp/bodhi-pi";
+import { createNodeKvStore } from "@bodhiapp/bodhi-pi-test-app-node-adapters";
 import { encodeToken } from "./auth/token.js";
 import { ensureUserWorkspace } from "./filesystem/user-workspace.js";
 
@@ -8,6 +10,8 @@ interface ProvisionRequest {
 	id: number;
 	email: string;
 	files?: Record<string, string>;
+	apiKeys?: Record<string, string>;
+	defaultModelId?: string;
 }
 
 interface ProvisionResponse {
@@ -27,7 +31,7 @@ export async function handleProvision(
 		writeJson(res, 400, { error: parsed.error });
 		return;
 	}
-	const { id, email, files } = parsed;
+	const { id, email, files, apiKeys, defaultModelId } = parsed;
 	const cwd = opts.workspaceOverride ?? ensureUserWorkspace(opts.dataDir, id);
 	if (files) {
 		for (const [relPath, contents] of Object.entries(files)) {
@@ -44,6 +48,22 @@ export async function handleProvision(
 			writeFileSync(abs, contents, "utf8");
 		}
 	}
+
+	if (apiKeys && Object.keys(apiKeys).length > 0) {
+		const kvDir = path.join(opts.dataDir, "kv", String(id));
+		const kvStore = createNodeKvStore({ dir: kvDir });
+		for (const [provider, value] of Object.entries(apiKeys)) {
+			if (typeof value !== "string" || value.length === 0) continue;
+			await kvStore.set(`${AUTH_PREFIX}${provider}`, { api_key: { value, secret: true } });
+		}
+	}
+
+	if (defaultModelId) {
+		const settingsDir = path.join(cwd, ".bodhi-pi");
+		mkdirSync(settingsDir, { recursive: true });
+		writeFileSync(path.join(settingsDir, "settings.json"), JSON.stringify({ defaultModelId }, null, 2), "utf8");
+	}
+
 	const token = encodeToken({ id, email });
 	const response: ProvisionResponse = { token, workspaceRoot: cwd, cwd };
 	writeJson(res, 200, response);
@@ -60,8 +80,19 @@ function parseProvisionRequest(body: unknown): ProvisionRequest | { error: strin
 			if (typeof v !== "string") return { error: "files values must be strings" };
 		}
 	}
+	if (obj.apiKeys !== undefined) {
+		if (typeof obj.apiKeys !== "object" || obj.apiKeys === null) return { error: "apiKeys must be an object" };
+		for (const v of Object.values(obj.apiKeys)) {
+			if (typeof v !== "string") return { error: "apiKeys values must be strings" };
+		}
+	}
+	if (obj.defaultModelId !== undefined && typeof obj.defaultModelId !== "string") {
+		return { error: "defaultModelId must be a string" };
+	}
 	const out: ProvisionRequest = { id: obj.id, email: obj.email };
 	if (obj.files) out.files = obj.files as Record<string, string>;
+	if (obj.apiKeys) out.apiKeys = obj.apiKeys as Record<string, string>;
+	if (obj.defaultModelId) out.defaultModelId = obj.defaultModelId as string;
 	return out;
 }
 
