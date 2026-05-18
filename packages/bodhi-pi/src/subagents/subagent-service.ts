@@ -266,7 +266,17 @@ export class SubagentService {
 			...(errorMessage !== undefined ? { error: errorMessage } : {}),
 		});
 
-		this.evictChild(childSessionId);
+		switch (status) {
+			case "completed":
+				this.evictChild(childSessionId);
+				break;
+			case "cancelled":
+				this.evictChild(childSessionId);
+				break;
+			case "failed":
+				this.evictChild(childSessionId);
+				break;
+		}
 
 		return {
 			childSessionId,
