@@ -1,6 +1,99 @@
-# Milestone 020 — Mode state + ACP `setSessionMode`
+# Milestone 020 — Mode state + ACP `setSessionConfigOption` (with `configId: "mode"`)
 
-> **Read [000-overview.md](000-overview.md) and [010-ground-preparation.md](010-ground-preparation.md) first.** Milestone 010 must be merged before this milestone starts.
+> **Read [005-acp-architecture-decision.md](005-acp-architecture-decision.md) BEFORE this milestone.** It revises the wire-surface choices originally drafted here.
+> Also read [000-overview.md](000-overview.md) and [010-ground-preparation.md](010-ground-preparation.md). Milestone 010 must be merged before this milestone starts.
+
+## Updated approach (per 005)
+
+The original draft of this milestone proposed implementing the deprecated `session/setSessionMode`. **Don't.** Instead, extend the existing `setSessionConfigOption` dispatch table in `src/models/registry.ts:217-236` with a new `MODE_CONFIG_ID = "mode"` entry that calls `PermissionService.setMode`. Mode change notifications go via the existing `ConfigOptionUpdate` `SessionUpdate` variant (not the deprecated `CurrentModeUpdate`). Below is the original brief; treat sections that say "implement setSessionMode" / "emit CurrentModeUpdate" as superseded by the dispatch-table-extension and `ConfigOptionUpdate` approach.
+
+### Concrete changes vs original 020 draft
+
+| Original | Replace with |
+|---|---|
+| Add `setSessionMode(params)` method to `BodhiPiAcpAgent` | **No method addition** — `BodhiPiAcpAgent.setSessionConfigOption` (existing at `src/acp/agent.ts:583-584`) already routes to `ModelRegistry.setSessionConfigOption`, which we extend. |
+| Add `MODE_CONFIG_ID` constant | **Add** (was correct) — `src/wire/constants.ts` alongside `MODEL_CONFIG_ID` / `THINKING_CONFIG_ID` |
+| Build `availableModes` and put on `NewSessionResponse._meta["bodhi-pi"].modes` | **Replace** — return as a `SessionConfigOption` with `category: "mode"` from the existing `buildAllConfigOptions(sessionId)` in `src/models/registry.ts:208`. Mode is the FIRST entry (highest priority per spec). The legacy `modes: SessionModeState` field on `NewSessionResponse` is NOT populated. |
+| Emit `CurrentModeUpdate` `SessionUpdate` on mode change | **Replace** — emit `ConfigOptionUpdate` with the FULL `configOptions` list (per ACP spec: agent MUST return complete state on any option change). The existing `setSessionConfigOption` flow already does this for model/thinking; mode rides the same code path. |
+| Add new wire constants `EXT_MODE_SET/GET/LIST` | **Skip entirely** — ACP-native methods cover all three. |
+| Implement mode change via `LIFECYCLE_EVENT_METHOD` (as fallback) | **Skip entirely** — `ConfigOptionUpdate` is in the SDK; no fallback needed. The in-process `mode_change` event still fires (extensions can subscribe), but the wire view is `ConfigOptionUpdate`. |
+| Emit `ConfigOptionUpdate` after response | **Reverse** — emit BEFORE returning from `setSessionConfigOption` (Goose pattern, see [notes/16-goose-acp.md](../notes/16-goose-acp.md)) to avoid the race where the response unblocks the client before the notification arrives. |
+
+### `PermissionService` API surface (refined)
+
+```ts
+class PermissionService {
+  buildModeConfigOption(session: SessionState): SessionConfigOption {
+    return {
+      id: MODE_CONFIG_ID,
+      name: "Session Mode",
+      description: "Controls how the agent requests permission",
+      category: "mode",
+      type: "select",
+      currentValue: session.runtime.mode,
+      options: ALL_AGENT_MODES.map(mode => ({
+        value: mode,
+        name: MODE_PRESETS[mode].displayName,
+        description: MODE_PRESETS[mode].description,
+      })).filter(opt => opt.value !== "allow-all" || capabilities.allowsAllowAllMode),
+    };
+  }
+
+  async setMode(sessionId: string, modeId: string, reason?: string): Promise<void> {
+    if (!ALL_AGENT_MODES.includes(modeId as AgentMode)) throw new RequestError(-32602, ...);
+    if (modeId === "allow-all" && !this.capabilities.allowsAllowAllMode) throw new RequestError(-32603, ...);
+    const session = this.sessions.get(sessionId);
+    const from = session.runtime.mode;
+    session.runtime.mode = modeId as AgentMode;
+    await this.appendEntry(sessionId, session, { type: "mode_change", mode: modeId, reason: reason ?? "user", ... });
+    await this.events.emit({ type: "mode_change", sessionId, fromMode: from, toMode: modeId, reason });
+  }
+
+  getCurrentMode(sessionId: string): AgentMode { ... }
+
+  // Below — milestone 030 fills these in
+  async evaluateToolCall(sessionId, toolCall): Promise<ApprovalDecision> { return { kind: "allow" }; }
+}
+```
+
+### Registry dispatch-table extension
+
+In `src/models/registry.ts:217-236` (the existing dispatch table), add one entry:
+
+```ts
+[MODE_CONFIG_ID]: (sid, _s, v) => this.permissionService.setMode(sid, v, "user"),
+```
+
+And in `buildAllConfigOptions(sessionId)` (line 208), prepend mode:
+
+```ts
+const options: SessionConfigOption[] = [
+  this.permissionService.buildModeConfigOption(this.sessions.get(sessionId)!),
+  await this.buildModelConfigOption(...),
+  ...(thinking ? [thinking] : []),
+];
+```
+
+`ModelRegistry` gains a reference to `PermissionService` in its constructor (or `PermissionService` is registered on `ModelRegistry` via setter after both are constructed — handle the circular-dep via setter to avoid constructor ordering issues).
+
+### `BodhiPiAcpAgent` constructor wiring
+
+Adds `PermissionService` alongside other domain services:
+
+```ts
+this.permissionService = new PermissionService({
+  sessions: this.sessions,
+  events: this.events,
+  conn: this.conn,
+  appendEntry: this.appendEntry.bind(this),
+  capabilities: { allowsAllowAllMode: !!config.allowsAllowAllMode, allowsAllowAllModeAsDefault: !!config.allowsAllowAllModeAsDefault },
+});
+this.modelRegistry.setPermissionService(this.permissionService);  // setter-injection to break circular dep
+```
+
+`extHandlers` does NOT gain new entries — `setSessionConfigOption` already routes via the existing handler at `src/acp/agent.ts:583`.
+
+---
 
 ## Goal
 

@@ -1,9 +1,11 @@
 # Bodhi-Pi modes — milestone overview
 
 **Owner role:** AI coding assistant
-**Source-of-truth research:** [`../report.md`](../report.md)
+**Source-of-truth research:** [`../report.md`](../report.md) + per-harness notes under [`../notes/`](../notes/) (12-acp-spec, 13-zed, 14-claude-agent-acp, 15-codex-acp, 16-goose-acp, 17-pi-acp)
 **Companion research:** [`../../sub-agents/`](../../sub-agents/)
 **Target spec dir:** [`ai-docs/specs/bodhi-pi/`](../../../specs/bodhi-pi/)
+
+> ⚠ **READ [005-acp-architecture-decision.md](005-acp-architecture-decision.md) BEFORE STARTING ANY MILESTONE.** It supersedes the wire-surface choices in this overview document. Where they conflict, 005 wins. Specifically: bodhi-pi uses native `session/setSessionConfigOption` (not the deprecated `session/setSessionMode`), `session/request_permission`, and `session/update { sessionUpdate: "config_option_update" }` — NO `_bodhi-pi/mode/*` or `_bodhi-pi/permission/*` extension methods are added.
 
 This folder is a **sequential implementation plan** for adding agent operating modes and permission policies to `packages/bodhi-pi`. Each milestone (`010-…`, `020-…`, …) is a self-contained brief sized to land as a single commit (or a tight commit sequence) on `main`, fully green against `npm run check`, `npm test`, `just test-e2e`, and `just test-e2e-ui`. The numbering uses 10-unit gaps so additional milestones can be inserted between (e.g. `035-`) without renaming.
 
@@ -11,34 +13,39 @@ The milestones are **depth-first**: each milestone delivers a slice end-to-end a
 
 ## What we're shipping
 
-A four-mode user-facing enum (`ask`, `plan`, `edit`, `allow-all`) backed by a per-category `PermissionPolicy` with per-tool overrides. Approvals ride the **native ACP `session/requestPermission` round-trip**. Mode changes ride the **native ACP `session/setSessionMode` method** and surface to clients via `CurrentModeUpdate` session notifications. Default mode for new sessions is `ask`. `allow-all` is gated by a per-Host `allowsAllowAllMode` capability (`false` for browser + chrome-ext by default). Sub-agent profiles can declare their own mode and the parent's mode floors the child's (Qwen Code rule).
+A four-mode user-facing enum (`ask`, `plan`, `edit`, `allow-all`) backed by a per-category `PermissionPolicy` with per-tool overrides. Approvals ride the **native ACP `session/request_permission` round-trip**. Mode changes ride the **native ACP `session/setSessionConfigOption` method with `configId: "mode"`** (preferred over the deprecated `session/setSessionMode`) and surface to clients via `ConfigOptionUpdate` session notifications. Default mode for new sessions is `ask`. `allow-all` is gated by a per-Host `allowsAllowAllMode` capability (`false` for browser + chrome-ext by default). Sub-agent profiles can declare their own mode and the parent's mode floors the child's (Qwen Code rule).
 
 ## Key architectural decisions (locked)
 
 ### 1. Ride on ACP-native methods, not custom `_bodhi-pi/*` wire
 
-The ACP SDK already declares:
-- `session/setSessionMode` (`SetSessionModeRequest { sessionId, modeId }`)
-- `session/requestPermission` (Agent → Client, with `PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always"`)
-- `SessionMode { id, name, description? }` and `SessionModeState { availableModes, currentModeId }`
-- `CurrentModeUpdate` session notification variant
-- `ToolCallStatus = "pending" | "in_progress" | "completed" | "failed"` — `pending` is the right status for a tool call awaiting approval
+The ACP spec gives us (verified against the live spec + SDK schema — see [notes/12-acp-spec.md](../notes/12-acp-spec.md)):
 
-We use these natively. Custom `_bodhi-pi/mode/*` and `_bodhi-pi/permission/*` extension methods are NOT introduced. The "stable ACP over `unstable_*`" pillar of bodhi-pi favours ACP-native any time it exists.
+- `session/setSessionConfigOption { configId: "mode", value: <modeId> }` — **live, preferred** path for client-initiated mode change. The bodhi-pi codebase already implements this wire method for `model` + `thinking`; adding `mode` is one entry in the existing dispatch table at `src/models/registry.ts:217-236`.
+- `session/setSessionMode { modeId }` — **deprecated** — will be removed in a future protocol version. Bodhi-pi will NOT implement this.
+- `session/request_permission` (Agent → Client) — live, with `PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always"`. `optionId` is agent-defined arbitrary string (encodes semantics like scope or target mode).
+- `session/update { sessionUpdate: "config_option_update", configOptions: [...] }` — live, preferred for agent-initiated mode change. `current_mode_update` is the deprecated counterpart.
+- `NewSessionResponse.configOptions[]` with `category: "mode"` — live, preferred for advertising available modes at session bootstrap.
+- `ToolCallStatus = "pending" | "in_progress" | "completed" | "failed"` — `pending` covers both streaming-input AND awaiting-approval.
+
+We use these natively. Custom `_bodhi-pi/mode/*` and `_bodhi-pi/permission/*` extension methods are NOT introduced. Persistent `alwaysAllow`/`alwaysDeny` rules ride existing `_bodhi-pi/session/settings/*` with `permission.alwaysAllow` / `permission.alwaysDeny` keys (no new wire surface).
+
+The "stable ACP over `unstable_*`" pillar of bodhi-pi favours ACP-native any time it exists, AND the live methods over the deprecated ones.
 
 ### 2. Agent owns policy; Host renders UI; Client triggers responses
 
-Per the agent–host–client split documented in [`ai-docs/specs/bodhi-pi/architecture.md`](../../../specs/bodhi-pi/architecture.md):
+Per the agent–host–client split documented in [`ai-docs/specs/bodhi-pi/architecture.md`](../../../specs/bodhi-pi/architecture.md), AND bodhi-pi's "agent owns filesystem" decision (different from Zed/Goose; same as cc/Codex/pi-acp — see [notes/12-acp-spec.md](../notes/12-acp-spec.md)):
 
 | Concern | Who |
 |---|---|
 | Mode enum + presets + policy evaluation | **Agent** — new `src/permissions/PermissionService` core service |
 | Mode state (`SessionState.runtime.mode`) | **Agent** — lives in-memory; persisted as a `mode_change` SessionEntry for replay |
-| `session/setSessionMode` handler | **Agent** — validates modeId, mutates state, appends entry, emits `mode_change` + `CurrentModeUpdate` |
-| `session/requestPermission` invocation | **Agent** — `PermissionService` calls `conn.requestPermission(...)` and awaits |
-| Approval UI rendering (`requestPermission` consumer) | **Host's Client side** — CLI prompt / HTTP modal / browser dialog / chrome-ext popup |
+| `session/setSessionConfigOption` (with `configId: "mode"`) handler | **Agent** — uses the EXISTING `setSessionConfigOption` dispatch in `src/models/registry.ts:217-236`. New entry calls `PermissionService.setMode`. No new ACP method on `BodhiPiAcpAgent`. |
+| `session/request_permission` invocation | **Agent** — `PermissionService` calls `conn.requestPermission(...)` and awaits |
+| Approval UI rendering (`requestPermission` consumer) | **Host's Client side** — CLI prompt / browser inline card / chrome-ext popup / HTTP modal via SSE bridge |
 | Default-mode bootstrap from `BodhiPiConfig.defaultMode` + `defaultMode` settings key | **Agent** — read at `buildSessionState` time |
 | `allowsAllowAllMode` capability gate | **Host** — declared via `BodhiPiConfig`; **Agent** enforces |
+| Persistent `alwaysAllow`/`alwaysDeny` rules | **Agent** — uses existing `SettingsService` + `permission.*` keys (no new wire methods) |
 
 The agent hooks into the existing `tool_call` event mechanism (the `beforeToolCall` hook bodhi-pi already wires through `EventDispatcher` in `src/sessions/session-bootstrap.ts:169-180`). The PermissionService registers an internal handler that consults policy and either returns `undefined` (allow), `{ block: true, reason }` (deny), or `await`s on `conn.requestPermission(...)` and resolves to one of the above based on the user's `PermissionOptionKind` reply. Because `beforeToolCall` is async and pi-agent-core awaits it, this naturally suspends tool execution without bespoke pause/resume machinery.
 
@@ -56,14 +63,22 @@ alwaysDeny  >  alwaysAllow  >  sessionGrant  >  toolOverride  >  categoryDefault
 
 ### 5. ACP-native `PermissionOptionKind` mapping
 
-| ACP `PermissionOptionKind` | Bodhi-pi meaning |
-|---|---|
-| `allow_once` | Run this call; do not persist |
-| `allow_always` | Add a `<toolName>` pattern to `alwaysAllow`; persist at the scope the host's UI chose (default: session) |
-| `reject_once` | Block this call with `reason: "user rejected"` |
-| `reject_always` | Add a `<toolName>` pattern to `alwaysDeny`; persist at scope (default: session) |
+| ACP `PermissionOptionKind` | Bodhi-pi meaning | OptionId convention |
+|---|---|---|
+| `allow_once` | Run this call; do not persist | `allow_once` |
+| `allow_always` | Add a `<toolName>` pattern to `alwaysAllow` at the chosen scope | **Three entries**: `allow_always_session`, `allow_always_project`, `allow_always_global` (per codex-acp's pattern — see [notes/15-codex-acp.md](../notes/15-codex-acp.md)). User picks scope by clicking the right button. No secondary modal. |
+| `reject_once` | Block this call with `reason: "user rejected"` | `reject_once` |
+| `reject_always` | Add a `<toolName>` pattern to `alwaysDeny`; defaults to session scope only | `reject_always` (one entry; scope picker for deny is less compelling) |
 
-The agent presents `RequestPermission.options` with the appropriate kinds based on what the mode allows. For most cases all four are offered; a host's UI can choose to elide the `_always` variants when the mode is `ask` (e.g. allow_always would defeat the point) — but the agent does not enforce this elision; it presents and lets the host filter.
+So the typical `ask` mode flow shows **6 options**: allow_once, allow_always_session, allow_always_project, allow_always_global, reject_once, reject_always.
+
+`plan` mode exit (`submit_plan` tool) uses a different option set with `optionId`s that encode the target mode (per spec example + claude-agent-acp pattern):
+
+| optionId | name | kind | semantic |
+|---|---|---|---|
+| `edit` | "Approve and switch to edit mode" | `allow_always` | switch session to `edit`, return success |
+| `edit_notes` | "Approve with notes" | `allow_once` | stay in plan, replay with notes |
+| `revise` | "Revise" | `reject_once` | stay in plan, return error |
 
 ### 6. Default mode: `ask` (safer)
 
@@ -120,9 +135,10 @@ Built-in `explore` + `planner` profiles get `mode: "plan"` so they're always rea
 
 | # | Title | Brief |
 |---|---|---|
-| [010](010-ground-preparation.md) | Ground preparation | Tool categories expansion, `AgentMode` + `PermissionPolicy` types, settings schema additions, lifecycle event declarations. **No behaviour change.** |
-| [020](020-mode-state-and-set-session-mode.md) | Mode state + ACP `setSessionMode` | `SessionState.runtime.mode`, `PermissionService` skeleton (allow-all default for this milestone), native `setSessionMode` handler, `CurrentModeUpdate` emission, `availableModes` advertised, default-mode bootstrap. |
-| [030](030-ask-mode-and-approval-flow.md) | `ask` mode + native ACP `requestPermission` flow | PermissionService policy engine + `ask` preset + `conn.requestPermission(...)` integration + 4-runtime UI parity + 30s timeout. **Biggest milestone.** |
+| **[005](005-acp-architecture-decision.md)** | **ACP architecture decision (READ FIRST)** | **Locks the ACP-native wire-surface choices. Supersedes wire-method drafts in 010/020/030/090. Not an implementation milestone — a binding decision doc.** |
+| [010](010-ground-preparation.md) | Ground preparation | Tool categories expansion, `AgentMode` + `PermissionPolicy` types, `MODE_CONFIG_ID` constant, settings schema additions, in-process event-type declarations. **No behaviour change.** |
+| [020](020-mode-state-and-set-config-option.md) | Mode state + extend `setSessionConfigOption` | `SessionState.runtime.mode`, `PermissionService` skeleton, new entry in `ModelRegistry.setters` dispatch table calling `PermissionService.setMode`, `buildModeConfigOption` prepended in `buildAllConfigOptions`, `ConfigOptionUpdate` notifications (emit BEFORE response per Goose pattern), default-mode bootstrap. |
+| [030](030-ask-mode-and-approval-flow.md) | `ask` mode + native ACP `request_permission` flow | PermissionService policy engine + `ask` preset + `conn.requestPermission(...)` invocation + scope-encoded-in-`optionId` (6-option `ask`-mode prompt) + 4-runtime UI parity (Zed-style inline cards for browser/chrome-ext) + 30s timeout. **Biggest milestone.** |
 | [040](040-edit-mode-preset.md) | `edit` mode preset | Add `edit` preset, mark write/edit tools with `respectsEditMode: true`, parity tests. |
 | [050](050-plan-mode-and-submit-plan-tool.md) | `plan` mode + `submit_plan` tool | Add `plan` preset, planner system-prompt suffix, built-in `submit_plan` tool (registered only when mode=plan), mode auto-transition on approval. |
 | [060](060-allow-all-and-safety-gate.md) | `allow-all` + capability + safety-immune deny | Add `allow-all` preset, `allowsAllowAllMode` capability gate, hardcoded safety-immune deny list (`.git/**` writes, `.bodhi-pi/**` writes, `.env*` reads, `~/.ssh/**` reads). |

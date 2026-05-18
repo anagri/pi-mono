@@ -1,6 +1,39 @@
 # Milestone 050 — `plan` mode + `submit_plan` tool
 
 > Prerequisites: 010, 020, 030, 040 merged.
+> Also re-read [005-acp-architecture-decision.md](005-acp-architecture-decision.md) — the `submit_plan` approval round-trip uses the spec's plan-exit pattern (3 options with semantic `optionId`s that encode target mode), NOT 4 generic options.
+
+## Updated approach (per 005)
+
+Two small changes from the original draft:
+
+### 1. `submit_plan` options use the canonical plan-exit pattern
+
+Spec `docs/protocol/session-modes.mdx:128-167` + claude-agent-acp's plan-exit:
+
+```ts
+options: [
+  { optionId: "edit",       name: "Approve and switch to edit mode", kind: "allow_always" },
+  { optionId: "edit_notes", name: "Approve with notes",              kind: "allow_once" },
+  { optionId: "revise",     name: "Revise (don't switch mode)",      kind: "reject_once" },
+]
+```
+
+When the user selects `optionId === "edit"`, the `submit_plan` tool:
+1. Calls `PermissionService.setMode(sessionId, "edit", "submit_plan_approved")` — auto-transitions
+2. Returns success with text "Plan approved. Mode switched to edit. Proceed with implementation."
+
+When `optionId === "edit_notes"`, the tool returns success with the user's notes embedded, but does NOT switch mode.
+
+When `optionId === "revise"`, the tool returns error with feedback.
+
+**3 options, not 4** — `reject_always` doesn't make sense for plan-exit.
+
+### 2. Uses native ACP `session/request_permission` (already established in 030)
+
+No new wire methods. Just `await this.conn.requestPermission(...)`.
+
+---
 
 ## Goal
 

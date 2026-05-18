@@ -1,6 +1,17 @@
 # Milestone 010 — Ground preparation
 
-> **Read [000-overview.md](000-overview.md) first.** This milestone lays types and small expansion changes with **no behaviour change**. It exists so the next milestone (020) can import a stable type surface without bundling unrelated changes.
+> **Read [005-acp-architecture-decision.md](005-acp-architecture-decision.md) BEFORE this milestone.** It supersedes the wire-surface choices.
+> Also read [000-overview.md](000-overview.md). This milestone lays types and small expansion changes with **no behaviour change**. It exists so the next milestone (020) can import a stable type surface without bundling unrelated changes.
+
+## Updated approach (per 005)
+
+The original draft added `mode_change` / `tool_approval_request` / `tool_approval_response` to the in-process `BodhiPiEvent` union. **Keep those** — they're for extensions to subscribe to via `pi.on("mode_change", ...)`. They are NOT wire methods.
+
+The original draft mentioned "lifecycle event declarations" implying wire emission via `LIFECYCLE_EVENT_METHOD`. **Don't wire-forward** these events. The wire view of mode change goes through ACP-native `config_option_update` `SessionUpdate` (added in milestone 020); the wire view of permission requests goes through native `session/request_permission` (added in milestone 030). Wire-forwarding the in-process events too would duplicate information.
+
+Also: add `MODE_CONFIG_ID = "mode"` to `src/wire/constants.ts`. Do NOT add `EXT_MODE_*` or `EXT_PERMISSION_*` constants. They're not needed.
+
+---
 
 ## Goal
 

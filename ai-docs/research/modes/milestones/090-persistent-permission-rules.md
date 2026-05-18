@@ -1,6 +1,31 @@
 # Milestone 090 — Persistent always-allow / always-deny rules
 
 > Prerequisites: 010–080 merged.
+> **Re-read [005-acp-architecture-decision.md](005-acp-architecture-decision.md).** This milestone is significantly simplified vs the original draft because no new wire methods are needed.
+
+## Updated approach (per 005)
+
+Three significant changes from the original draft:
+
+### 1. NO new wire methods
+
+The original draft introduced `_bodhi-pi/permission/policy/{get,set,list,unset}`. **Drop all four.** The existing `_bodhi-pi/session/settings/*` already supports arbitrary keys. Persisted rules live under `permission.alwaysAllow` / `permission.alwaysDeny` settings keys. Hosts read/edit via the existing `/settings list permission.*`, `/settings set permission.alwaysAllow.<pattern> true`, etc.
+
+### 2. NO scope-picker UI step
+
+The original draft proposed a secondary modal that pops up after the user clicks `allow_always` to ask "session / project / global?". **Drop.** The scope is encoded in `optionId` (3 distinct `allow_always_*` buttons) per milestone 030's updated approach. When the user clicks `allow_always_project`, the agent simply writes the pattern to project scope.
+
+### 3. The work in 090 is mostly:
+
+- `PermissionService.evaluateToolCall` reads `session.settings.effective.permission.alwaysAllow / alwaysDeny` arrays. If a pattern matches the tool name, short-circuit to allow/deny.
+- When `requestPermission` returns `{ optionId: "allow_always_<scope>" }`, the PermissionService calls `SettingsService.set(sessionId, "permission.alwaysAllow", [...existing, toolName], scope)`. Same for `reject_always` (defaults to session scope).
+- New `/permissions` slash command (per host) is just a thin shortcut over `/settings list permission.*` — optional UX sugar.
+
+### 4. Safety-immune deny list from milestone 060 still wins
+
+`isSafetyImmuneDeny` is consulted BEFORE `alwaysAllow`. A user CANNOT alwaysAllow a path like `.git/HEAD`.
+
+---
 
 ## Goal
 

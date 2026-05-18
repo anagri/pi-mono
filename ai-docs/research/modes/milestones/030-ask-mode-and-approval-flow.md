@@ -1,6 +1,48 @@
 # Milestone 030 — `ask` mode + ACP `requestPermission` flow
 
-> **Read [000-overview.md](000-overview.md), [010-ground-preparation.md](010-ground-preparation.md), [020-mode-state-and-set-session-mode.md](020-mode-state-and-set-session-mode.md) first.** Milestones 010 and 020 must be merged before this milestone starts. **This is the biggest milestone in the plan — both the policy engine and the 4-runtime approval UI land here.**
+> **Read [005-acp-architecture-decision.md](005-acp-architecture-decision.md) BEFORE this milestone.** It revises the option-set design here.
+> Also read [000-overview.md](000-overview.md), [010-ground-preparation.md](010-ground-preparation.md), [020-mode-state-and-set-session-mode.md](020-mode-state-and-set-session-mode.md). Milestones 010 and 020 must be merged before this milestone starts. **This is the biggest milestone in the plan — both the policy engine and the 4-runtime approval UI land here.**
+
+## Updated approach (per 005)
+
+Three changes from the original draft:
+
+### 1. Use native ACP `session/request_permission` (not custom wire)
+
+The original draft introduced `_bodhi-pi/permission/request` / `_bodhi-pi/permission/respond` wire methods. **Don't.** Use the native ACP `session/request_permission` (Agent → Client) — the `BodhiPiAcpAgent` already holds a `conn: AgentSideConnection`; call `await this.conn.requestPermission({ sessionId, toolCall, options })` directly from `PermissionService`. The response comes back as `RequestPermissionResponse { outcome: { outcome: "cancelled" | "selected", optionId? } }`.
+
+The test-harness already stubs `requestPermission` (see `test/helpers/harness.ts:82`); extend it with the `approvalResponses` queue.
+
+### 2. Scope encoded in `optionId` for `allow_always` (codex-acp pattern)
+
+Instead of offering one `allow_always` option and prompting for scope after, offer THREE distinct `allow_always` options in `ask` mode — scope is the `optionId`:
+
+```ts
+const options: PermissionOption[] = [
+  { optionId: "allow_once",              name: "Allow once",                       kind: "allow_once" },
+  { optionId: "allow_always_session",    name: "Allow always (this session)",      kind: "allow_always" },
+  { optionId: "allow_always_project",    name: "Allow always (this project)",      kind: "allow_always" },
+  { optionId: "allow_always_global",     name: "Allow always (every project)",     kind: "allow_always" },
+  { optionId: "reject_once",             name: "Reject",                           kind: "reject_once" },
+  { optionId: "reject_always",           name: "Reject always (this session)",     kind: "reject_always" },
+];
+```
+
+When the agent receives `{ optionId: "allow_always_project" }`, it (a) lets the tool run, AND (b) writes the pattern to `permission.alwaysAllow` at PROJECT scope via existing `SettingsService.set` (milestone 090 wires the write itself; 030 just decodes the optionId).
+
+### 3. No new wire methods at all
+
+The original draft listed:
+- `_bodhi-pi/permission/respond`
+- `_bodhi-pi/permission/list`
+- `_bodhi-pi/permission/policy/get`
+- `_bodhi-pi/permission/policy/set`
+
+**Drop all four.** They were leftover from the pre-ACP-research design. The native `session/request_permission` covers the round-trip; the existing `_bodhi-pi/session/settings/*` covers persistent rules.
+
+The in-process `tool_approval_request` / `tool_approval_response` events stay on the `EventDispatcher` for extensions to subscribe to — NOT forwarded to wire.
+
+---
 
 ## Goal
 
