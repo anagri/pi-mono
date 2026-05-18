@@ -97,12 +97,12 @@ See [mcp.md](./mcp.md) for the connection model and per-tenant ConnectionProvide
 
 ### Sub-agents (`src/subagents/subagent-service.ts`)
 
-V1 ships discovery + list + child-enumeration handlers; `_bodhi-pi/subagent/run` rejects with `-32601` until C2 lands the spawn flow. See [subagents.md](./subagents.md) for runtime mechanics.
+See [subagents.md](./subagents.md) for runtime mechanics and the three contribution sources (project markdown, extension-registered, bundled built-in).
 
 | Method | Params | Response | Side effects | Throws |
 |---|---|---|---|---|
-| `_bodhi-pi/subagent/list` | `{sessionId}` | `{profiles: SubagentProfileSummary[]}` — profiles discovered under `<cwd>/.bodhi-pi/agents/*.md`, sorted by name | none | `-32602` if session not loaded |
-| `_bodhi-pi/subagent/run` | `{sessionId, agent, task, context?, model?}` | (C2) `{childSessionId, status, summary?, error?, durationMs, toolCount}` | (C2) creates child Session via `SubagentService.spawn`, runs prompt loop, returns summary | `-32601` until C2; `-32602` if session not loaded or agent unknown |
+| `_bodhi-pi/subagent/list` | `{sessionId}` | `{profiles: SubagentProfileSummary[]}` — merged set across project markdown + extension-registered + built-ins, sorted by name. Each summary includes `source: "project" \| "extension" \| "builtin"`. | none | `-32602` if session not loaded |
+| `_bodhi-pi/subagent/run` | `{sessionId, agent, task, model?}` | `{childSessionId, status, summary?, error?, durationMs, toolCount}` | creates child Session via `SubagentService.spawn`, runs prompt loop, returns summary | `-32602` if session not loaded or agent unknown |
 | `_bodhi-pi/subagent/children` | `{sessionId}` | `{children: SessionInfo[]}` — list of child sessions whose `parentSessionId === sessionId` AND `subagent !== undefined` | none — drives "runs from this session" UI | `-32602` if session not loaded |
 
 ## `session/update` notifications (Agent → Client)

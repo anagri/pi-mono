@@ -1,3 +1,5 @@
+export type SubagentSource = "project" | "extension" | "builtin";
+
 export interface SubagentProfile {
 	name: string;
 	description: string;
@@ -7,6 +9,8 @@ export interface SubagentProfile {
 	maxTurns: number;
 	body: string;
 	filePath: string;
+	source: SubagentSource;
+	disabled?: boolean;
 }
 
 export interface SubagentFrontmatter {
@@ -16,6 +20,7 @@ export interface SubagentFrontmatter {
 	context?: "fresh";
 	tools?: string[];
 	"max-turns"?: number;
+	disabled?: boolean;
 }
 
 export interface SubagentProfileSummary {
@@ -25,6 +30,7 @@ export interface SubagentProfileSummary {
 	context: "fresh";
 	tools?: string[];
 	maxTurns: number;
+	source: SubagentSource;
 }
 
 export function profileToSummary(profile: SubagentProfile): SubagentProfileSummary {
@@ -35,5 +41,6 @@ export function profileToSummary(profile: SubagentProfile): SubagentProfileSumma
 		context: profile.context,
 		...(profile.tools !== undefined ? { tools: profile.tools } : {}),
 		maxTurns: profile.maxTurns,
+		source: profile.source,
 	};
 }

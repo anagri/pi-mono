@@ -20,7 +20,7 @@ import type { BodhiPiConfig } from "@/acp/agent.js";
 import { buildSystemPrompt } from "@/acp/system-prompt.js";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
-import { mergeCommands, mergeTools } from "@/extensions/merge.js";
+import { mergeCommands, mergeSubagentProfiles, mergeTools } from "@/extensions/merge.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
 import { type ModelRegistry, resolveProviderStreamOptions } from "@/models/registry.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
@@ -34,6 +34,7 @@ import { mergeSettings } from "@/settings/settings-merge.js";
 import { loadProjectSkills } from "@/skills/discovery.js";
 import type { Skill } from "@/skills/skill.js";
 import { loadProjectSubagents } from "@/subagents/discovery.js";
+import { getBuiltinSubagentProfiles } from "@/subagents/profiles/index.js";
 import type { SubagentService } from "@/subagents/subagent-service.js";
 import type { SubagentProfile } from "@/subagents/types.js";
 import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools } from "@/tools/index.js";
@@ -69,7 +70,7 @@ export async function loadProjectArtifacts(
 	globalSettingsResult: Awaited<ReturnType<typeof loadGlobalSettings>> | undefined;
 	mergedFileSettings: BodhiPiProjectSettings;
 }> {
-	const [projectCommands, skills, subagentProfiles, contextFiles, projectSettingsResult, globalSettingsResult] =
+	const [projectCommands, skills, projectSubagents, contextFiles, projectSettingsResult, globalSettingsResult] =
 		await Promise.all([
 			loadProjectCommands(config.filesystem, cwd),
 			loadProjectSkills(config.filesystem, cwd),
@@ -80,6 +81,7 @@ export async function loadProjectArtifacts(
 				? loadGlobalSettings(config.globalFilesystem ?? config.filesystem, config.homeDir)
 				: Promise.resolve(undefined),
 		]);
+	const subagentProfiles = mergeSubagentProfiles(projectSubagents, getBuiltinSubagentProfiles());
 	const builtinTools = createBuiltinTools({
 		filesystem: config.filesystem,
 		cwd,

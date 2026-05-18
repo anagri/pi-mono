@@ -6,7 +6,13 @@ This spec describes the public surface and the C1 (discovery scaffold) implement
 
 ## Concepts
 
-**Sub-agent profile**: a markdown document under `<cwd>/.bodhi-pi/agents/<name>.md` defining a specialist's `name`, `description`, `model?`, `tools?` (allowlist over built-ins), `max-turns?`, and a body that becomes the child's system prompt. Peer concept to `Skill` and `PromptTemplate`. Discovered via `loadProjectSubagents(filesystem, cwd)` (`src/subagents/discovery.ts`).
+**Sub-agent profile**: a specialist's `name`, `description`, `model?`, `tools?` (allowlist over built-ins), `max-turns?`, `disabled?`, and a `body` that becomes the child's system prompt. Peer concept to `Skill` and `PromptTemplate`. Three contribution sources:
+
+- **Project markdown** — `<cwd>/.bodhi-pi/agents/<name>.md`, discovered via `loadProjectSubagents(filesystem, cwd)` (`src/subagents/discovery.ts`). `source: "project"`.
+- **Built-in** — bundled with the package under `src/subagents/profiles/`, returned by `getBuiltinSubagentProfiles()` (`src/subagents/profiles/index.ts`). Currently ships `explore` and `planner`. `source: "builtin"`.
+- **Extension-registered** — via `ExtensionAPI.registerSubagentProfile(def)` (P2d); aggregated by `ExtensionRunner.getSubagentProfiles()`. `source: "extension"`.
+
+Merged at session bootstrap via `mergeSubagentProfiles(project, extension, builtin)` (`src/extensions/merge.ts`) with precedence **project > extension > built-in**. Entries where the winning entry has `disabled: true` are dropped from the output — that's how a project markdown stub overrides + hides a built-in or extension-registered profile by name.
 
 **Child session**: a real `SessionRecord` created in `SessionStore` with `parentSessionId` set to the parent and `subagent: { profileName }` denormalized for filterability. Default `SessionStore.list()` excludes child sessions to keep the user-visible list clean; opt in with `list({ includeSubagentChildren: true })`.
 
@@ -40,6 +46,10 @@ tools:                          # optional allowlist over built-ins; omitted = a
   - read
   - grep
 max-turns: 50                   # optional, default 50
+disabled: true                  # optional; on a project markdown entry, drops the same-name built-in or
+                                # extension-registered profile from the registry. Built-in source files
+                                # may NOT declare disabled:true (asserted at module load); extension
+                                # `registerSubagentProfile` calls with disabled:true throw at registration.
 ---
 You are an extractor sub-agent. Your job is to...
 ```
@@ -51,6 +61,20 @@ Discovery rules (`src/subagents/discovery.ts`):
 - Missing/empty `description` or empty body → profile silently dropped.
 - Duplicate names: first wins; later ones silently dropped.
 - Sorted by name.
+- Validation logic shared with extension-registered profiles via `src/subagents/_validate.ts` (`validateAndNormalizeProfile`).
+
+### Built-in profiles
+
+Two profiles ship bundled with bodhi-pi (no project seed required):
+
+- **`explore`** — read-only investigator (`tools: [read, ls, find, grep]`). Reads the workspace and reports findings without modifying state.
+- **`planner`** — design plans without executing them (`tools: [read, ls, find, grep]`). Produces numbered implementation plans grounded in real code.
+
+Both are loaded as TS modules from `src/subagents/profiles/{explore,planner}.ts` so they work uniformly across cli + http + browser Worker + chrome-ext MV3 with no bundler-specific glue. Disable a built-in by creating a project markdown profile with the same `name` and `disabled: true` in frontmatter.
+
+### Extension-registered profiles
+
+Extensions register profiles via `ExtensionAPI.registerSubagentProfile(def)` (P2d). The runner aggregates them into `runner.getSubagentProfiles()` and the bootstrap merger places them between project (highest precedence) and built-in (lowest). Registration shares the markdown validation pipeline; a registration that supplies `disabled: true` throws synchronously.
 
 ### Extension methods
 
@@ -106,21 +130,23 @@ Implementations:
 ```
 session/new → buildSessionState
               ├─ loadProjectArtifacts(config, cwd, sessionId)
-              │   ├─ loadProjectSubagents(fs, cwd)            → SubagentProfile[]
+              │   ├─ loadProjectSubagents(fs, cwd)            → SubagentProfile[] (source: "project")
+              │   ├─ runner?.getSubagentProfiles()            → SubagentProfile[] (source: "extension")
+              │   ├─ getBuiltinSubagentProfiles()             → SubagentProfile[] (source: "builtin")
+              │   ├─ mergeSubagentProfiles(project, extension, builtin)
+              │   │     → dedup by name (project > extension > builtin); drop disabled-winning
               │   └─ createBuiltinTools({
               │        ...,
-              │        subagent: profiles.length > 0
-              │          ? { sessionId, profiles }
+              │        subagent: merged.length > 0
+              │          ? { sessionId, profiles: merged, service }
               │          : undefined
               │      })
-              └─ SessionState.subagentProfiles = profiles
-                 SessionState.tools includes `subagent` tool iff profiles.length > 0
+              └─ SessionState.subagentProfiles = merged
+                 SessionState.tools includes `subagent` tool iff merged.length > 0
 
-extMethod _bodhi-pi/subagent/list   → SubagentService.handleList   → profile summaries
-extMethod _bodhi-pi/subagent/run    → throws -32601 (C1 stub; C2 wires spawn)
+extMethod _bodhi-pi/subagent/list     → SubagentService.handleList   → merged profile summaries (with `source`)
+extMethod _bodhi-pi/subagent/run      → SubagentService.spawn        → child summary
 extMethod _bodhi-pi/subagent/children → SubagentService.handleChildren → sessionStore.list({parentSessionId, includeSubagentChildren:true})
-
-subagent tool .execute()            → throws "spawn path lands in C2"
 ```
 
 ## C2/C3 sketch (what arrives later)

@@ -41,6 +41,7 @@ function makeProfile(name: string): SubagentProfile {
 		maxTurns: 5,
 		body: "test body",
 		filePath: `inline:${name}`,
+		source: "project",
 	};
 }
 
