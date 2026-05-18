@@ -110,6 +110,30 @@ test("extension that registers a profile with disabled:true throws at registrati
 	expect(res.profiles.find((p) => p.name === "should-fail")).toBeUndefined();
 });
 
+test("extension that registers a profile with context:'fork' throws at registration", async () => {
+	const forkExt: ExtensionFactory = (pi) => {
+		pi.registerSubagentProfile({
+			name: "should-fail-fork",
+			description: "fork-mode at extension surface",
+			body: "x",
+			...({ context: "fork" } as unknown as { context: "fresh" }),
+		});
+	};
+	const model = newModel();
+	const harness = createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		extensionFactories: [{ name: "fork-ext", factory: forkExt }],
+	});
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const res = (await harness.clientConn.extMethod(EXT_SUBAGENT_LIST, { sessionId })) as {
+		profiles: ListedProfile[];
+	};
+	expect(res.profiles.find((p) => p.name === "should-fail-fork")).toBeUndefined();
+});
+
 test("extension overrides a built-in when no project markdown exists", async () => {
 	const overrideExt: ExtensionFactory = (pi) => {
 		pi.registerSubagentProfile({

@@ -164,12 +164,17 @@ export class ExtensionRunner {
 						`extension '${extensionName}' cannot register subagent profile '${def.name}' with disabled:true — disabled only applies to project markdown overrides`,
 					);
 				}
+				if (def.context !== undefined && def.context !== "fresh") {
+					throw new Error(
+						`extension '${extensionName}' cannot register subagent profile '${def.name}' with context:"${def.context}" — extension-registered profiles must use context:"fresh"; ship as a project markdown profile under <cwd>/.bodhi-pi/agents/ to use context:"fork"`,
+					);
+				}
 				const result = validateAndNormalizeProfile({
 					frontmatter: {
 						name: def.name,
 						description: def.description,
 						...(def.model !== undefined ? { model: def.model } : {}),
-						context: "fresh",
+						context: def.context ?? "fresh",
 						...(def.tools !== undefined ? { tools: def.tools } : {}),
 						...(def.maxTurns !== undefined ? { "max-turns": def.maxTurns } : {}),
 					},

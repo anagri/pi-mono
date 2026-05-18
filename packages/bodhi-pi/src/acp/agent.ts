@@ -375,6 +375,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		terminal: boolean;
 		scriptExecutor: boolean;
 		settings: boolean;
+		subagent: boolean;
 	} {
 		return {
 			kv: this.config.kvStore !== undefined,
@@ -383,6 +384,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 			terminal: this.config.terminal !== undefined,
 			scriptExecutor: this.config.scriptExecutor !== undefined,
 			settings: true,
+			// SubagentService is unconditionally registered (bundled built-ins always present); per-session profile count is reachable via `_bodhi-pi/subagent/list`.
+			subagent: true,
 		};
 	}
 

@@ -423,6 +423,7 @@ test("initialize advertises per-namespace availability reflecting the injected a
 		terminal: false,
 		scriptExecutor: false,
 		settings: true,
+		subagent: true,
 	});
 
 	// Construct an agent directly without kvStore to verify kv:false / mcp:false.
@@ -451,6 +452,7 @@ test("initialize advertises per-namespace availability reflecting the injected a
 		terminal: false,
 		scriptExecutor: false,
 		settings: true,
+		subagent: true,
 	});
 });
 
