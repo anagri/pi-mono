@@ -1,6 +1,8 @@
 # Sub-agents roadmap (rough)
 
-After v1 lands and we capture learnings in `retrospective.md`, we'll pick the next phase here and **re-research** it before writing its plan. The order below is a current guess at value × effort, not a commitment. Each phase will go through its own brainstorming + planning + execution cycle.
+V1 landed 2026-05-18 across three commits (`f7d7d421`, `532ee5fc`, `c8e06bf1`). Retrospective in [retrospective.md](./retrospective.md). The phases below are refined with what v1 surfaced; each one still goes through its own brainstorming + planning + execution cycle before implementation. Order is a current guess at value × effort, not a commitment.
+
+**Reordering after v1 retrospective**: P2c (bundled profiles) is the lowest-effort highest-leverage next step because v1 de-risked discovery + tool registration + spawn. P2d (extension-registered profiles) is similarly low effort — half-a-commit estimate. P2a (forked context) is the bigger semantic change but unblocks "review this diff"-style usage. Suggested order: **P2c → P2d → P2a → P2b → P3a → ...**.
 
 ## Phase 2 candidates (one picks next)
 
@@ -33,9 +35,9 @@ After v1 lands and we capture learnings in `retrospective.md`, we'll pick the ne
 - Failure modes: fail-fast vs collect-all?
 - How do parallel child events interleave on the parent's `tool_call_update` channel?
 
-### P2c — Bundled built-in profiles
+### P2c — Bundled built-in profiles (**RECOMMENDED NEXT**)
 
-**Why**: New installs get value with zero config. Matches cc/opencode/Mastra UX. Reduces "what do I put in `.bodhi-pi/agents/`?" friction.
+**Why**: New installs get value with zero config. Matches cc/opencode/Mastra UX. Reduces "what do I put in `.bodhi-pi/agents/`?" friction. **De-risked by v1**: discovery + tool registration + spawn flow are all proven; adding a profile file is a one-file change.
 
 **Refs to re-read**:
 - cc's `Explore/Plan/Execute/audit-tests`.
@@ -44,9 +46,11 @@ After v1 lands and we capture learnings in `retrospective.md`, we'll pick the ne
 
 **Key design questions**:
 - Which profiles to ship? Start with `explore` (read-only) + `planner` (planning prose only)? Skip `worker` (too generic, easy to ship a bad default)?
-- Where do they live: `src/subagents/profiles/<name>.md` bundled as imports? Or runtime-loaded from a known path?
+- Where do they live: `src/subagents/profiles/<name>.md` bundled as TS imports (works in all runtimes — no FS scan needed for built-ins)? Or runtime-loaded from a known path?
 - How do users override / disable? `subagents.disableBuiltins` in settings? Override by name in `.bodhi-pi/agents/`?
-- Should bundled profiles ship with `inheritProjectContext` / `inheritSkills` semantics (pi-subagents pattern)?
+- Should bundled profiles ship with `inheritProjectContext` / `inheritSkills` semantics (pi-subagents pattern)? (v1 doesn't have either; P3d adds skill inheritance.)
+
+**Estimated commits**: 1 (profile definitions + merge into discovery + tests).
 
 ### P2d — Extension-registered profiles
 
@@ -54,11 +58,14 @@ After v1 lands and we capture learnings in `retrospective.md`, we'll pick the ne
 
 **Refs to re-read**:
 - Existing `registerTool` / `registerCommand` API in `src/extensions/types.ts`.
+- v1's `loadProjectArtifacts` in `src/sessions/session-bootstrap.ts:58` for the merge insertion point.
 
 **Key design questions**:
 - Add `registerSubagentProfile(def)` to ExtensionAPI — straightforward.
-- Profile merge precedence with markdown: `mergeSubagentProfiles(markdownProfiles, extensionProfiles)` — first-registered wins on name collision? Or project markdown beats extension?
+- Profile merge precedence with markdown: `mergeSubagentProfiles(markdownProfiles, extensionProfiles)` — first-registered wins on name collision (matches commands merge)? Or project markdown beats extension?
 - How does this interact with hot-reload (markdown profiles re-walk per session boot; extension profiles fixed at runner build)?
+
+**Estimated commits**: 1 (ExtensionAPI method + merge in bootstrap + tests). Pattern identical to `mergeCommands`/`mergeTools`.
 
 ## Phase 3 candidates
 
@@ -146,6 +153,18 @@ After v1 lands and we capture learnings in `retrospective.md`, we'll pick the ne
 - Gemini CLI `remote-invocation.ts` + A2A streaming + `RemoteInvocation`.
 
 **Key note**: Far-future. Depends on A2A spec maturity in our ecosystem. Likely needs a new `SubagentExecutor` interface (local vs remote) and a Host-injected dependency.
+
+## Carry-forward from v1 retrospective
+
+These items came out of `retrospective.md`'s "Design decisions that should change" section. Fold them into the relevant phase plan before implementation:
+
+- **`SubagentService.evictChild` lifecycle** — currently in the unconditional finally of `spawn()`. For background runs (P3a) this is wrong; the child must stay alive across parent turns. Move the eviction into the "completion" branch only.
+- **`computeChildDepth` is O(n entries)** per spawn — cache on `SessionState.subagentDepth` populated at `buildChildSessionState`. Worth doing in P2c or P3a, whichever lands first.
+- **Progress mirroring is one global handler** filtering by sessionId. Works for foreground single-child but parallel batch (P2b) needs per-child UI accumulation in the Host — design the parallel-render UI before implementation.
+- **`buildChildSessionState` duplicates `buildSessionState`** — acceptable now, will diverge with profile inheritance features. Worth a shared helper in a later cleanup.
+- **Faux provider scripting helper** — add a `scriptSubagentRun({parentToolCalls, childToolCalls, finalText})` test helper so future spawn tests don't off-by-one on the queue.
+- **`ChatPanelPage.systemMessageWithEvent(event)`** Playwright helper — avoids the `.last()` after `waitForIdle()` race documented in retrospective.
+- **`SubagentService.config`** field is declared but unused in C2 — keep for symmetry, drop in cleanup if YAGNI wins.
 
 ## Notes for re-reading
 

@@ -4,7 +4,7 @@ Living set of documents for adding sub-agent support to bodhi-pi. The feature le
 
 ## Status
 
-**Current phase**: v1 design locked (2026-05-18). Implementation pending user approval of `v1-plan.md`.
+**Current phase**: v1 shipped 2026-05-18 — `f7d7d421` (C1) → `532ee5fc` (C2) → `c8e06bf1` (C3). See [`retrospective.md`](./retrospective.md). Next phase pick: P2c (bundled built-in profiles) per refined [roadmap.md](./roadmap.md).
 
 **Scope locked for v1** (from brainstorming session 2026-05-18):
 
@@ -20,7 +20,8 @@ Living set of documents for adding sub-agent support to bodhi-pi. The feature le
 | Question | Doc |
 |---|---|
 | What does the final shape look like and why? | [design.md](./design.md) |
-| What are we building right now and in what order? | [v1-plan.md](./v1-plan.md) |
+| What did v1 ship? What surprised vs the design? | [retrospective.md](./retrospective.md) |
+| What were the v1 commit boundaries? | [v1-plan.md](./v1-plan.md) |
 | What comes after v1? (Rough only — re-researched per phase) | [roadmap.md](./roadmap.md) |
 | What did we defer from v1 and why? | [pending.md](./pending.md) |
 | What's the upstream research base? | `../research/sub-agents/` |
