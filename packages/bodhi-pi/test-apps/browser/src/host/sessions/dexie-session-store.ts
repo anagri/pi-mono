@@ -47,16 +47,25 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 	const { db, sessions, entries } = handle;
 
 	return {
-		async create({ cwd }) {
+		async create({ cwd, parentSessionId, subagent }) {
 			const now = Date.now();
 			const record: SessionRecord = {
 				id: crypto.randomUUID(),
 				cwd,
 				createdAt: now,
 				updatedAt: now,
+				...(parentSessionId !== undefined ? { parentSessionId } : {}),
+				...(subagent !== undefined ? { subagent } : {}),
 				entries: [],
 			};
-			await sessions.put({ id: record.id, cwd, createdAt: now, updatedAt: now });
+			await sessions.put({
+				id: record.id,
+				cwd,
+				createdAt: now,
+				updatedAt: now,
+				...(parentSessionId !== undefined ? { parentSessionId } : {}),
+				...(subagent !== undefined ? { subagentProfile: subagent.profileName } : {}),
+			});
 			return record;
 		},
 
@@ -70,6 +79,8 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 				createdAt: row.createdAt,
 				updatedAt: row.updatedAt,
 				leafId: row.leafId ?? null,
+				...(row.parentSessionId ? { parentSessionId: row.parentSessionId } : {}),
+				...(row.subagentProfile ? { subagent: { profileName: row.subagentProfile } } : {}),
 				entries: rows.map((e) => e.entry),
 			};
 		},
@@ -91,9 +102,12 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 			});
 		},
 
-		async list({ cwd, cursor }: ListSessionsRequest): Promise<ListSessionsResult> {
+		async list({ cwd, cursor, parentSessionId, includeSubagentChildren }: ListSessionsRequest): Promise<ListSessionsResult> {
 			const cursorData = parseCursor(cursor);
 			let rows = cwd ? await sessions.where("cwd").equals(cwd).toArray() : await sessions.toArray();
+			rows = rows
+				.filter((r) => (parentSessionId !== undefined ? r.parentSessionId === parentSessionId : true))
+				.filter((r) => includeSubagentChildren === true || r.subagentProfile === undefined);
 			rows.sort((a, b) => b.updatedAt - a.updatedAt || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0));
 
 			if (cursorData) {
@@ -117,6 +131,8 @@ export function createDexieSessionStore(opts: DexieSessionStoreOptions = {}): Se
 						createdAt: r.createdAt,
 						updatedAt: r.updatedAt,
 						messageCount,
+						...(r.parentSessionId ? { parentSessionId: r.parentSessionId } : {}),
+						...(r.subagentProfile ? { subagent: { profileName: r.subagentProfile } } : {}),
 					};
 				}),
 			);

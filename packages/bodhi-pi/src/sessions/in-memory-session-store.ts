@@ -21,7 +21,7 @@ export function createInMemorySessionStore(): SessionStore {
 	const sessions = new Map<string, SessionRecord>();
 
 	return {
-		async create({ cwd, parentSessionId }) {
+		async create({ cwd, parentSessionId, subagent }) {
 			const now = Date.now();
 			const record: SessionRecord = {
 				id: randomUUID(),
@@ -30,6 +30,7 @@ export function createInMemorySessionStore(): SessionStore {
 				updatedAt: now,
 				leafId: null,
 				...(parentSessionId !== undefined ? { parentSessionId } : {}),
+				...(subagent !== undefined ? { subagent } : {}),
 				entries: [],
 			};
 			sessions.set(record.id, record);
@@ -77,11 +78,13 @@ export function createInMemorySessionStore(): SessionStore {
 			return { newSessionId: newRecord.id };
 		},
 
-		async list({ cwd }: ListSessionsRequest): Promise<ListSessionsResult> {
+		async list({ cwd, parentSessionId, includeSubagentChildren }: ListSessionsRequest): Promise<ListSessionsResult> {
 			// Single-page in-memory store; cursor is ignored. Disk-backed impls
 			// must honour `cursor` per the SessionStore.list JSDoc contract.
 			const all = [...sessions.values()]
 				.filter((r) => (cwd ? r.cwd === cwd : true))
+				.filter((r) => (parentSessionId !== undefined ? r.parentSessionId === parentSessionId : true))
+				.filter((r) => includeSubagentChildren === true || r.subagent === undefined)
 				.sort((a, b) => b.updatedAt - a.updatedAt)
 				.map((r) => {
 					const latestName = [...r.entries]
@@ -95,6 +98,7 @@ export function createInMemorySessionStore(): SessionStore {
 						messageCount: r.entries.filter((e) => e.type === "message").length,
 						...(latestName !== undefined ? { name: latestName } : {}),
 						...(r.parentSessionId !== undefined ? { parentSessionId: r.parentSessionId } : {}),
+						...(r.subagent !== undefined ? { subagent: r.subagent } : {}),
 					};
 				});
 			return { sessions: all };

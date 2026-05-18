@@ -19,7 +19,9 @@ CREATE TABLE sessions (
 	cwd TEXT NOT NULL,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL,
-	leaf_id TEXT
+	leaf_id TEXT,
+	parent_session_id TEXT,
+	subagent_profile TEXT
 );
 
 CREATE INDEX IF NOT EXISTS sessions_user_updated_idx

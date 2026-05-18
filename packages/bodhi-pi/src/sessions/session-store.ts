@@ -25,8 +25,10 @@ export interface SessionRecord {
 	 * tree-aware features (compaction, fork) populate it via `setLeafId`.
 	 */
 	leafId?: string | null;
-	/** Set when this session was created by `_bodhi-pi/session/fork` or `/clone`. */
+	/** Set when this session was created by `_bodhi-pi/session/fork`, `/clone`, or `SubagentService.spawn`. */
 	parentSessionId?: string;
+	/** Set when this session was created by `SubagentService.spawn`. Denormalized so `list()` can filter without walking each session's entries. */
+	subagent?: { profileName: string };
 	/** Latest `session_info.name` on the active path. */
 	name?: string;
 	entries: SessionEntry[];
@@ -40,11 +42,24 @@ export interface SessionInfo {
 	messageCount: number;
 	name?: string;
 	parentSessionId?: string;
+	subagent?: { profileName: string };
 }
 
 export interface ListSessionsRequest {
 	cwd?: string;
 	cursor?: string;
+	/**
+	 * When set, returns only sessions whose `parentSessionId` matches. Combine
+	 * with `includeSubagentChildren: true` to enumerate subagent children of a
+	 * given parent.
+	 */
+	parentSessionId?: string;
+	/**
+	 * When false/omitted (default), sessions created by `SubagentService.spawn`
+	 * are filtered out. Forks (which set `parentSessionId` but NOT `subagent`)
+	 * remain visible — historical UX preserved.
+	 */
+	includeSubagentChildren?: boolean;
 }
 
 export interface ListSessionsResult {
@@ -60,7 +75,7 @@ export interface ListSessionsResult {
  * branch summary, navigate) depend on their presence.
  */
 export interface SessionStore {
-	create(meta: { cwd: string; parentSessionId?: string }): Promise<SessionRecord>;
+	create(meta: { cwd: string; parentSessionId?: string; subagent?: { profileName: string } }): Promise<SessionRecord>;
 
 	load(sessionId: string): Promise<SessionRecord | undefined>;
 

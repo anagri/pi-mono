@@ -33,6 +33,8 @@ import { loadGlobalSettings } from "@/settings/settings-global.js";
 import { mergeSettings } from "@/settings/settings-merge.js";
 import { loadProjectSkills } from "@/skills/discovery.js";
 import type { Skill } from "@/skills/skill.js";
+import { loadProjectSubagents } from "@/subagents/discovery.js";
+import type { SubagentProfile } from "@/subagents/types.js";
 import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools } from "@/tools/index.js";
 import { type ContextFile, loadProjectContextFiles } from "./resource-loader.js";
 
@@ -49,39 +51,48 @@ export interface BootstrapDeps {
 /**
  * Read all per-cwd bootstrap inputs in parallel: discovered tools, project + global settings,
  * and the merged file-settings view. Pure I/O — no Agent construction yet.
+ *
+ * `builtinTools` is built per `sessionId` so the conditional `subagent` tool can close over the
+ * parent's id (the tool needs it to create child sessions linked back).
  */
 export async function loadProjectArtifacts(
 	config: BodhiPiConfig,
 	cwd: string,
+	sessionId: string,
 ): Promise<{
 	builtinTools: ReturnType<typeof createBuiltinTools>;
 	projectCommands: Awaited<ReturnType<typeof loadProjectCommands>>;
 	skills: Skill[];
+	subagentProfiles: SubagentProfile[];
 	contextFiles: ContextFile[];
 	projectSettingsResult: Awaited<ReturnType<typeof loadProjectSettings>>;
 	globalSettingsResult: Awaited<ReturnType<typeof loadGlobalSettings>> | undefined;
 	mergedFileSettings: BodhiPiProjectSettings;
 }> {
+	const [projectCommands, skills, subagentProfiles, contextFiles, projectSettingsResult, globalSettingsResult] =
+		await Promise.all([
+			loadProjectCommands(config.filesystem, cwd),
+			loadProjectSkills(config.filesystem, cwd),
+			loadProjectSubagents(config.filesystem, cwd),
+			loadProjectContextFiles(config.filesystem, cwd),
+			loadProjectSettings(config.filesystem, cwd),
+			config.homeDir
+				? loadGlobalSettings(config.globalFilesystem ?? config.filesystem, config.homeDir)
+				: Promise.resolve(undefined),
+		]);
 	const builtinTools = createBuiltinTools({
 		filesystem: config.filesystem,
 		cwd,
 		...(config.scriptExecutor ? { scriptExecutor: config.scriptExecutor } : {}),
 		...(config.terminal ? { terminal: config.terminal } : {}),
+		...(subagentProfiles.length > 0 ? { subagent: { sessionId, profiles: subagentProfiles } } : {}),
 	});
-	const [projectCommands, skills, contextFiles, projectSettingsResult, globalSettingsResult] = await Promise.all([
-		loadProjectCommands(config.filesystem, cwd),
-		loadProjectSkills(config.filesystem, cwd),
-		loadProjectContextFiles(config.filesystem, cwd),
-		loadProjectSettings(config.filesystem, cwd),
-		config.homeDir
-			? loadGlobalSettings(config.globalFilesystem ?? config.filesystem, config.homeDir)
-			: Promise.resolve(undefined),
-	]);
 	const mergedFileSettings = mergeSettings(globalSettingsResult?.settings ?? {}, projectSettingsResult.settings);
 	return {
 		builtinTools,
 		projectCommands,
 		skills,
+		subagentProfiles,
 		contextFiles,
 		projectSettingsResult,
 		globalSettingsResult,
@@ -224,11 +235,12 @@ export async function buildSessionState(
 	const leafId = args.leafId ?? null;
 	const initialThinkingLevel = args.initialThinkingLevel ?? null;
 
-	const artifacts = await loadProjectArtifacts(config, cwd);
+	const artifacts = await loadProjectArtifacts(config, cwd, sessionId);
 	const {
 		builtinTools,
 		projectCommands,
 		skills,
+		subagentProfiles,
 		contextFiles,
 		projectSettingsResult,
 		globalSettingsResult,
@@ -278,6 +290,7 @@ export async function buildSessionState(
 		commands,
 		projectCommands,
 		skills,
+		subagentProfiles,
 		appendSystemPrompt: resolvedAppend ?? null,
 		contextFiles,
 		compaction: effectiveCompaction,

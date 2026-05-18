@@ -7,6 +7,8 @@ export interface SessionRow {
 	createdAt: number;
 	updatedAt: number;
 	leafId?: string | null;
+	parentSessionId?: string;
+	subagentProfile?: string;
 }
 
 export interface EntryRow {

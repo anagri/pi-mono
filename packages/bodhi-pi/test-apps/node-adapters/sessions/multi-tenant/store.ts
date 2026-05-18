@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ExtensionEntry, ReadExtensionEntriesFilter, SessionRecord, SessionStore } from "@bodhiapp/bodhi-pi";
 import Database from "better-sqlite3";
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { encodeCursor, PAGE_SIZE, parseCursor, parseExtensionEntry, parseSessionEntry } from "../shared.js";
 import { runMigrations } from "./migrate.js";
@@ -55,11 +55,29 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 	}
 
 	return {
-		create({ cwd }) {
+		create({ cwd, parentSessionId, subagent }) {
 			const now = Date.now();
 			const id = crypto.randomUUID();
-			db.insert(sessions).values({ id, userId, cwd, createdAt: now, updatedAt: now }).run();
-			return Promise.resolve({ id, cwd, createdAt: now, updatedAt: now, entries: [] });
+			db.insert(sessions)
+				.values({
+					id,
+					userId,
+					cwd,
+					createdAt: now,
+					updatedAt: now,
+					...(parentSessionId !== undefined ? { parentSessionId } : {}),
+					...(subagent !== undefined ? { subagentProfile: subagent.profileName } : {}),
+				})
+				.run();
+			return Promise.resolve({
+				id,
+				cwd,
+				createdAt: now,
+				updatedAt: now,
+				...(parentSessionId !== undefined ? { parentSessionId } : {}),
+				...(subagent !== undefined ? { subagent } : {}),
+				entries: [],
+			});
 		},
 
 		load(sessionId) {
@@ -83,6 +101,8 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 				createdAt: row.createdAt,
 				updatedAt: row.updatedAt,
 				leafId: row.leafId ?? null,
+				...(row.parentSessionId ? { parentSessionId: row.parentSessionId } : {}),
+				...(row.subagentProfile ? { subagent: { profileName: row.subagentProfile } } : {}),
 				entries: entryRows.map((r) => parseSessionEntry(r.payload)),
 			};
 			return Promise.resolve(record);
@@ -136,7 +156,7 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 			}
 		},
 
-		list({ cwd, cursor }) {
+		list({ cwd, cursor, parentSessionId, includeSubagentChildren }) {
 			const cursorData = parseCursor(cursor ?? undefined);
 
 			const rows = db
@@ -145,6 +165,8 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 					cwd: sessions.cwd,
 					createdAt: sessions.createdAt,
 					updatedAt: sessions.updatedAt,
+					parentSessionId: sessions.parentSessionId,
+					subagentProfile: sessions.subagentProfile,
 					messageCount: sql<number>`count(case when ${sessionEntries.type} = 'message' then 1 end)`,
 				})
 				.from(sessions)
@@ -153,6 +175,8 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 					and(
 						eq(sessions.userId, userId),
 						cwd ? eq(sessions.cwd, cwd) : undefined,
+						parentSessionId !== undefined ? eq(sessions.parentSessionId, parentSessionId) : undefined,
+						includeSubagentChildren === true ? undefined : isNull(sessions.subagentProfile),
 						cursorData
 							? or(
 									lt(sessions.updatedAt, cursorData.updatedAt),
@@ -178,6 +202,8 @@ export function createSqliteSessionStore(opts: MultiTenantSessionStoreOptions): 
 					createdAt: r.createdAt,
 					updatedAt: r.updatedAt,
 					messageCount: r.messageCount ?? 0,
+					...(r.parentSessionId ? { parentSessionId: r.parentSessionId } : {}),
+					...(r.subagentProfile ? { subagent: { profileName: r.subagentProfile } } : {}),
 				})),
 				...(nextCursor ? { nextCursor } : {}),
 			});

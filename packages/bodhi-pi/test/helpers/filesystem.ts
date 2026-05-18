@@ -12,6 +12,12 @@ export async function seedSkill(fs: Filesystem, cwd: string, folder: string, con
 	await fs.writeTextFile(`${dir}/SKILL.md`, content);
 }
 
+export async function seedSubagent(fs: Filesystem, cwd: string, name: string, content: string): Promise<void> {
+	const dir = `${cwd === "/" ? "" : cwd}/.bodhi-pi/agents`;
+	await fs.mkdir(dir, { recursive: true });
+	await fs.writeTextFile(`${dir}/${name}.md`, content);
+}
+
 export async function seedContextFile(fs: Filesystem, dir: string, filename: string, content: string): Promise<void> {
 	const normalized = dir === "/" ? "" : dir;
 	await fs.mkdir(dir, { recursive: true });

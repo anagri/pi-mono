@@ -195,6 +195,7 @@ export {
 export { loadGlobalSettings } from "./settings/settings-global.js";
 export { mergeSettings } from "./settings/settings-merge.js";
 export type { Skill } from "./skills/skill.js";
+export type { SubagentFrontmatter, SubagentProfile, SubagentProfileSummary } from "./subagents/types.js";
 export type {
 	Terminal,
 	TerminalCapabilities,
@@ -236,6 +237,9 @@ export {
 	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
+	EXT_SUBAGENT_CHILDREN,
+	EXT_SUBAGENT_LIST,
+	EXT_SUBAGENT_RUN,
 	LIFECYCLE_EVENT_METHOD,
 	MODEL_CONFIG_ID,
 	THINKING_CONFIG_ID,

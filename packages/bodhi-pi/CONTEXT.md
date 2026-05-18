@@ -80,6 +80,17 @@ A markdown document in `<cwd>/.bodhi-pi/skills/<name>/SKILL.md` with frontmatter
 **Command**:
 A markdown prompt template in `<cwd>/.bodhi-pi/commands/<name>.md` (optionally nested). Frontmatter declares `description` and `argument-hint`; the body is expanded on slash-command invocation with `$1`/`$@`/`$ARGUMENTS`.
 
+**Sub-agent profile**:
+A markdown definition in `<cwd>/.bodhi-pi/agents/<name>.md` declaring a specialist child agent. Frontmatter: `description`, optional `model`, optional `tools` allowlist, optional `max-turns`. Body is the child's system prompt. Discovered via `loadProjectSubagents` and exposed through the first-party `subagent` built-in tool (which is registered only when at least one profile exists).
+_Avoid_: "agent" alone (overloaded with the bodhi-pi Agent role); always say "sub-agent profile" or "child agent".
+
+**Child session**:
+A real `SessionRecord` created by `SubagentService.spawn` with `parentSessionId` set to the parent session and `subagent: { profileName }` denormalized for filterability. Hidden from default `SessionStore.list()` to keep the user-visible session list clean; opt in with `list({ includeSubagentChildren: true })`. Each child has its own session log, its own piAgent, and its own ACP `sessionId` (so it can be loaded/resumed independently).
+_Avoid_: "fork" (a Sub-agent Session is created with `subagent` set; a Fork is created without).
+
+**Sub-agent depth**:
+Number of `subagent_link` SessionEntry rows in the chain from a child back to its root parent. Hard-capped at 2 in v1 (C2); `SubagentService.spawn` rejects deeper recursion. The child's tool list excludes the `subagent` tool unconditionally as a belt-and-suspenders guard.
+
 **MCP server**:
 An external tool provider speaking the **Model Context Protocol**. Persisted under KV key `mcp/<slug>`. Transports: `http` (Streamable HTTP, all runtimes) and `stdio` (Node-spawnable Hosts only). HTTP auth is a top-level discriminator `auth: "public" | "http-param" | "oauth-preregistered"`; `"http-param"` carries sibling `headers`/`queries`; `"oauth-preregistered"` carries pre-issued `clientId`/`clientSecret` plus explicit `authorizeUrl`/`tokenUrl` and runs an OAuth 2.1 authorization-code-with-PKCE flow. All secret values are stored as `McpNamedSecret` and masked on ACP reads.
 _Avoid_: "MCP" alone for the server (use "MCP server"); "MCP" alone for the connection (use "MCP connection").
@@ -131,7 +142,8 @@ Host-injected interface that owns MCP transport lifecycle and per-`<host, slug>`
 - A **Session** belongs to exactly one **SessionStore**; it is loaded into at most one **Agent** instance at a time.
 - A **Session DAG** has one root, many **Branches**, one active **Leaf** at a time.
 - An **MCP server** is global per `<host, slug>`; its visibility in a **Session** is governed by that session's **Inclusion set**.
-- **Extensions**, **Skills**, **Commands**, and **MCP tools** all contribute into the same per-session tool/command registries but via independent mechanisms (in-process factory, markdown discovery, markdown discovery, wire-protocol respectively).
+- **Extensions**, **Skills**, **Commands**, **MCP tools**, and **Sub-agent profiles** all contribute into the same per-session tool/command registries but via independent mechanisms (in-process factory, markdown discovery, markdown discovery, wire-protocol, and markdown discovery respectively).
+- A **Child session** belongs to exactly one parent session, links via `parentSessionId` + `subagent: { profileName }`, and is created and managed by `SubagentService.spawn` (C2).
 - A **Session Entry** with type `branch_summary` is appended automatically when a Client navigates across **Branches** in a way that would otherwise lose context.
 
 ## Example dialogue

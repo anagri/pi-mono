@@ -1,21 +1,21 @@
-# Extensions vs Skills vs Commands vs MCP
+# Extensions vs Skills vs Commands vs MCP vs Sub-agent profiles
 
-Four ways for capabilities to land in a session. They contribute to the same per-session **tools + slash-commands** surfaces but via independent mechanisms with different trust, persistence, and lifecycle characteristics.
+Five ways for capabilities to land in a session. They contribute to the same per-session **tools + slash-commands** surfaces but via independent mechanisms with different trust, persistence, and lifecycle characteristics.
 
 ## Side-by-side
 
-| Aspect | **Extension** | **Skill** | **Command** | **MCP server** |
-|---|---|---|---|---|
-| Lives where | Host-loaded JS factory | `.bodhi-pi/skills/<name>/SKILL.md` | `.bodhi-pi/commands/<name>.md` | KV under `mcp/<slug>`; external process or HTTP endpoint |
-| Loaded when | At first `session/new`/`load`/`resume` (lazy `ensureExtensionRunner`) | Per-session at boot (`loadProjectSkills`) | Per-session at boot (`loadProjectCommands`) | At session boot via `mcpService.hydrate` (re-binds existing connections from provider) |
-| Discovery | Host passes `extensionFactories: RegisteredExtension[]` into `BodhiPiConfig` | Walk `<cwd>/.bodhi-pi/skills/*/SKILL.md` via injected `Filesystem` | Walk `<cwd>/.bodhi-pi/commands/*.md` via injected `Filesystem` | KV prefix scan (`mcp/`) |
-| Can run code? | **Yes** (full TS factory) | No (markdown only; body is prompt content) | No (markdown only; template expansion) | Yes — but in a remote process, not in-agent |
-| Can register tools? | Yes (`registerTool`) | No (an Extension may wrap a Skill; Skills themselves don't expose tools) | No | Yes — surfaced through `mcp-tool-adapter` |
-| Can register slash commands? | Yes (`registerCommand`) | Implicit — `skill:<name>` is always advertised when Skill is loaded | Yes (one slash per file) | No — manipulated via `_bodhi-pi/mcp/*` extension methods |
-| Can append SessionEntry? | Yes (`appendEntry` → `ExtensionEntry`; `sendMessage` → `CustomMessageEntry`) | No | No | Only `mcp_inclusion_set` (written by McpStore) |
-| Hooks lifecycle events? | Yes (`on("tool_call", …)`, `before_provider_request`, …) | No | No | No |
-| Hot-reload? | No (factory captured at runner build) | Yes (re-walked at next session boot) | Yes (re-walked at next session boot) | Yes (KV writes immediately visible to next operation) |
-| Trust boundary | Host code — full agent privileges | Sandboxable text — bounded by skill body + `allowed-tools` | Bounded — template only | Remote — limited by network + auth |
+| Aspect | **Extension** | **Skill** | **Command** | **MCP server** | **Sub-agent profile** |
+|---|---|---|---|---|---|
+| Lives where | Host-loaded JS factory | `.bodhi-pi/skills/<name>/SKILL.md` | `.bodhi-pi/commands/<name>.md` | KV under `mcp/<slug>`; external process or HTTP endpoint | `.bodhi-pi/agents/<name>.md` |
+| Loaded when | At first `session/new`/`load`/`resume` (lazy `ensureExtensionRunner`) | Per-session at boot (`loadProjectSkills`) | Per-session at boot (`loadProjectCommands`) | At session boot via `mcpService.hydrate` (re-binds existing connections from provider) | Per-session at boot (`loadProjectSubagents`) |
+| Discovery | Host passes `extensionFactories: RegisteredExtension[]` into `BodhiPiConfig` | Walk `<cwd>/.bodhi-pi/skills/*/SKILL.md` via injected `Filesystem` | Walk `<cwd>/.bodhi-pi/commands/*.md` via injected `Filesystem` | KV prefix scan (`mcp/`) | Walk `<cwd>/.bodhi-pi/agents/*.md` via injected `Filesystem` |
+| Can run code? | **Yes** (full TS factory) | No (markdown only; body is prompt content) | No (markdown only; template expansion) | Yes — but in a remote process, not in-agent | No (markdown only; body is the child's system prompt) |
+| Can register tools? | Yes (`registerTool`) | No (an Extension may wrap a Skill; Skills themselves don't expose tools) | No | Yes — surfaced through `mcp-tool-adapter` | Implicit — when any profile exists, the first-party `subagent` built-in tool is registered |
+| Can register slash commands? | Yes (`registerCommand`) | Implicit — `skill:<name>` is always advertised when Skill is loaded | Yes (one slash per file) | No — manipulated via `_bodhi-pi/mcp/*` extension methods | No — Hosts implement built-in `/agents` and `/subagent` slashes that call `_bodhi-pi/subagent/*` extMethods |
+| Can append SessionEntry? | Yes (`appendEntry` → `ExtensionEntry`; `sendMessage` → `CustomMessageEntry`) | No | No | Only `mcp_inclusion_set` (written by McpStore) | Indirect (C2): `SubagentService.spawn` appends `subagent_link` + `subagent_complete` entries to the child session |
+| Hooks lifecycle events? | Yes (`on("tool_call", …)`, `before_provider_request`, …) | No | No | No | No |
+| Hot-reload? | No (factory captured at runner build) | Yes (re-walked at next session boot) | Yes (re-walked at next session boot) | Yes (KV writes immediately visible to next operation) | Yes (re-walked at next session boot) |
+| Trust boundary | Host code — full agent privileges | Sandboxable text — bounded by skill body + `allowed-tools` | Bounded — template only | Remote — limited by network + auth | Bounded — child runs with profile-constrained tool list (no `subagent` tool; no MCP in v1) |
 
 ## Extensions (`src/extensions/`)
 
@@ -106,6 +106,14 @@ Loaded by `loadProjectCommands(fs, cwd)` (`src/commands/discovery.ts:48-75`). On
 
 This is why bodhi-pi's slash surface is intentionally **flat-and-complete**: every operation has a single direct slash form. No cycle conveniences, no popups. The agent advertises; the Host dispatches. See [bodhi-pi slash design feedback memory](../../../packages/bodhi-pi/CLAUDE.md) for the rationale.
 
+## Sub-agent profiles — see [subagents.md](./subagents.md)
+
+Distinguishing facts vs the above:
+
+- Markdown discovery, like Commands and Skills, but with a different role: a profile is a **specialist child agent definition**. The body is the child's system prompt; the frontmatter constrains its tools, model, and limits.
+- Not LLM-callable directly — profiles are invoked via the first-party `subagent` built-in tool (which is registered only when at least one profile is discovered).
+- Spawned by `SubagentService.spawn` (C2) into a new durable child Session linked to the parent via `parentSessionId` + denormalized `subagent: { profileName }`.
+
 ## MCP servers — see [mcp.md](./mcp.md)
 
 Distinguishing facts vs the above:
@@ -123,6 +131,7 @@ Distinguishing facts vs the above:
 | A LLM-callable prompt fragment the LLM can self-invoke | **Skill** |
 | A shortcut to type a long prompt | **Command** |
 | To integrate with an external tool server (GitHub, filesystem-as-service, browser automation) | **MCP server** |
+| To delegate a focused task to a specialist child agent (with its own system prompt, constrained tools, fresh context) | **Sub-agent profile** |
 | To run code that observes/modifies tool calls or LLM payloads | **Extension** (`on("tool_call")`, `on("before_provider_request")`) |
 | To persist arbitrary structured data on the session log | **Extension** (`appendEntry`) |
 

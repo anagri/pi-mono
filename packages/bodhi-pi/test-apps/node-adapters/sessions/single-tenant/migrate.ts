@@ -1,15 +1,14 @@
 import type Database from "better-sqlite3";
 
-// Inlined schema — replaces the drizzle migrator + .sql migration files. For
-// e2e the DB is always freshly created in a tmpdir; we don't need migration
-// history, just the current schema applied idempotently.
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
 	id TEXT PRIMARY KEY NOT NULL,
 	cwd TEXT NOT NULL,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL,
-	leaf_id TEXT
+	leaf_id TEXT,
+	parent_session_id TEXT,
+	subagent_profile TEXT
 );
 
 CREATE INDEX IF NOT EXISTS sessions_cwd_updated_id_idx ON sessions (cwd, updated_at, id);

@@ -2,6 +2,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { isAbsolute, join, normalize } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
+import type { SubagentProfile } from "@/subagents/types.js";
 import type { Terminal } from "@/terminal/terminal.js";
 import { createBashTool } from "./bash.js";
 import { createEditTool } from "./edit.js";
@@ -10,6 +11,7 @@ import { createGrepTool } from "./grep.js";
 import { createLsTool } from "./ls.js";
 import { createReadTool } from "./read.js";
 import { createRunScriptTool } from "./run-script.js";
+import { createSubagentTool } from "./subagent.js";
 import { createWriteTool } from "./write.js";
 
 export interface ToolDeps {
@@ -17,6 +19,11 @@ export interface ToolDeps {
 	cwd: string;
 	scriptExecutor?: ScriptExecutor;
 	terminal?: Terminal;
+	/** When present (and `profiles.length > 0`), the first-party `subagent` tool is registered. */
+	subagent?: {
+		sessionId: string;
+		profiles: SubagentProfile[];
+	};
 }
 
 export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
@@ -33,6 +40,9 @@ export function createBuiltinTools(deps: ToolDeps): AgentTool[] {
 	}
 	if (deps.terminal) {
 		tools.push(createBashTool(deps));
+	}
+	if (deps.subagent && deps.subagent.profiles.length > 0) {
+		tools.push(createSubagentTool(deps.subagent));
 	}
 	return tools;
 }
@@ -51,6 +61,7 @@ export const BUILTIN_TOOL_SNIPPETS: Record<string, string> = {
 	grep: "Search file contents for a regex (or literal string) under a directory",
 	run_script: "Execute a JavaScript file at PATH with positional ARGS; returns stdout/stderr and exit code",
 	bash: "Execute a bash command; returns stdout, stderr, exit code, signal, durationMs, timedOut, truncated",
+	subagent: "Delegate a focused task to a specialized sub-agent profile; returns its findings as text",
 };
 
 /**
@@ -75,6 +86,7 @@ export function toolKindFor(name: string): "read" | "edit" | "search" | "execute
 			return "search";
 		case "run_script":
 		case "bash":
+		case "subagent":
 			return "execute";
 		default:
 			return "other";

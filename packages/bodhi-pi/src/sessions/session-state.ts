@@ -3,6 +3,7 @@ import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
 import type { BodhiPiProjectSettings } from "@/settings/settings.js";
 import type { Skill } from "@/skills/skill.js";
+import type { SubagentProfile } from "@/subagents/types.js";
 import type { CompactionSettings } from "./compaction.js";
 import type { ContextFile } from "./resource-loader.js";
 
@@ -59,6 +60,8 @@ export interface SessionState {
 	/** Project-discovered commands frozen at session hydration; combined with extension commands at refresh time. */
 	projectCommands: PromptTemplate[];
 	skills: Skill[];
+	/** Sub-agent profiles discovered under `<cwd>/.bodhi-pi/agents/*.md`. Drives `_bodhi-pi/subagent/list` and the conditional `subagent` built-in tool registration. */
+	subagentProfiles: SubagentProfile[];
 	appendSystemPrompt: string | null;
 	contextFiles: ContextFile[];
 	/** Resolved per-session bits surfaced via `_bodhi-pi/session/config`. */

@@ -56,6 +56,7 @@ import type { SessionStore } from "@/sessions/session-store.js";
 import type { BodhiPiProjectSettings, ProviderOptionsEntry } from "@/settings/settings.js";
 import { SettingsService } from "@/settings/settings-service.js";
 import type { Skill } from "@/skills/skill.js";
+import { SubagentService } from "@/subagents/subagent-service.js";
 import type { Terminal } from "@/terminal/terminal.js";
 import { toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
@@ -186,6 +187,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private readonly sessionInfoService: SessionInfoService;
 	private readonly compactionOrchestrator: CompactionOrchestrator;
 	private readonly sessionGraphService: SessionGraphService;
+	private readonly subagentService: SubagentService;
 	private readonly extensionRunnerHost: ExtensionRunnerHost;
 	private readonly extHandlers: Map<string, ExtHandler>;
 
@@ -279,6 +281,11 @@ class BodhiPiAcpAgent implements AcpAgent {
 			compactionOrchestrator: this.compactionOrchestrator,
 		});
 
+		this.subagentService = new SubagentService({
+			sessions: this.sessions,
+			sessionStore: config.sessionStore,
+		});
+
 		this.extHandlers = new Map<string, ExtHandler>([
 			[EXT_DELETE_SESSION, this.handleSessionDelete.bind(this)],
 			...this.sessionGraphService.register(),
@@ -287,6 +294,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			...this.settingsService.register(),
 			...this.sessionInfoService.register(),
 			...this.compactionOrchestrator.register(),
+			...this.subagentService.register(),
 		]);
 	}
 
