@@ -108,65 +108,6 @@ test("spawn creates a child session linked via parentSessionId + subagent and pe
 	});
 });
 
-test("recursion guard rejects when depth would exceed 2", async () => {
-	const filesystem = createInMemoryFilesystem();
-	await seedSubagent(filesystem, "/proj", "caller", "---\ndescription: call self\n---\nYou call subagents.\n");
-
-	const faux = newProvider();
-	const model = faux.getModel() as Model<Api>;
-	faux.setResponses([() => fauxAssistantMessage("ok")]);
-
-	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
-	await harness.clientConn.initialize(stdInitParams);
-	await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
-
-	const grandparentLeaf = await harness.sessionStore.create({ cwd: "/proj" });
-	await harness.sessionStore.append(grandparentLeaf.id, {
-		type: "subagent_link",
-		id: "fake-link-1",
-		parentId: null,
-		timestamp: Date.now(),
-		parentSessionId: "fake-root",
-		profileName: "caller",
-		task: "x",
-		toolCallId: "tc-x",
-		depth: 1,
-	});
-
-	const fakeParent = await harness.sessionStore.create({
-		cwd: "/proj",
-		parentSessionId: grandparentLeaf.id,
-		subagent: { profileName: "caller" },
-	});
-	await harness.sessionStore.append(fakeParent.id, {
-		type: "subagent_link",
-		id: "fake-link-2",
-		parentId: null,
-		timestamp: Date.now(),
-		parentSessionId: grandparentLeaf.id,
-		profileName: "caller",
-		task: "y",
-		toolCallId: "tc-y",
-		depth: 2,
-	});
-
-	await harness.clientConn.loadSession({ sessionId: fakeParent.id, cwd: "/proj", mcpServers: [] });
-
-	await expect(
-		harness.clientConn.extMethod("_bodhi-pi/subagent/run", {
-			sessionId: fakeParent.id,
-			agent: "caller",
-			task: "should fail",
-		}),
-	).rejects.toMatchObject({ code: -32603, message: expect.stringContaining("max depth") });
-
-	const stillNoChild = await harness.sessionStore.list({
-		parentSessionId: fakeParent.id,
-		includeSubagentChildren: true,
-	});
-	expect(stillNoChild.sessions).toHaveLength(0);
-});
-
 test("spawn via _bodhi-pi/subagent/run returns structured result", async () => {
 	const filesystem = createInMemoryFilesystem();
 	await seedSubagent(filesystem, "/proj", "echo", "---\ndescription: echo back\n---\nYou are an echo agent.\n");

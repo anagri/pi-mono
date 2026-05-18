@@ -323,6 +323,7 @@ export async function buildSessionState(
 			cancelled: false,
 			leafId,
 			overflowRecoveryAttempted: false,
+			subagentDepth: 0,
 		},
 	});
 }

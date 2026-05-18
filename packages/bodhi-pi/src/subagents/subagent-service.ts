@@ -11,7 +11,7 @@ import type { SubagentCompleteEntry, SubagentLinkEntry } from "@/sessions/entrie
 import { requireLiveSession } from "@/sessions/resolution.js";
 import type { BootstrapDeps } from "@/sessions/session-bootstrap.js";
 import type { SessionState } from "@/sessions/session-state.js";
-import type { SessionRecord, SessionStore } from "@/sessions/session-store.js";
+import type { SessionStore } from "@/sessions/session-store.js";
 import { EXT_SUBAGENT_CHILDREN, EXT_SUBAGENT_LIST, EXT_SUBAGENT_RUN } from "@/wire/constants.js";
 import { buildChildSessionState } from "./build-child-state.js";
 import { profileToSummary, type SubagentProfile } from "./types.js";
@@ -142,8 +142,7 @@ export class SubagentService {
 			throw new RequestError(-32603, `subagent.spawn: parent session ${input.parentSessionId} not loaded`);
 		}
 
-		const parentRecord = await this.sessionStore.load(input.parentSessionId);
-		const depth = computeChildDepth(parentRecord?.entries);
+		const depth = parent.runtime.subagentDepth + 1;
 		if (depth > SUBAGENT_MAX_DEPTH) {
 			throw new RequestError(-32603, `subagent.spawn: max depth ${SUBAGENT_MAX_DEPTH} exceeded (would be ${depth})`);
 		}
@@ -174,6 +173,7 @@ export class SubagentService {
 			parentSessionState: parent,
 			profile: input.profile,
 			leafId: linkEntry.id,
+			depth,
 			...(input.modelOverride !== undefined ? { modelOverride: input.modelOverride } : {}),
 		});
 
@@ -367,14 +367,6 @@ export class SubagentService {
 		});
 		return { children: result.sessions };
 	}
-}
-
-function computeChildDepth(entries: SessionRecord["entries"] | undefined): number {
-	if (!entries) return 1;
-	for (const entry of entries) {
-		if (entry.type === "subagent_link") return entry.depth + 1;
-	}
-	return 1;
 }
 
 function formatToolPreview(toolName: string, args: unknown): string {

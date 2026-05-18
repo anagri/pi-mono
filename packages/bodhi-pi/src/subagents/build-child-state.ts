@@ -11,6 +11,7 @@ export interface BuildChildSessionStateArgs {
 	parentSessionState: SessionState;
 	profile: SubagentProfile;
 	leafId: string;
+	depth: number;
 	modelOverride?: string;
 }
 
@@ -86,6 +87,7 @@ export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChi
 			cancelled: false,
 			leafId: args.leafId,
 			overflowRecoveryAttempted: false,
+			subagentDepth: args.depth,
 		},
 	});
 }

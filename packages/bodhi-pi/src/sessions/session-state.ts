@@ -46,6 +46,8 @@ export interface SessionRuntime {
 	leafId: string | null;
 	/** True after one auto-compact retry; reset at the start of each prompt() to allow per-turn recovery. */
 	overflowRecoveryAttempted: boolean;
+	/** 0 for top-level sessions; N for children spawned at depth N. Set at SessionState construction; read by SubagentService.spawn to bound recursion in O(1). */
+	subagentDepth: number;
 }
 
 export interface SessionState {
