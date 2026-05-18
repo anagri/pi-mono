@@ -31,7 +31,7 @@ Use this when:
 
 \`failFast: true\` aborts in-flight siblings on the first child that does not complete successfully; the default (collect-all) lets every child run to completion and surfaces per-child status. Use a single \`subagent\` tool call for one task — \`subagent_batch\` requires at least 2.`,
 		parameters,
-		async execute(toolCallId, params, signal, _onUpdate) {
+		async execute(toolCallId, params, signal, onUpdate) {
 			const inputs: SubagentSpawnBatchInput["tasks"] = params.tasks.map((t) => {
 				const profile = profilesByName.get(t.agent);
 				if (!profile) throw new Error(`unknown sub-agent profile: ${t.agent}`);
@@ -47,6 +47,7 @@ Use this when:
 				tasks: inputs,
 				...(params.failFast === true ? { failFast: true } : {}),
 				...(signal !== undefined ? { signal } : {}),
+				...(onUpdate !== undefined ? { onUpdate } : {}),
 			});
 			return deps.service.buildBatchToolResult(
 				batch,

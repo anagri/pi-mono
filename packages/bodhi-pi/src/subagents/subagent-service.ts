@@ -16,6 +16,7 @@ import type { SessionState } from "@/sessions/session-state.js";
 import type { SessionStore } from "@/sessions/session-store.js";
 import { EXT_SUBAGENT_CHILDREN, EXT_SUBAGENT_LIST, EXT_SUBAGENT_RUN } from "@/wire/constants.js";
 import { SUBAGENT_FORK_FILTER } from "./_clone-slice-filter.js";
+import { BatchProgressAccumulator } from "./batch-progress-accumulator.js";
 import { buildChildSessionState } from "./build-child-state.js";
 import { profileToSummary, type SubagentProfile } from "./types.js";
 
@@ -81,6 +82,7 @@ export interface SubagentSpawnBatchInput {
 	tasks: Array<{ profile: SubagentProfile; task: string; modelOverride?: string }>;
 	failFast?: boolean;
 	signal?: AbortSignal;
+	onUpdate?: AgentToolUpdateCallback;
 }
 
 export interface SubagentSpawnBatchResult {
@@ -100,6 +102,7 @@ export class SubagentService {
 	private readonly appendEntry: AppendEntry;
 	private readonly maxBatchConcurrency: number;
 	private readonly activeRuns = new Map<string, ActiveRun>();
+	private readonly batchAccumulators = new Map<string, BatchProgressAccumulator>();
 
 	constructor(deps: SubagentServiceDeps) {
 		this.sessions = deps.sessions;
@@ -118,6 +121,11 @@ export class SubagentService {
 				const run = this.activeRuns.get(e.sessionId);
 				if (!run) return;
 				run.toolCount += 1;
+				const accumulator = this.batchAccumulators.get(e.sessionId);
+				if (accumulator) {
+					accumulator.recordToolStart(e.sessionId, e.toolName);
+					return;
+				}
 				if (!run.onUpdate) return;
 				const preview = formatToolPreview(e.toolName, e.args);
 				run.onUpdate({
@@ -137,7 +145,9 @@ export class SubagentService {
 		this.events.appendHandlers("message_end", [
 			async (e) => {
 				const run = this.activeRuns.get(e.sessionId);
-				if (!run?.onUpdate) return;
+				if (!run) return;
+				if (this.batchAccumulators.has(e.sessionId)) return;
+				if (!run.onUpdate) return;
 				if (e.message.role !== "assistant") return;
 				const text = extractText(e.message).trim();
 				if (!text) return;
@@ -413,13 +423,27 @@ export class SubagentService {
 			failFast,
 		});
 
+		let accumulator: BatchProgressAccumulator | undefined;
+		if (input.onUpdate) {
+			accumulator = new BatchProgressAccumulator({
+				batchToolCallId: input.batchToolCallId,
+				onUpdate: input.onUpdate,
+				children: input.tasks.map((t, i) => ({
+					childSessionId: childSessionIds[i],
+					profile: t.profile.name,
+				})),
+			});
+			for (const id of childSessionIds) this.batchAccumulators.set(id, accumulator);
+		}
+
 		const batchAC = new AbortController();
 		const wrappedSignals = input.tasks.map(() =>
 			input.signal ? AbortSignal.any([input.signal, batchAC.signal]) : batchAC.signal,
 		);
 
-		const promises = input.tasks.map((t, i) =>
-			this.spawn({
+		const promises = input.tasks.map((t, i) => {
+			accumulator?.markRunning(childSessionIds[i]);
+			return this.spawn({
 				parentSessionId: input.parentSessionId,
 				profile: t.profile,
 				task: t.task,
@@ -431,12 +455,18 @@ export class SubagentService {
 					? { inheritedMessages: cachedForkMessages }
 					: {}),
 			}).then((result) => {
+				accumulator?.recordChildEnd(childSessionIds[i], result.status);
 				if (failFast && result.status !== "completed" && !batchAC.signal.aborted) batchAC.abort();
 				return result;
-			}),
-		);
+			});
+		});
 
-		const results = await Promise.all(promises);
+		let results: SubagentSpawnResult[];
+		try {
+			results = await Promise.all(promises);
+		} finally {
+			for (const id of childSessionIds) this.batchAccumulators.delete(id);
+		}
 		const durationMs = Date.now() - startTime;
 
 		const batchEntry: SubagentBatchEntry = {
