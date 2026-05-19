@@ -263,6 +263,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 				allowsAllowAllModeAsDefault: config.allowsAllowAllModeAsDefault === true,
 			},
 			logger,
+			// mcpService is initialised below — the arrow closes over `this` and resolves at call time.
+			mcpAnnotationLookup: (sessionId, fullName) => this.mcpService.getToolAnnotations(sessionId, fullName),
 		});
 
 		wireInternalEventHandlers({

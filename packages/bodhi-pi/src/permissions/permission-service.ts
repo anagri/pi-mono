@@ -3,9 +3,12 @@ import { randomUUID } from "@/_internal/uuid.js";
 import type { BodhiPiLogger } from "@/acp/agent.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import { createEvent } from "@/events/factory.js";
+import type { McpToolAnnotations } from "@/mcp/mcp-types.js";
 import type { SessionEntry } from "@/sessions/entries.js";
 import type { SessionState } from "@/sessions/session-state.js";
+import { toolKindFor } from "@/tools/index.js";
 import { MODE_CONFIG_ID } from "@/wire/constants.js";
+import { MODE_PRESETS } from "./presets.js";
 import {
 	type AgentMode,
 	ALL_AGENT_MODES,
@@ -14,9 +17,12 @@ import {
 	MODE_DISPLAY,
 	type ModeChangeReason,
 	type ModeRuntimeCapabilities,
+	type ToolCategory,
 } from "./types.js";
 
 export type AppendEntry = (sessionId: string, session: SessionState, entry: SessionEntry) => Promise<void>;
+
+export type McpAnnotationLookup = (sessionId: string, fullName: string) => McpToolAnnotations | undefined;
 
 export interface PermissionServiceDeps {
 	sessions: Map<string, SessionState>;
@@ -24,6 +30,13 @@ export interface PermissionServiceDeps {
 	appendEntry: AppendEntry;
 	capabilities: ModeRuntimeCapabilities;
 	logger: BodhiPiLogger;
+	/** Resolve MCP annotations for a `<slug>__<tool>` tool name. Optional; absence = research-permissive default-allow. */
+	mcpAnnotationLookup?: McpAnnotationLookup;
+}
+
+export interface ToolCallDescriptor {
+	name: string;
+	arguments: unknown;
 }
 
 export class PermissionService {
@@ -32,6 +45,7 @@ export class PermissionService {
 	private readonly appendEntry: AppendEntry;
 	readonly capabilities: ModeRuntimeCapabilities;
 	private readonly logger: BodhiPiLogger;
+	private readonly mcpAnnotationLookup: McpAnnotationLookup | undefined;
 
 	constructor(deps: PermissionServiceDeps) {
 		this.sessions = deps.sessions;
@@ -39,6 +53,7 @@ export class PermissionService {
 		this.appendEntry = deps.appendEntry;
 		this.capabilities = deps.capabilities;
 		this.logger = deps.logger;
+		this.mcpAnnotationLookup = deps.mcpAnnotationLookup;
 	}
 
 	getCurrentMode(sessionId: string): AgentMode {
@@ -98,10 +113,39 @@ export class PermissionService {
 	}
 
 	/**
-	 * Policy evaluation stub. Phase 0 ships no enforcement — every call returns `allow`.
-	 * Milestone 030 fills in mode-driven category rules + ask flow.
+	 * Policy evaluation. Phase 1 enforces plan mode; ask/edit/allow-all stay inert (allow-all
+	 * preset already allows everything; ask/edit policies are empty → fall through to allow).
+	 * MCP tools consult annotations via `mcpAnnotationLookup` (research-permissive default: absent
+	 * annotations OR no lookup → allow).
 	 */
-	async evaluateToolCall(_sessionId: string, _toolName: string): Promise<ApprovalDecision> {
+	async evaluateToolCall(sessionId: string, toolCall: ToolCallDescriptor): Promise<ApprovalDecision> {
+		const session = this.sessions.get(sessionId);
+		if (!session) return { kind: "allow" };
+		const mode = session.runtime.mode;
+		const preset = MODE_PRESETS[mode];
+		const category = toolKindFor(toolCall.name);
+		if (category === "mcp") {
+			return this.evaluateMcpTool(sessionId, toolCall.name, mode);
+		}
+		const decision = preset.policy.categories[category];
+		if (decision === "deny") {
+			return { kind: "deny", reason: buildPlanDenyReason(toolCall.name, category) };
+		}
 		return { kind: "allow" };
 	}
+
+	private evaluateMcpTool(sessionId: string, fullName: string, mode: AgentMode): ApprovalDecision {
+		if (mode !== "plan") return { kind: "allow" };
+		const annotations = this.mcpAnnotationLookup?.(sessionId, fullName);
+		if (!annotations) return { kind: "allow" };
+		if (annotations.readOnlyHint === true) return { kind: "allow" };
+		if (annotations.destructiveHint === true) {
+			return { kind: "deny", reason: buildPlanDenyReason(fullName, "mcp") };
+		}
+		return { kind: "allow" };
+	}
+}
+
+function buildPlanDenyReason(toolName: string, category: ToolCategory): string {
+	return `plan mode is read-only — \`${toolName}\` blocked (category: ${category}). Use read-only tools or \`/mode edit\` to proceed.`;
 }

@@ -41,6 +41,7 @@ import {
 	type McpListEntry,
 	type McpNamedSecret,
 	type McpServerEntry,
+	type McpToolAnnotations,
 	parseMcpServerEntry,
 	serializeAuthConfig,
 	serializeMcpServerEntry,
@@ -87,6 +88,14 @@ export class McpService {
 			registry: this.registry,
 		});
 		this.provider.onChange(() => this.registry.applyToAllSessions());
+	}
+
+	/**
+	 * Resolve annotations for an MCP tool by its namespaced `<slug>__<tool>` name.
+	 * Used by PermissionService to classify MCP tools under plan mode.
+	 */
+	getToolAnnotations(sessionId: string, fullName: string): McpToolAnnotations | undefined {
+		return this.registry.getToolAnnotations(sessionId, fullName);
 	}
 
 	register(): Array<[string, ExtHandler]> {
