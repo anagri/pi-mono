@@ -5,6 +5,7 @@ import type { BodhiPiLogger } from "@/acp/agent.js";
 import type { PromptLoopDeps } from "@/acp/prompt-loop.js";
 import { runPromptLoop } from "@/acp/prompt-loop.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import type { McpService } from "@/mcp/mcp-service.js";
 import { extractText } from "@/sessions/_shared.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
@@ -259,16 +260,17 @@ export class SubagentService {
 		};
 		if (input.signal) input.signal.addEventListener("abort", onAbort);
 
-		await this.events.emit({
-			type: "subagent_start",
-			parentSessionId: input.parentSessionId,
-			childSessionId,
-			profileName: input.profile.name,
-			task: input.task,
-			toolCallId: input.toolCallId,
-			depth,
-			contextMode: input.profile.context,
-		});
+		await this.events.emit(
+			createEvent("subagent_start", {
+				parentSessionId: input.parentSessionId,
+				childSessionId,
+				profileName: input.profile.name,
+				task: input.task,
+				toolCallId: input.toolCallId,
+				depth,
+				contextMode: input.profile.context,
+			}),
+		);
 
 		let status: "completed" | "cancelled" | "failed" = "failed";
 		let summary = "";
@@ -316,18 +318,19 @@ export class SubagentService {
 			this.logger.error("[bodhi-pi subagent] failed to append complete entry", err);
 		}
 
-		await this.events.emit({
-			type: "subagent_end",
-			parentSessionId: input.parentSessionId,
-			childSessionId,
-			profileName: input.profile.name,
-			status,
-			durationMs,
-			toolCount,
-			contextMode: input.profile.context,
-			...(summary ? { summary } : {}),
-			...(errorMessage !== undefined ? { error: errorMessage } : {}),
-		});
+		await this.events.emit(
+			createEvent("subagent_end", {
+				parentSessionId: input.parentSessionId,
+				childSessionId,
+				profileName: input.profile.name,
+				status,
+				durationMs,
+				toolCount,
+				contextMode: input.profile.context,
+				...(summary ? { summary } : {}),
+				...(errorMessage !== undefined ? { error: errorMessage } : {}),
+			}),
+		);
 
 		this.evictChild(childSessionId);
 
@@ -413,15 +416,16 @@ export class SubagentService {
 			childSessionIds.push(rec.id);
 		}
 
-		await this.events.emit({
-			type: "subagent_batch_start",
-			parentSessionId: input.parentSessionId,
-			batchToolCallId: input.batchToolCallId,
-			childSessionIds: [...childSessionIds],
-			profileNames: input.tasks.map((t) => t.profile.name),
-			tasks: input.tasks.map((t) => t.task),
-			failFast,
-		});
+		await this.events.emit(
+			createEvent("subagent_batch_start", {
+				parentSessionId: input.parentSessionId,
+				batchToolCallId: input.batchToolCallId,
+				childSessionIds: [...childSessionIds],
+				profileNames: input.tasks.map((t) => t.profile.name),
+				tasks: input.tasks.map((t) => t.task),
+				failFast,
+			}),
+		);
 
 		let accumulator: BatchProgressAccumulator | undefined;
 		if (input.onUpdate) {
@@ -486,15 +490,16 @@ export class SubagentService {
 			this.logger.error("[bodhi-pi subagent] failed to append batch entry on parent", err);
 		}
 
-		await this.events.emit({
-			type: "subagent_batch_end",
-			parentSessionId: input.parentSessionId,
-			batchToolCallId: input.batchToolCallId,
-			childSessionIds: results.map((r) => r.childSessionId),
-			profileNames: input.tasks.map((t) => t.profile.name),
-			statuses: results.map((r) => r.status),
-			durationMs,
-		});
+		await this.events.emit(
+			createEvent("subagent_batch_end", {
+				parentSessionId: input.parentSessionId,
+				batchToolCallId: input.batchToolCallId,
+				childSessionIds: results.map((r) => r.childSessionId),
+				profileNames: input.tasks.map((t) => t.profile.name),
+				statuses: results.map((r) => r.status),
+				durationMs,
+			}),
+		);
 
 		return { batchToolCallId: input.batchToolCallId, results };
 	}

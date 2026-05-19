@@ -27,6 +27,7 @@ import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { pickDefined } from "@/_internal/object.js";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
 import { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import type { BodhiPiEventHandlers } from "@/events/types.js";
 import { ExtensionRunnerHost } from "@/extensions/extension-runner-host.js";
 import { mergeCommands } from "@/extensions/merge.js";
@@ -467,12 +468,13 @@ class BodhiPiAcpAgent implements AcpAgent {
 	}): Promise<{ notFoundSlugs: string[] }> {
 		await this.advertiseSlashable(opts.sessionId);
 		const result = await this.mcpService.hydrate(opts.sessionId, opts.mcpServers, opts.restoredSlugs);
-		await this.events.emit({
-			type: "session_start",
-			sessionId: opts.sessionId,
-			cwd: opts.cwd,
-			reason: opts.reason,
-		});
+		await this.events.emit(
+			createEvent("session_start", {
+				sessionId: opts.sessionId,
+				cwd: opts.cwd,
+				reason: opts.reason,
+			}),
+		);
 		return result;
 	}
 
@@ -560,7 +562,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		cached?.runtime.piAgent.abort();
 		await this.mcpService.closeSession(params.sessionId);
 		this.sessions.delete(params.sessionId);
-		await this.events.emit({ type: "session_shutdown", sessionId: params.sessionId });
+		await this.events.emit(createEvent("session_shutdown", { sessionId: params.sessionId }));
 		return {};
 	}
 
@@ -576,7 +578,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		await this.mcpService.closeSession(sessionId);
 		this.sessions.delete(sessionId);
 		await this.config.sessionStore.delete(sessionId);
-		await this.events.emit({ type: "session_shutdown", sessionId });
+		await this.events.emit(createEvent("session_shutdown", { sessionId }));
 		return {};
 	}
 

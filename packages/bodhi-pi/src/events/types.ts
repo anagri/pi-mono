@@ -3,29 +3,33 @@ import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/p
 
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "cancelled" | "refusal";
 
+export interface BodhiPiEventCommon {
+	serverTime?: number;
+}
+
 // === Session lifecycle ===
 
-export interface SessionStartEvent {
+export interface SessionStartEvent extends BodhiPiEventCommon {
 	type: "session_start";
 	sessionId: string;
 	cwd: string;
 	reason: "new" | "load" | "resume";
 }
 
-export interface SessionShutdownEvent {
+export interface SessionShutdownEvent extends BodhiPiEventCommon {
 	type: "session_shutdown";
 	sessionId: string;
 }
 
 // === Agent run lifecycle ===
 
-export interface AgentStartEvent {
+export interface AgentStartEvent extends BodhiPiEventCommon {
 	type: "agent_start";
 	sessionId: string;
 	userPrompt: string;
 }
 
-export interface AgentEndEvent {
+export interface AgentEndEvent extends BodhiPiEventCommon {
 	type: "agent_end";
 	sessionId: string;
 	stopReason?: StopReason;
@@ -33,12 +37,12 @@ export interface AgentEndEvent {
 	errorMessage?: string;
 }
 
-export interface TurnStartEvent {
+export interface TurnStartEvent extends BodhiPiEventCommon {
 	type: "turn_start";
 	sessionId: string;
 }
 
-export interface TurnEndEvent {
+export interface TurnEndEvent extends BodhiPiEventCommon {
 	type: "turn_end";
 	sessionId: string;
 	message: AgentMessage;
@@ -47,7 +51,7 @@ export interface TurnEndEvent {
 
 // === Mutable input/system-prompt hooks (fired before piAgent.prompt) ===
 
-export interface InputEvent {
+export interface InputEvent extends BodhiPiEventCommon {
 	type: "input";
 	sessionId: string;
 	text: string;
@@ -58,7 +62,7 @@ export interface InputEventResult {
 	handled?: boolean;
 }
 
-export interface BeforeAgentStartEvent {
+export interface BeforeAgentStartEvent extends BodhiPiEventCommon {
 	type: "before_agent_start";
 	sessionId: string;
 	systemPrompt: string;
@@ -71,7 +75,7 @@ export interface BeforeAgentStartEventResult {
 
 // === Provider request/response (mapped to pi-agent-core's onPayload/onResponse) ===
 
-export interface BeforeProviderRequestEvent {
+export interface BeforeProviderRequestEvent extends BodhiPiEventCommon {
 	type: "before_provider_request";
 	sessionId: string;
 	provider: string;
@@ -80,7 +84,7 @@ export interface BeforeProviderRequestEvent {
 }
 export type BeforeProviderRequestEventResult = unknown | undefined;
 
-export interface AfterProviderResponseEvent {
+export interface AfterProviderResponseEvent extends BodhiPiEventCommon {
 	type: "after_provider_response";
 	sessionId: string;
 	provider: string;
@@ -91,20 +95,20 @@ export interface AfterProviderResponseEvent {
 
 // === Streaming message events (forwarded from pi-agent-core's subscribe) ===
 
-export interface MessageStartEvent {
+export interface MessageStartEvent extends BodhiPiEventCommon {
 	type: "message_start";
 	sessionId: string;
 	message: AgentMessage;
 }
 
-export interface MessageUpdateEvent {
+export interface MessageUpdateEvent extends BodhiPiEventCommon {
 	type: "message_update";
 	sessionId: string;
 	message: AgentMessage;
 	assistantMessageEvent: AssistantMessageEvent;
 }
 
-export interface MessageEndEvent {
+export interface MessageEndEvent extends BodhiPiEventCommon {
 	type: "message_end";
 	sessionId: string;
 	message: AgentMessage;
@@ -112,7 +116,7 @@ export interface MessageEndEvent {
 
 // === Tool execution observations (forwarded from pi-agent-core's subscribe) ===
 
-export interface ToolExecutionStartEvent {
+export interface ToolExecutionStartEvent extends BodhiPiEventCommon {
 	type: "tool_execution_start";
 	sessionId: string;
 	toolCallId: string;
@@ -120,7 +124,7 @@ export interface ToolExecutionStartEvent {
 	args: unknown;
 }
 
-export interface ToolExecutionUpdateEvent {
+export interface ToolExecutionUpdateEvent extends BodhiPiEventCommon {
 	type: "tool_execution_update";
 	sessionId: string;
 	toolCallId: string;
@@ -128,7 +132,7 @@ export interface ToolExecutionUpdateEvent {
 	partialResult: unknown;
 }
 
-export interface ToolExecutionEndEvent {
+export interface ToolExecutionEndEvent extends BodhiPiEventCommon {
 	type: "tool_execution_end";
 	sessionId: string;
 	toolCallId: string;
@@ -139,7 +143,7 @@ export interface ToolExecutionEndEvent {
 
 // === Mutable tool_call / tool_result (mapped to pi-agent-core's beforeToolCall / afterToolCall) ===
 
-export interface ToolCallEvent {
+export interface ToolCallEvent extends BodhiPiEventCommon {
 	type: "tool_call";
 	sessionId: string;
 	toolCallId: string;
@@ -152,7 +156,7 @@ export interface ToolCallEventResult {
 	reason?: string;
 }
 
-export interface ToolResultEvent {
+export interface ToolResultEvent extends BodhiPiEventCommon {
 	type: "tool_result";
 	sessionId: string;
 	toolCallId: string;
@@ -169,7 +173,7 @@ export interface ToolResultEventResult {
 
 // === Model selection ===
 
-export interface ModelSelectEvent {
+export interface ModelSelectEvent extends BodhiPiEventCommon {
 	type: "model_select";
 	sessionId: string;
 	/** `null` on the first model selection in a session that booted without an auth-resolvable model. */
@@ -184,7 +188,7 @@ export interface ModelSelectEvent {
  * `auth/<provider>`. `sessionId` is the calling session if the request carried
  * one (typical for /login); off-session writes pass `undefined`.
  */
-export interface AuthChangeEvent {
+export interface AuthChangeEvent extends BodhiPiEventCommon {
 	type: "auth_change";
 	sessionId: string | undefined;
 	provider: string;
@@ -199,7 +203,7 @@ export interface AuthChangeEvent {
  * picker via `config_option_update` when `key` is `defaultModel` or
  * `defaultThinkingLevel`; extensions may subscribe for any key.
  */
-export interface SettingsChangeEvent {
+export interface SettingsChangeEvent extends BodhiPiEventCommon {
 	type: "settings_change";
 	sessionId: string;
 	scope: "global" | "project" | "session";
@@ -210,13 +214,13 @@ export interface SettingsChangeEvent {
 
 // === Compaction lifecycle ===
 
-export interface CompactionStartEvent {
+export interface CompactionStartEvent extends BodhiPiEventCommon {
 	type: "compaction_start";
 	sessionId: string;
 	reason: "manual" | "proactive" | "recovery";
 }
 
-export interface CompactionEndEvent {
+export interface CompactionEndEvent extends BodhiPiEventCommon {
 	type: "compaction_end";
 	sessionId: string;
 	reason: "manual" | "proactive" | "recovery";
@@ -230,7 +234,7 @@ export interface CompactionEndEvent {
 
 // === Branch summary ===
 
-export interface BranchSummaryCreatedEvent {
+export interface BranchSummaryCreatedEvent extends BodhiPiEventCommon {
 	type: "branch_summary_created";
 	sessionId: string;
 	abandonedTailLeafId: string;
@@ -240,7 +244,7 @@ export interface BranchSummaryCreatedEvent {
 
 // === MCP lifecycle ===
 
-export interface McpStatusChangeEvent {
+export interface McpStatusChangeEvent extends BodhiPiEventCommon {
 	type: "mcp_status_change";
 	sessionId: string;
 	slug: string;
@@ -248,14 +252,14 @@ export interface McpStatusChangeEvent {
 	errorMessage?: string;
 }
 
-export interface McpToolsChangeEvent {
+export interface McpToolsChangeEvent extends BodhiPiEventCommon {
 	type: "mcp_tools_change";
 	sessionId: string;
 	slug: string;
 	toolNames: string[];
 }
 
-export interface McpOAuthStatusChangeEvent {
+export interface McpOAuthStatusChangeEvent extends BodhiPiEventCommon {
 	type: "mcp_oauth_status_change";
 	sessionId: string;
 	slug: string;
@@ -265,7 +269,7 @@ export interface McpOAuthStatusChangeEvent {
 
 // === Session navigate ===
 
-export interface SessionNavigateEvent {
+export interface SessionNavigateEvent extends BodhiPiEventCommon {
 	type: "session_navigate";
 	sessionId: string;
 	fromLeafId: string | null;
@@ -275,7 +279,7 @@ export interface SessionNavigateEvent {
 
 // === Session fork / clone ===
 
-export interface SessionForkEvent {
+export interface SessionForkEvent extends BodhiPiEventCommon {
 	type: "session_fork";
 	/** The source session that was forked from. */
 	sessionId: string;
@@ -284,7 +288,7 @@ export interface SessionForkEvent {
 	position: "before" | "at";
 }
 
-export interface SessionCloneEvent {
+export interface SessionCloneEvent extends BodhiPiEventCommon {
 	type: "session_clone";
 	/** The source session that was cloned from. */
 	sessionId: string;
@@ -294,7 +298,7 @@ export interface SessionCloneEvent {
 
 // === Sub-agent lifecycle ===
 
-export interface SubagentStartEvent {
+export interface SubagentStartEvent extends BodhiPiEventCommon {
 	type: "subagent_start";
 	parentSessionId: string;
 	childSessionId: string;
@@ -305,7 +309,7 @@ export interface SubagentStartEvent {
 	contextMode: "fresh" | "fork";
 }
 
-export interface SubagentEndEvent {
+export interface SubagentEndEvent extends BodhiPiEventCommon {
 	type: "subagent_end";
 	parentSessionId: string;
 	childSessionId: string;
@@ -318,7 +322,7 @@ export interface SubagentEndEvent {
 	error?: string;
 }
 
-export interface SubagentBatchStartEvent {
+export interface SubagentBatchStartEvent extends BodhiPiEventCommon {
 	type: "subagent_batch_start";
 	parentSessionId: string;
 	batchToolCallId: string;
@@ -328,7 +332,7 @@ export interface SubagentBatchStartEvent {
 	failFast: boolean;
 }
 
-export interface SubagentBatchEndEvent {
+export interface SubagentBatchEndEvent extends BodhiPiEventCommon {
 	type: "subagent_batch_end";
 	parentSessionId: string;
 	batchToolCallId: string;

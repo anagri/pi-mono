@@ -20,6 +20,7 @@ import type { BodhiPiConfig } from "@/acp/agent.js";
 import { buildSystemPrompt } from "@/acp/system-prompt.js";
 import { loadProjectCommands } from "@/commands/discovery.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import { mergeCommands, mergeSubagentProfiles, mergeTools } from "@/extensions/merge.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
 import { type ModelRegistry, resolveProviderStreamOptions } from "@/models/registry.js";
@@ -167,46 +168,50 @@ export function createPiAgent(
 		},
 		getApiKey: resolveApiKey,
 		beforeToolCall: async (ctx: BeforeToolCallContext): Promise<BeforeToolCallResult | undefined> => {
-			const result = await events.emitToolCall({
-				type: "tool_call",
-				sessionId: args.sessionId,
-				toolCallId: ctx.toolCall.id,
-				toolName: ctx.toolCall.name,
-				input: ctx.args as Record<string, unknown>,
-			});
+			const result = await events.emitToolCall(
+				createEvent("tool_call", {
+					sessionId: args.sessionId,
+					toolCallId: ctx.toolCall.id,
+					toolName: ctx.toolCall.name,
+					input: ctx.args as Record<string, unknown>,
+				}),
+			);
 			return result.block
 				? { block: true, ...(result.reason !== undefined ? { reason: result.reason } : {}) }
 				: undefined;
 		},
 		afterToolCall: async (ctx: AfterToolCallContext): Promise<AfterToolCallResult | undefined> => {
-			const overrides = await events.emitToolResult({
-				type: "tool_result",
-				sessionId: args.sessionId,
-				toolCallId: ctx.toolCall.id,
-				toolName: ctx.toolCall.name,
-				result: ctx.result,
-				isError: ctx.isError,
-			});
+			const overrides = await events.emitToolResult(
+				createEvent("tool_result", {
+					sessionId: args.sessionId,
+					toolCallId: ctx.toolCall.id,
+					toolName: ctx.toolCall.name,
+					result: ctx.result,
+					isError: ctx.isError,
+				}),
+			);
 			return Object.keys(overrides).length === 0 ? undefined : overrides;
 		},
 		onPayload: async (payload, m) => {
-			return await events.emitBeforeProviderRequest({
-				type: "before_provider_request",
-				sessionId: args.sessionId,
-				provider: m.provider,
-				modelId: m.id,
-				payload,
-			});
+			return await events.emitBeforeProviderRequest(
+				createEvent("before_provider_request", {
+					sessionId: args.sessionId,
+					provider: m.provider,
+					modelId: m.id,
+					payload,
+				}),
+			);
 		},
 		onResponse: async (response: ProviderResponse, m) => {
-			await events.emit({
-				type: "after_provider_response",
-				sessionId: args.sessionId,
-				provider: m.provider,
-				modelId: m.id,
-				status: response.status,
-				headers: response.headers,
-			});
+			await events.emit(
+				createEvent("after_provider_response", {
+					sessionId: args.sessionId,
+					provider: m.provider,
+					modelId: m.id,
+					status: response.status,
+					headers: response.headers,
+				}),
+			);
 		},
 		prepareNextTurn: async (): Promise<AgentLoopTurnUpdate | undefined> => {
 			const compactUpdate = await compactionOrchestrator.maybeProactiveCompact(args.sessionId);

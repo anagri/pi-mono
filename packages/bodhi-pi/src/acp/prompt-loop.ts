@@ -8,6 +8,7 @@ import type { StopReason as PiStopReason } from "@earendil-works/pi-ai";
 import { randomUUID } from "@/_internal/uuid.js";
 import { expandPromptTemplate } from "@/commands/prompt-templates.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import type { StopReason } from "@/events/types.js";
 import type { ModelRegistry } from "@/models/registry.js";
 import { formatLocationHint } from "@/sessions/_shared.js";
@@ -56,35 +57,37 @@ export async function runPromptLoop(
 
 	const sessionId = params.sessionId;
 
-	const inputResult = await events.emitInput({ type: "input", sessionId, text: expandedText, source: "acp" });
+	const inputResult = await events.emitInput(createEvent("input", { sessionId, text: expandedText, source: "acp" }));
 	if (inputResult.handled) {
 		return { stopReason: "end_turn", userMessageId: params.messageId ?? null };
 	}
 
-	const before = await events.emitBeforeAgentStart({
-		type: "before_agent_start",
-		sessionId,
-		systemPrompt: session.runtime.piAgent.state.systemPrompt,
-		userPrompt: inputResult.text,
-	});
+	const before = await events.emitBeforeAgentStart(
+		createEvent("before_agent_start", {
+			sessionId,
+			systemPrompt: session.runtime.piAgent.state.systemPrompt,
+			userPrompt: inputResult.text,
+		}),
+	);
 	if (before.systemPrompt !== session.runtime.piAgent.state.systemPrompt) {
 		session.runtime.piAgent.state.systemPrompt = before.systemPrompt;
 	}
 	const promptText = before.userPrompt;
 
-	await events.emit({ type: "agent_start", sessionId, userPrompt: promptText });
+	await events.emit(createEvent("agent_start", { sessionId, userPrompt: promptText }));
 
 	const outcome: { stopReason?: PiStopReason; errorMessage?: string } = {};
 	const unsubscribe = subscribeToAgent(deps, sessionId, session, outcome);
 
 	const finishTurn = async (stopReason: StopReason | undefined, errorMessage: string | undefined): Promise<void> => {
-		await events.emit({
-			type: "agent_end",
-			sessionId,
-			...(stopReason !== undefined ? { stopReason } : {}),
-			messages: session.runtime.piAgent.state.messages,
-			...(errorMessage !== undefined ? { errorMessage } : {}),
-		});
+		await events.emit(
+			createEvent("agent_end", {
+				sessionId,
+				...(stopReason !== undefined ? { stopReason } : {}),
+				messages: session.runtime.piAgent.state.messages,
+				...(errorMessage !== undefined ? { errorMessage } : {}),
+			}),
+		);
 	};
 
 	try {
@@ -128,29 +131,31 @@ export function subscribeToAgent(
 	return session.runtime.piAgent.subscribe(async (event) => {
 		switch (event.type) {
 			case "turn_start": {
-				await events.emit({ type: "turn_start", sessionId });
+				await events.emit(createEvent("turn_start", { sessionId }));
 				return;
 			}
 			case "turn_end": {
-				await events.emit({
-					type: "turn_end",
-					sessionId,
-					message: event.message,
-					toolResults: event.toolResults,
-				});
+				await events.emit(
+					createEvent("turn_end", {
+						sessionId,
+						message: event.message,
+						toolResults: event.toolResults,
+					}),
+				);
 				return;
 			}
 			case "message_start": {
-				await events.emit({ type: "message_start", sessionId, message: event.message });
+				await events.emit(createEvent("message_start", { sessionId, message: event.message }));
 				return;
 			}
 			case "message_update": {
-				await events.emit({
-					type: "message_update",
-					sessionId,
-					message: event.message,
-					assistantMessageEvent: event.assistantMessageEvent,
-				});
+				await events.emit(
+					createEvent("message_update", {
+						sessionId,
+						message: event.message,
+						assistantMessageEvent: event.assistantMessageEvent,
+					}),
+				);
 				if (event.assistantMessageEvent.type !== "text_delta") return;
 				await conn.sessionUpdate({
 					sessionId,
@@ -162,13 +167,14 @@ export function subscribeToAgent(
 				return;
 			}
 			case "tool_execution_start": {
-				await events.emit({
-					type: "tool_execution_start",
-					sessionId,
-					toolCallId: event.toolCallId,
-					toolName: event.toolName,
-					args: event.args,
-				});
+				await events.emit(
+					createEvent("tool_execution_start", {
+						sessionId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						args: event.args,
+					}),
+				);
 				await conn.sessionUpdate({
 					sessionId,
 					update: {
@@ -183,13 +189,14 @@ export function subscribeToAgent(
 				return;
 			}
 			case "tool_execution_update": {
-				await events.emit({
-					type: "tool_execution_update",
-					sessionId,
-					toolCallId: event.toolCallId,
-					toolName: event.toolName,
-					partialResult: event.partialResult,
-				});
+				await events.emit(
+					createEvent("tool_execution_update", {
+						sessionId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						partialResult: event.partialResult,
+					}),
+				);
 				const partialContent = Array.isArray(event.partialResult?.content) ? event.partialResult.content : [];
 				await conn.sessionUpdate({
 					sessionId,
@@ -203,14 +210,15 @@ export function subscribeToAgent(
 				return;
 			}
 			case "tool_execution_end": {
-				await events.emit({
-					type: "tool_execution_end",
-					sessionId,
-					toolCallId: event.toolCallId,
-					toolName: event.toolName,
-					result: event.result,
-					isError: event.isError,
-				});
+				await events.emit(
+					createEvent("tool_execution_end", {
+						sessionId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						result: event.result,
+						isError: event.isError,
+					}),
+				);
 				const resultContent = Array.isArray(event.result?.content) ? event.result.content : [];
 				await conn.sessionUpdate({
 					sessionId,
@@ -224,7 +232,7 @@ export function subscribeToAgent(
 				return;
 			}
 			case "message_end": {
-				await events.emit({ type: "message_end", sessionId, message: event.message });
+				await events.emit(createEvent("message_end", { sessionId, message: event.message }));
 				const message = event.message;
 				if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return;
 				if (message.role === "assistant") {

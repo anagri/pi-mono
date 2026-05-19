@@ -73,6 +73,7 @@ export {
 	parseSlashArgs,
 	type SlashArgs,
 } from "./commands/slash-args.js";
+export { createEvent, type EventPayload } from "./events/factory.js";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,

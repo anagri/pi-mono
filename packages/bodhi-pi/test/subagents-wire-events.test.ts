@@ -102,3 +102,38 @@ test("subagent_start and subagent_end carry contextMode='fork' when spawned via 
 	expect(startEv?.contextMode).toBe("fork");
 	expect(endEv?.contextMode).toBe("fork");
 });
+
+test("wire-forwarded lifecycle events carry serverTime stamped by the event factory", async () => {
+	const filesystem = createInMemoryFilesystem();
+	await seedSubagent(filesystem, "/proj", "echo", "---\ndescription: echo\n---\nYou echo.\n");
+
+	const faux = newProvider();
+	const model = faux.getModel() as Model<Api>;
+	faux.setResponses([() => fauxAssistantMessage("child done")]);
+
+	const harness = createTestHarness({ models: [model], defaultModelId: model.id, filesystem });
+	await harness.clientConn.initialize(stdInitParams);
+	const { sessionId } = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
+
+	const before = Date.now();
+	const result = (await harness.clientConn.extMethod(EXT_SUBAGENT_RUN, {
+		sessionId,
+		agent: "echo",
+		task: "do",
+	})) as { status: string };
+	expect(result.status).toBe("completed");
+	const after = Date.now();
+
+	const lifecycle = harness.extNotifications.filter((n) => n.method === LIFECYCLE_EVENT_METHOD);
+	const startEv = lifecycle.find((n) => (n.params as { type?: string }).type === "subagent_start")?.params as {
+		serverTime?: number;
+	};
+	const endEv = lifecycle.find((n) => (n.params as { type?: string }).type === "subagent_end")?.params as {
+		serverTime?: number;
+	};
+	expect(typeof startEv?.serverTime).toBe("number");
+	expect(typeof endEv?.serverTime).toBe("number");
+	expect(startEv?.serverTime).toBeGreaterThanOrEqual(before);
+	expect(endEv?.serverTime).toBeLessThanOrEqual(after);
+	expect(startEv?.serverTime ?? 0).toBeLessThanOrEqual(endEv?.serverTime ?? 0);
+});

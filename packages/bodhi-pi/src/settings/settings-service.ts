@@ -1,5 +1,6 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
 import { requireLiveSession } from "@/sessions/resolution.js";
 import type { SessionState } from "@/sessions/session-state.js";
@@ -146,14 +147,15 @@ export class SettingsService {
 			) as BodhiPiProjectSettings;
 		}
 
-		await this.events.emit({
-			type: "settings_change",
-			sessionId: params.sessionId as string,
-			scope,
-			key,
-			value,
-			reason: "set",
-		});
+		await this.events.emit(
+			createEvent("settings_change", {
+				sessionId: params.sessionId as string,
+				scope,
+				key,
+				value,
+				reason: "set",
+			}),
+		);
 
 		return {
 			key,
@@ -183,14 +185,15 @@ export class SettingsService {
 			) as BodhiPiProjectSettings;
 		}
 
-		await this.events.emit({
-			type: "settings_change",
-			sessionId: params.sessionId as string,
-			scope,
-			key,
-			value: null,
-			reason: "unset",
-		});
+		await this.events.emit(
+			createEvent("settings_change", {
+				sessionId: params.sessionId as string,
+				scope,
+				key,
+				value: null,
+				reason: "unset",
+			}),
+		);
 
 		return {
 			key,

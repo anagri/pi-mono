@@ -1,5 +1,6 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import {
 	EXT_SESSION_CLONE,
 	EXT_SESSION_ENTRIES,
@@ -98,20 +99,22 @@ export class SessionGraphService {
 				},
 			);
 			if (summaryEntry) {
-				await this.events.emit({
-					type: "branch_summary_created",
-					sessionId,
-					abandonedTailLeafId: oldLeaf,
-					commonAncestorId: cross.commonAncestorId,
-					summary: summaryEntry.summary,
-				});
-				await this.events.emit({
-					type: "session_navigate",
-					sessionId,
-					fromLeafId: oldLeaf,
-					toLeafId: targetEntryId,
-					crossedBranches: true,
-				});
+				await this.events.emit(
+					createEvent("branch_summary_created", {
+						sessionId,
+						abandonedTailLeafId: oldLeaf,
+						commonAncestorId: cross.commonAncestorId,
+						summary: summaryEntry.summary,
+					}),
+				);
+				await this.events.emit(
+					createEvent("session_navigate", {
+						sessionId,
+						fromLeafId: oldLeaf,
+						toLeafId: targetEntryId,
+						crossedBranches: true,
+					}),
+				);
 				return { leafId: session.runtime.leafId };
 			}
 			// Cross-branch but summary failed (LLM error, no API key, etc.): fall
@@ -129,13 +132,14 @@ export class SessionGraphService {
 				session.runtime.piAgent.state.messages = ctx.messages;
 			}
 		}
-		await this.events.emit({
-			type: "session_navigate",
-			sessionId,
-			fromLeafId: oldLeaf,
-			toLeafId: targetEntryId,
-			crossedBranches: !!cross,
-		});
+		await this.events.emit(
+			createEvent("session_navigate", {
+				sessionId,
+				fromLeafId: oldLeaf,
+				toLeafId: targetEntryId,
+				crossedBranches: !!cross,
+			}),
+		);
 		return { leafId: targetEntryId };
 	}
 
@@ -164,13 +168,14 @@ export class SessionGraphService {
 		const target = record.entries.find((e) => e.id === entryId);
 		if (!target) throw new RequestError(-32602, `unknown entry: ${entryId}`);
 		const { newSessionId } = await this.sessionStore.forkRecord(sessionId, entryId, position);
-		await this.events.emit({
-			type: "session_fork",
-			sessionId,
-			newSessionId,
-			fromEntryId: entryId,
-			position,
-		});
+		await this.events.emit(
+			createEvent("session_fork", {
+				sessionId,
+				newSessionId,
+				fromEntryId: entryId,
+				position,
+			}),
+		);
 		const out: Record<string, unknown> = { newSessionId };
 		if (position === "before" && target.type === "message" && target.message.role === "user") {
 			const text = target.message.content;
@@ -191,12 +196,13 @@ export class SessionGraphService {
 		const leafId = record.leafId ?? record.entries[record.entries.length - 1]?.id;
 		if (!leafId) throw new RequestError(-32603, "cannot clone an empty session");
 		const { newSessionId } = await this.sessionStore.forkRecord(sessionId, leafId, "at");
-		await this.events.emit({
-			type: "session_clone",
-			sessionId,
-			newSessionId,
-			fromLeafId: leafId,
-		});
+		await this.events.emit(
+			createEvent("session_clone", {
+				sessionId,
+				newSessionId,
+				fromLeafId: leafId,
+			}),
+		);
 		return { newSessionId };
 	}
 }

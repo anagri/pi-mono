@@ -16,6 +16,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { randomUUID } from "@/_internal/uuid.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
 import { extractAuthApiKey, extractAuthBaseUrl } from "@/kv/auth-format.js";
 import { AUTH_PREFIX, type JsonValue, type KvStore } from "@/kv/kv-store.js";
@@ -258,12 +259,13 @@ export class ModelRegistry {
 			provider: newModel.provider,
 			modelId: newModel.id,
 		});
-		await this.events.emit({
-			type: "model_select",
-			sessionId,
-			fromModelId: previousModelId,
-			toModelId: value,
-		});
+		await this.events.emit(
+			createEvent("model_select", {
+				sessionId,
+				fromModelId: previousModelId,
+				toModelId: value,
+			}),
+		);
 	}
 
 	private async setSessionThinkingLevel(sessionId: string, session: SessionState, value: unknown): Promise<void> {

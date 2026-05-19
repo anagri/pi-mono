@@ -1,5 +1,6 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import { EXT_KV_GET, EXT_KV_LIST, EXT_KV_REMOVE, EXT_KV_SET } from "@/wire/constants.js";
 import { optionalSessionId, requireStringParam } from "@/wire/validators.js";
 import { AUTH_PREFIX, type JsonValue, type KvStore, maskSecrets } from "./kv-store.js";
@@ -45,12 +46,13 @@ export class KvService {
 		const value = params.value as JsonValue;
 		await kv.set(key, value);
 		if (key.startsWith(AUTH_PREFIX)) {
-			await this.events.emit({
-				type: "auth_change",
-				sessionId: optionalSessionId(params),
-				provider: key.slice(AUTH_PREFIX.length),
-				action: "login",
-			});
+			await this.events.emit(
+				createEvent("auth_change", {
+					sessionId: optionalSessionId(params),
+					provider: key.slice(AUTH_PREFIX.length),
+					action: "login",
+				}),
+			);
 		}
 		return { key };
 	}
@@ -80,12 +82,13 @@ export class KvService {
 		const key = requireStringParam(EXT_KV_REMOVE, params, "key");
 		await kv.remove(key);
 		if (key.startsWith(AUTH_PREFIX)) {
-			await this.events.emit({
-				type: "auth_change",
-				sessionId: optionalSessionId(params),
-				provider: key.slice(AUTH_PREFIX.length),
-				action: "logout",
-			});
+			await this.events.emit(
+				createEvent("auth_change", {
+					sessionId: optionalSessionId(params),
+					provider: key.slice(AUTH_PREFIX.length),
+					action: "logout",
+				}),
+			);
 		}
 		return { key };
 	}

@@ -4,6 +4,7 @@ import type { AssistantMessage, StopReason as PiStopReason } from "@earendil-wor
 import { isContextOverflow } from "@earendil-works/pi-ai";
 import { randomUUID } from "@/_internal/uuid.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
+import { createEvent } from "@/events/factory.js";
 import type { StopReason } from "@/events/types.js";
 import { EXT_SESSION_COMPACT } from "@/wire/constants.js";
 import { mapStopReason } from "@/wire/converters.js";
@@ -103,18 +104,19 @@ export class CompactionOrchestrator {
 		const apiKey = await this.resolveApiKey(model.provider);
 		if (!apiKey) return { kind: "skipped", reason: "no_api_key" };
 
-		await this.events.emit({ type: "compaction_start", sessionId, reason });
+		await this.events.emit(createEvent("compaction_start", { sessionId, reason }));
 		let result: CompactionResult;
 		try {
 			result = await runCompaction(preparation, model, apiKey, options.customInstructions);
 		} catch (err) {
 			const error = err instanceof Error ? err : new Error(String(err));
-			await this.events.emit({
-				type: "compaction_end",
-				sessionId,
-				reason,
-				errorMessage: error.message,
-			});
+			await this.events.emit(
+				createEvent("compaction_end", {
+					sessionId,
+					reason,
+					errorMessage: error.message,
+				}),
+			);
 			return { kind: "failed", error };
 		}
 
@@ -125,14 +127,15 @@ export class CompactionOrchestrator {
 			: session.runtime.piAgent.state.messages;
 		session.runtime.piAgent.state.messages = messages;
 
-		await this.events.emit({
-			type: "compaction_end",
-			sessionId,
-			reason,
-			summary: result.summary,
-			firstKeptEntryId: result.firstKeptEntryId,
-			tokensBefore: result.tokensBefore,
-		});
+		await this.events.emit(
+			createEvent("compaction_end", {
+				sessionId,
+				reason,
+				summary: result.summary,
+				firstKeptEntryId: result.firstKeptEntryId,
+				tokensBefore: result.tokensBefore,
+			}),
+		);
 		return { kind: "succeeded", result, messages };
 	}
 

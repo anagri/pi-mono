@@ -2,6 +2,7 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "../acp/agent.js";
 import type { EventDispatcher } from "../events/dispatcher.js";
+import { createEvent } from "../events/factory.js";
 import type { SessionState } from "../sessions/session-state.js";
 import type { McpConnectionProvider } from "./mcp-connection-provider.js";
 import type { McpRegistry } from "./mcp-registry.js";
@@ -102,9 +103,14 @@ export class McpConnectionLifecycle {
 		status: "connected" | "disconnected" | "error",
 		errorMessage?: string,
 	): Promise<void> {
-		const payload: Record<string, unknown> = { type: "mcp_status_change", sessionId, slug, status };
-		if (errorMessage !== undefined) payload.errorMessage = errorMessage;
-		await this.events.emit(payload as never);
+		await this.events.emit(
+			createEvent("mcp_status_change", {
+				sessionId,
+				slug,
+				status,
+				...(errorMessage !== undefined ? { errorMessage } : {}),
+			}),
+		);
 	}
 
 	closeSession(sessionId: string): void {
@@ -140,17 +146,21 @@ export class McpConnectionLifecycle {
 	): Promise<void> {
 		if (this.sessions.size === 0) return;
 		for (const sessionId of this.sessions.keys()) {
-			const payload: Record<string, unknown> = { type: "mcp_status_change", sessionId, slug, status };
-			if (errorMessage !== undefined) payload.errorMessage = errorMessage;
-			await this.events.emit(payload as never);
+			await this.events.emit(
+				createEvent("mcp_status_change", {
+					sessionId,
+					slug,
+					status,
+					...(errorMessage !== undefined ? { errorMessage } : {}),
+				}),
+			);
 		}
 	}
 
 	async emitToolsBroadcast(slug: string, toolNames: string[]): Promise<void> {
 		if (this.sessions.size === 0) return;
 		for (const sessionId of this.sessions.keys()) {
-			const payload = { type: "mcp_tools_change" as const, sessionId, slug, toolNames };
-			await this.events.emit(payload);
+			await this.events.emit(createEvent("mcp_tools_change", { sessionId, slug, toolNames }));
 		}
 	}
 
@@ -163,9 +173,14 @@ export class McpConnectionLifecycle {
 		// session closes. Emit a sentinel sessionId "" so UI panels with no active session still see it.
 		const targets = this.sessions.size === 0 ? [""] : Array.from(this.sessions.keys());
 		for (const sessionId of targets) {
-			const payload: Record<string, unknown> = { type: "mcp_oauth_status_change", sessionId, slug, status };
-			if (errorMessage !== undefined) payload.errorMessage = errorMessage;
-			await this.events.emit(payload as never);
+			await this.events.emit(
+				createEvent("mcp_oauth_status_change", {
+					sessionId,
+					slug,
+					status,
+					...(errorMessage !== undefined ? { errorMessage } : {}),
+				}),
+			);
 		}
 	}
 }
