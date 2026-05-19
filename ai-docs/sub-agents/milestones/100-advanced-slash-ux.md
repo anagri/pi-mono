@@ -5,7 +5,7 @@
 
 ## Goal
 
-Extend the host-side slash command surface beyond the current flat `/agents` (list) + `/subagent <name> <task>` (run) to cover the operational patterns users need once the underlying sub-agent feature gets richer (background, batch, resume).
+Extend the host-side slash command surface beyond the current flat `/agents` (list) + `/subagent <name> <task>` (run) to cover the operational patterns users need once the underlying sub-agent feature gets richer (background, resume, parallel host-side dispatch).
 
 This is a **host-side milestone, not a core milestone** — it adds no `src/` behaviour, only new commands in `test-apps/<host>/src/client/`. The core feature must support whatever the commands invoke; that comes from milestones 050, 060, 070, 080.
 
@@ -45,7 +45,7 @@ Most of the proposed commands map to existing `_bodhi-pi/subagent/*` ext methods
 - `/subagent <name> <task>` → `_bodhi-pi/subagent/run`
 - `/children` → `_bodhi-pi/subagent/children`
 - `/chain` → repeated `_bodhi-pi/subagent/run` invocations with output stitching
-- `/parallel` → would need a `_bodhi-pi/subagent/batch` ext method (currently the batch path is LLM-tool-only)
+- `/parallel` → repeated `_bodhi-pi/subagent/run` calls executed concurrently host-side (e.g. `Promise.all` in the client); no new ext method needed
 - `/cancel` → needs a new `_bodhi-pi/subagent/cancel` ext method (milestone 050)
 - `/resume` → needs a new `_bodhi-pi/subagent/resume` or extension of `/status` (milestone 060)
 

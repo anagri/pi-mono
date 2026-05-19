@@ -1,7 +1,7 @@
 # Milestone 050 — Background execution (fire-and-forget)
 
 > **Status:** ☐ pending. Tracked in `../pending.md` as **P3a**. Not yet started.
-> **Prerequisite reading:** [`005-architecture-decisions.md`](005-architecture-decisions.md), [`040-parallel-batch.md`](040-parallel-batch.md), `../v2-retrospective.md` (the eviction-per-status work that prepared this seam).
+> **Prerequisite reading:** [`005-architecture-decisions.md`](005-architecture-decisions.md), `../v2-retrospective.md` (the eviction-per-status work that prepared this seam).
 > **Depends on:** the per-status lifecycle-eviction refactor that landed in milestone 020 alongside V2 — the eviction seam was added explicitly to make this milestone possible without revisiting `SubagentService`'s core lifecycle.
 
 ## Goal
@@ -14,7 +14,7 @@ Background execution is the **first cross-turn lifecycle** in the sub-agent syst
 
 ### IN
 
-- **A way for the LLM to opt into background spawn** — either a new `background?: boolean` flag on the existing `subagent` tool, OR a new `subagent_background` tool. The decision belongs to the implementing agent; both are coherent with Decision 3 (the case for a separate tool is that "fire-and-forget" has very different success semantics from synchronous spawn).
+- **A way for the LLM to opt into background spawn** — either a new `background?: boolean` flag on the existing `subagent` tool, OR a new `subagent_background` tool. The decision belongs to the implementing agent. Adding a flag keeps the single-tool stance (Decision 3) but introduces an attractor knob; a separate tool keeps the single-task schema clean but adds tool-surface area. Either choice should weigh the C0 attractor lesson from V2.
 - **`subagent_status` tool** — takes a `childSessionId`, returns `{ status: "running" | "completed" | "failed" | "cancelled", summary?: string, error?: string, partial?: string }`. The `partial` field lets the LLM check progress without waiting (returns the most recent assistant chunk).
 - **A way to retrieve the final result** — either `subagent_status` returning the full summary on `status: "completed"`, or a separate `subagent_collect` tool. Choice belongs to the implementing agent.
 - **Synthetic result injection (optional)** — when a child completes in the background and the parent is mid-turn, an extension or the host can choose to inject the child's summary as a synthetic user/assistant message rather than wait for the LLM to poll. The mechanics here are designed alongside the implementing agent.
@@ -32,8 +32,8 @@ Background execution is the **first cross-turn lifecycle** in the sub-agent syst
 
 ### Tool surface
 Two viable shapes:
-- **Flag on `subagent`:** add `background?: boolean` (default `false`). When true, the tool returns immediately with `{ childSessionId, status: "running" }`. Schema attractor risk is real — needs careful description-writing.
-- **New `subagent_background` tool:** mirrors `subagent` parameters but always returns immediately. Cleaner from Decision 3's stance (two-tools-not-one), but adds a third tool to the surface.
+- **Flag on `subagent`:** add `background?: boolean` (default `false`). When true, the tool returns immediately with `{ childSessionId, status: "running" }`. Preserves the single-tool stance (Decision 3) but adds an LLM-facing knob — careful description-writing required.
+- **New `subagent_background` tool:** mirrors `subagent` parameters but always returns immediately. Adds a second sub-agent tool but keeps each tool's schema minimal.
 
 The implementing agent should review the C0 attractor lesson from V2 before picking. Either choice must keep the synchronous default working as today.
 
@@ -54,7 +54,7 @@ Existing `subagent_start` / `subagent_end` may suffice, but a `subagent_backgrou
 
 1. **All seven locked decisions still apply.** In-process spawn, profile source-of-truth, fresh-default, depth-cap-2, MCP-empty for children, full-transcript fork filter. Background mode does not change *what* a child can do; it only changes *when* the result is consumed.
 2. **A background child cannot itself spawn children.** Depth-cap-2 holds.
-3. **`SUBAGENT_DEFAULT_MAX_BATCH_CONCURRENCY` still applies** — the cap on concurrent children (background OR foreground) lives on the service, not on the tool.
+3. **A concurrent-children cap** (if needed) is a fresh service-level design call for the implementing agent — not bound to any prior primitive. Foreground parallelism currently has no service-level cap because `pi-agent-core`'s `executeToolCallsParallel` dispatches whatever the LLM emits; background mode may want one.
 4. **The parent's transcript faithfully records the spawn** — `subagent_link` is appended at dispatch, `subagent_complete` is appended at child end (potentially many turns later). Replay reconstructs.
 5. **Cancellation is a first-class operation** — host UIs need a way to stop a background child; the implementing agent designs the host-facing surface.
 6. **A child whose parent session is deleted is also terminated.** No orphaned children.
@@ -64,7 +64,7 @@ Existing `subagent_start` / `subagent_end` may suffice, but a `subagent_backgrou
 Background execution is the **OpenCode pattern**: dispatch immediately, poll later, optionally inject the result as a synthetic message. Qwen Code has a similar model with task IDs that survive across turns. cc supports a more limited form via the resume hook.
 
 Relative to the spectrum:
-- **Lifecycle axis:** moves bodhi-pi from foreground+parallel-batch to foreground+background+parallel-batch — the broadest position in the spectrum.
+- **Lifecycle axis:** moves bodhi-pi from foreground-only (with concurrent dispatch via LLM tool-use) to foreground + background — the broadest position in the spectrum.
 - **Return-protocol axis:** adds the synthetic-injection variant alongside the existing structured-return variant. Both coexist; the LLM picks per dispatch (or the host picks via injection).
 
 The key design tension: background mode lets the LLM "compose tasks over time" but introduces a polling pattern that can degrade to wasted turns if the LLM checks too eagerly. Tool description and recommendation-prompts matter here.

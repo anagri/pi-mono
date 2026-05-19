@@ -2,7 +2,6 @@
 
 > **Status:** ☐ pending. Tracked in `../pending.md` as the "Recursion opt-in" open knob. Not yet started.
 > **Prerequisite reading:** [`005-architecture-decisions.md`](005-architecture-decisions.md) (Decision 5 — recursion).
-> **Historical note:** this milestone originally also covered "tool consolidation" (fold `subagent_batch` into `subagent`). That half was shipped differently — Phase 2 (2026-05-19) deleted the entire batch surface rather than merging it. Decision 3 is Superseded. The recursion half (below) is the only remaining open knob.
 
 ## Goal
 

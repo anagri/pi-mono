@@ -7,7 +7,7 @@
 
 Land the foundational sub-agent surface end-to-end across all four runtimes: a markdown-discovered profile system, a single LLM tool that spawns one child synchronously inside the parent's turn, a fresh (task-only) context for that child, the session-store + lifecycle plumbing to record the spawn, the wire-level ext methods that let hosts/clients introspect, and the slash-command affordances `/agents` + `/subagent`.
 
-This milestone is the **biggest single landing** in the sub-agent arc — everything later (built-ins, fork, batch, future background mode) layers on the seams introduced here.
+This milestone is the **biggest single landing** in the sub-agent arc — everything later (built-ins, fork, future background mode) layers on the seams introduced here.
 
 ## Functional scope
 
@@ -29,7 +29,6 @@ This milestone is the **biggest single landing** in the sub-agent arc — everyt
 - **Built-in profiles** — V1 ships zero bundled profiles; `explore` and `planner` land in milestone 020.
 - **Extension-registered profiles** — `ExtensionAPI.registerSubagentProfile` lands in milestone 020.
 - **Forked context** — milestone 030. V1 only exercises `context: "fresh"`.
-- **Parallel batch tool** — shipped in P2b (milestone 040), retired in Phase 2 (2026-05-19). Parallelism is now achieved by the LLM emitting multiple `subagent` tool calls in one assistant message; pi-agent-core executes them concurrently.
 - **Background mode + resume** — milestones 050, 060.
 - **MCP for children** — out by Decision 6; children get zero MCP tools in V1.
 
@@ -79,15 +78,17 @@ V1 commits bodhi-pi to four of the seven locked decisions:
 - **Hard depth-cap-2 (Decision 5).** Enforced by tool exclusion from child tool list.
 - **MCP-empty for children (Decision 6).** Children get nothing despite parent registrations.
 
+V1 also commits to:
+- **Single sub-agent tool with LLM-driven parallelism (Decision 3).** V1 ships only the `subagent` tool; concurrent dispatch emerges when the LLM emits multiple `subagent` tool calls in one assistant message, which pi-agent-core's `executeToolCallsParallel` runs through `Promise.all`.
+
 V1 does NOT commit yet to:
-- Decision 3 (separate tools) — only `subagent` exists. Note: Decision 3 was later Superseded in Phase 2 (2026-05-19); the dual-tool stance never made it past P2b.
 - Decision 4 (fresh-default) — only fresh exists; the fork option arrives in milestone 030.
 - Decision 7 (full-transcript fork) — no fork yet.
 
 Relative to the research spectrum:
 - **Execution model:** in-process spawn — closest to cc's in-process fork model, but using a fresh `SessionState` rather than cloning the parent's.
 - **Context isolation:** task-only / fresh — closest to OpenCode's default.
-- **Lifecycle:** foreground-only — narrower than OpenCode's foreground+background or OpenHands' parallel batch.
+- **Lifecycle:** foreground-only, with concurrent dispatch when the LLM emits multiple `subagent` calls in one turn — narrower than OpenCode's foreground+background but matches the majority parallel-tool-use pattern (cc, Mastra, Gemini CLI).
 - **Return protocol:** structured (final assistant text → tool_result body) — closest to Mastra and Gemini.
 - **Profile definition:** markdown discovery only — closest to cc's `.claude/agents/*.md` pattern.
 
@@ -114,6 +115,5 @@ The test scaffolding helper `scriptSubagentRun` (in `packages/bodhi-pi/test/help
 
 - Built-in profiles + extension-registered sources → milestone [020](020-profile-sources-and-precedence.md).
 - Forked context for richer child input → milestone [030](030-forked-context.md).
-- Parallel sub-agent dispatch → LLM emits multiple `subagent` tool calls in one assistant message; concurrent execution by pi-agent-core. (Originally shipped as `subagent_batch` in milestone [040](040-parallel-batch.md); retired in Phase 2.)
 - The MCP-empty stance from Decision 6 → unblocked by milestone [070](070-mcp-and-skill-inheritance.md).
 - The "discovery warns on dropped files" cleanup work that originally fell out of V1 → hardened during the cleanup wave; current source in `src/subagents/discovery.ts` carries the final form.

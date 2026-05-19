@@ -15,7 +15,7 @@ This is the first time a child is bootstrapped with non-empty message history, a
 
 - **`context: "fresh" | "fork"` on `SubagentProfile`** — declared in V1 but only `"fresh"` was exercised. P2a wires the `"fork"` branch end-to-end.
 - **Shared transcript-clone helper** — `cloneTranscriptSlice(parentSession)` produces a filtered copy of the parent's entries suitable for use as a child's initial history. Lives in `src/sessions/clone-slice.ts`. Reused by the existing `_bodhi-pi/session/fork` ext method.
-- **`SUBAGENT_FORK_FILTER`** — a `Set<SessionEntry["type"]>` of entry types that are excluded from a forked child's view. Current contents: `mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`, `subagent_batch`. Lives in `src/subagents/_clone-slice-filter.ts`.
+- **`SUBAGENT_FORK_FILTER`** — a `Set<SessionEntry["type"]>` of entry types that are excluded from a forked child's view. Current contents: `mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`. Lives in `src/subagents/_clone-slice-filter.ts`.
 - **Spawn-flow fork branch** — `SubagentService.spawn` reads `profile.context`; if `"fork"`, builds the child's initial state with the cloned + filtered transcript. The child's `runPromptLoop` sees this as its starting message history.
 - **`contextMode` field on `SubagentLinkEntry`** — records which mode was used, so replay / inspection can tell fresh vs fork spawns apart.
 - **`contextMode` on lifecycle events** — `subagent_start` and `subagent_end` events carry the mode for extensions / UIs that want to render differently.
@@ -35,7 +35,7 @@ This is the first time a child is bootstrapped with non-empty message history, a
 Shared with the existing `_bodhi-pi/session/fork` ext method. Recommendation: keep the helper pure — input is the parent's session record + the filter; output is a new array of entries that can be appended to a fresh `SessionState`'s entry list before its first turn.
 
 ### `SUBAGENT_FORK_FILTER`
-A `Set` of session-entry `type` strings excluded from a forked child's view. The current contents (`mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`, `subagent_batch`) reflect two rules:
+A `Set` of session-entry `type` strings excluded from a forked child's view. The current contents (`mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`) reflect two rules:
 1. Drop entries that describe the parent's *runtime configuration*, not its *conversation* (mcp_inclusion_set, extension).
 2. Drop entries that describe *prior sub-agent activity* — a forked child shouldn't see other children's link/complete records, both because they're not conversational and because they could trick the LLM into trying to spawn its own children (and the depth-cap-2 prevents that anyway).
 

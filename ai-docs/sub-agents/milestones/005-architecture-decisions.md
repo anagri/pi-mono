@@ -8,7 +8,7 @@ Seven decisions diverge from one or more harnesses in the research spectrum, and
 
 1. **In-process spawn** — not separate process, not separate ACP session
 2. **Profile is the source of truth** — context mode, model, tools all locked at discovery time; no per-call overrides
-3. **Two LLM tools, not one** — `subagent` (single) and `subagent_batch` (N≥2) intentionally separate ⛔ **Superseded (Phase 2, 2026-05-19)** — now one tool `subagent`; parallelism via LLM parallel tool-use
+3. **Single sub-agent tool with LLM-driven parallelism** — one `subagent` tool; concurrency emerges from the LLM emitting multiple tool calls in one assistant message, dispatched concurrently by pi-agent-core's `Promise.all` executor
 4. **Fresh context is the default** — fork is opt-in per profile
 5. **Hard depth-cap of 2** — recursion is not configurable; children cannot spawn grandchildren
 6. **MCP-empty for children in v1** — children get zero MCP tools regardless of parent
@@ -55,27 +55,24 @@ Each decision is followed by what we did instead, why, what we gave up, and wher
 
 ---
 
-## Decision 3 — Two LLM tools, not one ⛔ Superseded (Phase 2, 2026-05-19)
+## Decision 3 — Single sub-agent tool with LLM-driven parallelism
 
-> **Superseded by Phase 2 (2026-05-19).** Empirical evidence from Phase 1 (`subagent_batch` LLM tool unregistered + serverTime concurrency proof in integration / e2e / e2e-ui / browser manual smoke) confirmed that pi-agent-core's `Promise.all` dispatch correctly executes multiple `subagent` tool calls emitted in one assistant message — no batch primitive is required for parallelism. Phase 2 deleted `src/tools/subagent-batch.ts`, `src/subagents/batch-progress-accumulator.ts`, `SubagentService.spawnBatch`, `SubagentBatchEntry`, the batch lifecycle events, and the batch wire forwarders. The new locked stance is **one LLM-facing sub-agent tool (`subagent`), with parallelism via LLM parallel tool-use**. Plan: `ai-docs/plans/we-want-to-merge-jiggly-meteor.md`.
->
-> Reasoning models (gpt-5-mini, o-series) reliably chunk tool calls one-per-assistant-turn → serial execution; non-reasoning models (claude-haiku-4-5, gpt-4o-mini) emit parallel calls → true concurrent execution. The model-dependency is now an authoring concern, not an architectural one.
->
-> The historical content below describes what the dual-tool stance was and why; it is retained for context but no longer authoritative.
+**The spectrum:** Two camps across the surveyed harnesses. (a) Folded batch-as-array: Mastra and cc expose a single tool that takes `tasks: Array<...>` with `minItems: 1`. (b) Parallel tool-use: OpenCode, Gemini CLI, Qwen Code expose a single-task sub-agent tool and rely on the LLM emitting multiple tool calls in one assistant message to get concurrency. Both achieve parallelism — the difference is whether the batching is expressed at the tool-schema level or at the LLM tool-use level.
 
-**The spectrum:** Mastra and cc fold single-child and batch into one tool with an array-of-tasks parameter (`minItems: 1`).
-
-**What bodhi-pi does:** `subagent` accepts one task. `subagent_batch` requires `tasks.minItems: 2`. The two tools are exposed to the model side-by-side when at least one profile is discovered.
+**What bodhi-pi does:** A single `subagent` tool that takes one task per call. Concurrency is implicit — when the LLM emits N `subagent` tool calls in one assistant message, pi-agent-core's `executeToolCallsParallel` (`packages/agent/src/agent-loop.ts`) runs them through `Promise.all`. Parallel children produce N parallel `subagent_link` → `subagent_complete` entry pairs and N overlapping `subagent_start` / `subagent_end` event windows.
 
 **Why:**
-- **The N=1 degenerate case has a different success profile** than the N≥2 case. A single tool that takes an array makes the model think it must always batch, and creates schema noise (the `failFast` knob is meaningless for N=1).
-- **Single-child schema stays minimal** (3 fields) while batch can grow per-task complexity (`failFast`, per-task model override) without polluting the single-child path.
+- **Matches the majority pattern.** OpenCode, Gemini CLI, and Qwen Code (the harnesses most aligned with bodhi-pi's child-session model) all use parallel-tool-use over a batch primitive. The research report flagged this as the prevailing pattern in coding-agent harnesses.
+- **Schema minimisation (Decision 2's spirit).** Every additional knob on the LLM-facing tool is a knob the model can misuse. `tasks: Array`, `failFast`, per-task model override on a single tool widens the attractor surface. A flat single-task schema is the smallest possible.
+- **Concurrency comes for free from `pi-agent-core`.** The `Promise.all` executor was already in place for other tool dispatch; sub-agents inherit it without bespoke plumbing.
+- **No new replay surface.** Without batch entries, the `SessionStore` keeps one entry-pair per child — replay is straightforward.
 
 **What we give up:**
-- Two tools = more cognitive surface for the model.
-- Schema duplication between the two tools.
+- **Reasoning models serialize.** gpt-5-mini and the o-series reliably chunk tool calls one-per-assistant-turn, so multi-child workflows on those models run serially even when the parent's intent is parallel. Non-reasoning models (claude-haiku-4-5, gpt-4o-mini) emit parallel calls per turn. Concurrency behaviour is therefore an authoring/model-selection concern, not an architectural primitive.
+- **No tool-level `failFast` semantics.** If a parent wants "abort siblings on first failure", it has to express that itself across multiple turns; the runtime won't cancel in-flight peers automatically when one fails.
+- **No tool-level concurrency cap.** The LLM emits however many parallel calls it wants; if downstream pressure (provider rate limits, etc.) matters, that's a service-level concern, not a tool-schema one.
 
-**Where the alternative still lives:** Milestone 080 tracks the option to consolidate. It is not currently a recommendation — the consolidation requires evidence that the dual-tool approach is causing model confusion, which we have not seen.
+**Where the alternative still lives:** Workflow-handoff graphs (LangGraph, AutoGen Swarm) — which let the parent declare a sequential or parallel pipeline as a first-class artefact — remain a separate future concern, not a sub-agent feature. They would warrant their own decision doc.
 
 ---
 
@@ -158,7 +155,7 @@ These hold across every milestone and every runtime — code reviews flag violat
 | Invariant | Why |
 |---|---|
 | `src/subagents/` has no `node:*` imports | Four-runtime parity |
-| Children never see the `subagent` or `subagent_batch` tool in their tool list | Depth-cap-2 by construction |
+| Children never see the `subagent` tool in their tool list | Depth-cap-2 by construction |
 | Children get zero MCP tools in v1 | Decision 6 |
 | `SessionStore.list()` defaults to `includeChildren: false` | Don't pollute parent-facing UI |
 | Sub-agent lifecycle events flow on both rails (in-process `EventDispatcher` AND ACP `session/update`) | Extensions subscribe in-process; clients render via ACP |
