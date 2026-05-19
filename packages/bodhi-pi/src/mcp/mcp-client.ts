@@ -191,9 +191,23 @@ async function listTools(client: Client): Promise<McpToolInfo[]> {
 		const tool: McpToolInfo = { name: t.name };
 		if (typeof t.description === "string") tool.description = t.description;
 		if (t.inputSchema) tool.inputSchema = t.inputSchema as unknown as McpToolInfo["inputSchema"];
+		const annotations = parseToolAnnotations(t.annotations);
+		if (annotations) tool.annotations = annotations;
 		list.push(tool);
 	}
 	return list;
+}
+
+function parseToolAnnotations(raw: unknown): McpToolInfo["annotations"] | undefined {
+	if (raw === undefined || raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+	const obj = raw as Record<string, unknown>;
+	const out: NonNullable<McpToolInfo["annotations"]> = {};
+	if (typeof obj.title === "string") out.title = obj.title;
+	if (typeof obj.readOnlyHint === "boolean") out.readOnlyHint = obj.readOnlyHint;
+	if (typeof obj.destructiveHint === "boolean") out.destructiveHint = obj.destructiveHint;
+	if (typeof obj.idempotentHint === "boolean") out.idempotentHint = obj.idempotentHint;
+	if (typeof obj.openWorldHint === "boolean") out.openWorldHint = obj.openWorldHint;
+	return Object.keys(out).length === 0 ? undefined : out;
 }
 
 export async function callMcpTool(

@@ -94,10 +94,25 @@ export interface McpServerEntry {
 	label: string;
 }
 
+/**
+ * MCP tool annotations (spec v2025-03-26). All fields are hints; clients
+ * SHOULD NOT make security decisions based solely on these — bodhi-pi treats
+ * `readOnlyHint: true` as "safe in plan mode", `destructiveHint: true` as
+ * "blocked in plan mode", and absence as research-permissive default-allow.
+ */
+export interface McpToolAnnotations {
+	title?: string;
+	readOnlyHint?: boolean;
+	destructiveHint?: boolean;
+	idempotentHint?: boolean;
+	openWorldHint?: boolean;
+}
+
 export interface McpToolInfo {
 	name: string;
 	description?: string;
 	inputSchema?: JsonValue;
+	annotations?: McpToolAnnotations;
 }
 
 export interface McpListEntry {

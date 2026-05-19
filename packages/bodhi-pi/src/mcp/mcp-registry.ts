@@ -2,6 +2,8 @@ import type { AgentTool, Agent as PiAgent } from "@earendil-works/pi-agent-core"
 import { mergeTools } from "../extensions/merge.js";
 import type { SessionState } from "../sessions/session-state.js";
 import type { McpConnectionProvider } from "./mcp-connection-provider.js";
+import { parseToolName } from "./mcp-tool-adapter.js";
+import type { McpToolAnnotations } from "./mcp-types.js";
 
 /**
  * Per-agent registry for **inclusion** (which slugs each session has opted in
@@ -62,6 +64,20 @@ export class McpRegistry {
 		const set = this.inclusion.get(sessionId);
 		if (!set || !set.has(slug)) return [];
 		return this.provider.getToolNames(slug) ?? [];
+	}
+
+	/**
+	 * Resolve MCP tool annotations for a namespaced `<slug>__<tool>` name. Returns `undefined`
+	 * when the name is malformed, the slug isn't included for the session, the slug isn't
+	 * connected, the tool name isn't known, or the tool carries no annotations.
+	 */
+	getToolAnnotations(sessionId: string, fullName: string): McpToolAnnotations | undefined {
+		const parsed = parseToolName(fullName);
+		if (!parsed) return undefined;
+		const set = this.inclusion.get(sessionId);
+		if (!set || !set.has(parsed.slug)) return undefined;
+		const infos = this.provider.getToolInfos(parsed.slug);
+		return infos?.find((t) => t.name === parsed.original)?.annotations;
 	}
 
 	applyToSession(sessionId: string): void {
