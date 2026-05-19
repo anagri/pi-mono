@@ -145,19 +145,52 @@ Phase 0 ships read-only visual surface + slash commands. No interactive dropdown
 
 | Milestone | Status | Description |
 |---|---|---|
-| 010 — ground prep (types + tool-cat + event types + settings schema) | ☑ | This phase |
-| 020 — mode-state + setSessionConfigOption | ☑ | This phase |
-| 030 — policy enforcement + `request_permission` + persistent rules surface | ☐ | Phase 1 |
-| 040 — fine-grained patterns (`bash:command`, `mcp:slug__tool`) | ☐ | |
-| 050 — submit-plan slash + auto-transition plan→edit | ☐ | |
-| 060 — allow-all semantics & guardrails | ☐ | |
-| 070 — sub-agent mode inheritance | ☐ | |
-| 080 — active-tools swap (vs gate-at-call-time) | ☐ | |
-| 090 — persistent rules (`alwaysAllow` / `alwaysDeny`) | ☐ | |
+| 010 — ground prep (types + tool-cat + event types + settings schema) | ☑ | Phase 0 |
+| 020 — mode-state + setSessionConfigOption | ☑ | Phase 0 |
+| 030 — plan-mode plumbing (preset + evaluator + gate + suffix + tool_blocked + custom_message renderers) | ☑ | Phase 1 |
+| 040 — ask-mode `request_permission` round-trip | ☐ | |
+| 050 — edit-mode preset + fine-grained patterns | ☐ | |
+| 060 — plan-mode `submit_plan` + 3-option approval UI + plan→edit auto-transition | ☐ | |
+| 070 — allow-all semantics & guardrails | ☐ | |
+| 080 — sub-agent profile mode field + Qwen inheritance rule | ☐ | |
+| 090 — active-tools swap (vs gate-at-call-time) | ☐ | |
+| 100 — persistent rules (`alwaysAllow` / `alwaysDeny`) | ☐ | |
+
+### Phase 1 deliverables (milestone 030 — locked-in scope)
+
+- `MODE_PRESETS.plan.policy.categories` filled per the locked table:
+  `read`/`search`/`subagent` allow; `edit`/`execute`/`other` deny;
+  `mcp` per-annotation (read MCP SDK `annotations.readOnlyHint` /
+  `destructiveHint`; research-permissive default-allow on absent).
+- `MODE_PRESETS.plan.systemPromptSuffix` appended to `composeSystemPrompt`
+  after the existing `appendSystemPrompt` at session boot. Mid-session
+  `/mode plan` does NOT rebuild the prompt — convergent CC/Codex/OpenCode/
+  Roo pattern: rely on the `tool_result.isError` amendment text alone.
+- `PermissionService.evaluateToolCall(sessionId, toolCall: { name, arguments })`
+  is the gate. Returns `{ kind: "allow" }` or `{ kind: "deny", reason }`.
+- `createPiAgent.beforeToolCall` calls the gate AFTER the existing
+  `tool_call` event. On deny: emits a `tool_blocked` lifecycle event,
+  appends a `custom_message` entry (`extensionName: "modes"`,
+  `customType: "tool_blocked"`, `display: true`), and returns
+  `{ block: true, reason }` so pi-agent-core constructs an `isError`
+  tool-result with the redirect text.
+- Block redirect template:
+  `"plan mode is read-only — \`{toolName}\` blocked (category: {category}). Use read-only tools or \`/mode edit\` to proceed."`
+- `ToolBlockedEvent { sessionId, toolCallId, toolName, category, mode, reason }`
+  fires via `LIFECYCLE_EVENT_METHOD`. No `correlationId` (one-shot — no
+  wire round-trip).
+- Sub-agent: child inherits `parent.runtime.mode` unconditionally (already
+  wired in 020). `SubagentProfile.mode?` field + Qwen-rule combinator
+  land in milestone 080.
+- 4-Host rendering: cli + browser + http + chrome-ext now have minimal
+  `tool_blocked` chat rendering (CLI yellow banner; browser/chrome-ext/http
+  reuse `AppShell` to push a `[data-testid="custom-message"][data-test-state="tool-blocked"]`
+  system message). Ask/edit/allow-all enforcement stays inert in this phase.
 
 ## References
 
-- Research wave: `ai-docs/research/modes/` (000-overview, 005-acp-architecture-decision, 010-090).
-- Source: `src/permissions/`, `src/sessions/session-bootstrap.ts`, `src/acp/agent.ts`, `src/acp/event-wiring.ts`.
-- Tests: `test/modes-state.test.ts`, `test/permissions-types.test.ts`, `test/tools-categorisation.test.ts`.
-- E2E: `e2e/shared/mode.e2e.ts`.
+- Research wave: `ai-docs/research/modes/` (000-overview, 005-acp-architecture-decision, 010-100).
+- Source: `src/permissions/`, `src/sessions/session-bootstrap.ts`, `src/acp/agent.ts`, `src/acp/event-wiring.ts`, `src/mcp/`.
+- Tests: `test/modes-state.test.ts`, `test/permissions-types.test.ts`, `test/tools-categorisation.test.ts`, `test/plan-mode-policy.test.ts`, `test/plan-mode-mcp.test.ts`, `test/plan-mode-subagent.test.ts`, `src/permissions/permission-evaluator.test.ts`, `src/mcp/mcp-registry.test.ts`.
+- E2E: `e2e/shared/mode.e2e.ts`, `e2e/shared/plan-mode.e2e.ts`.
+- Playwright: `e2e-ui/shared/mode-switch.spec.ts`, `e2e-ui/shared/plan-mode.spec.ts`.

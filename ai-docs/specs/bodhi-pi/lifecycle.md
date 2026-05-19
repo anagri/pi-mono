@@ -17,7 +17,7 @@ Canonical persistence unit. Discriminated by `type`. Source: `src/sessions/entri
 | `branch_summary` | `{fromId, summary, details?, fromHook?}` | cross-branch `_bodhi-pi/session/navigate` |
 | `session_info` | `{name?}` | `_bodhi-pi/session/setName` |
 | `extension` | `{extensionName, customType, data}` | Extension via `ExtensionAPI.appendEntry` |
-| `custom_message` | `{extensionName, customType, content, display, details?}` | Extension via `ExtensionAPI.sendMessage` |
+| `custom_message` | `{extensionName, customType, content, display, details?}` | Extension via `ExtensionAPI.sendMessage`; also written by plan-mode (`extensionName: "modes"`, `customType: "tool_blocked"`) when `PermissionService.evaluateToolCall` denies a call — see [modes.md](./modes.md). |
 | `subagent_link` | `{parentSessionId, profileName, task, toolCallId, depth, contextMode}` | `SubagentService.spawn` — appended as the FIRST entry of a child session (parent is the spawning session, not a sibling SessionEntry). `contextMode: "fresh" \| "fork"` records whether the child inherited a filtered slice of the parent transcript. See [subagents.md](./subagents.md). |
 | `subagent_complete` | `{status: "completed"\|"cancelled"\|"failed", summary, durationMs, error?}` | `SubagentService.spawn` — appended after the child's `runPromptLoop` returns (or aborts). Terminal marker for the child run. |
 

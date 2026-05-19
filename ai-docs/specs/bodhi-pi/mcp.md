@@ -80,6 +80,25 @@ Source: `src/mcp/mcp-service.ts`. Plan that drove the OAuth additions: `ai-docs/
 
 Persisted under KV: `mcp/<slug>` → `serializeMcpServerEntry(entry)`. Listed via prefix scan in `McpStore.loadPersistedEntries()` at `src/mcp/mcp-store.ts:33-43`.
 
+`McpToolInfo` (`src/mcp/mcp-types.ts`) — per-tool surface cached on `ConnectedClient.tools`:
+
+```ts
+{
+  name: string;
+  description?: string;
+  inputSchema?: JsonValue;
+  annotations?: {           // MCP spec v2025-03-26 ToolAnnotations
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+}
+```
+
+Annotations are parsed from the MCP SDK's `Tool.annotations` field on every `client.listTools()` call (`src/mcp/mcp-client.ts::listTools`). `McpRegistry.getToolAnnotations(sessionId, fullName)` resolves them per `<slug>__<tool>` name for `PermissionService` to consult under plan mode (read-only → allow, destructive → deny, absent → research-permissive default-allow). Annotations refresh ONLY when the SDK re-lists tools (i.e. on `_bodhi-pi/mcp/{connect,reconnect}`); a server that re-publishes its tool list via `notifications/tools/list_changed` mid-session will surface stale annotations until the user issues `_bodhi-pi/mcp/reconnect <slug>`. Accepted v1 limitation; full live-refresh is a deferred follow-up.
+
 ## The four classes
 
 ### McpStore (`src/mcp/mcp-store.ts`)
