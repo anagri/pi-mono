@@ -2,6 +2,7 @@ import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
+import type { SubagentEndEvent, SubagentStartEvent } from "@/index.js";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { loadScenarioFiles } from "../helpers/load-scenario.js";
@@ -9,7 +10,7 @@ import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
 
-test("parallel subagent calls: parent LLM dispatches three counters via separate subagent tool calls in one assistant turn; aggregated results reach the final reply", async () => {
+test("parallel subagent calls: parent LLM dispatches three counters via separate subagent tool calls in one assistant turn; children run concurrently (serverTime overlap) and aggregated results reach the final reply", async () => {
 	const model = getModel("openai", "gpt-5-mini");
 	const h = harness.set(
 		await createE2EHarness({
@@ -31,19 +32,35 @@ test("parallel subagent calls: parent LLM dispatches three counters via separate
 			},
 		],
 	});
+	await h.flushEvents();
 
 	const childrenRes = (await h.clientConn.extMethod("_bodhi-pi/subagent/children", { sessionId })) as {
 		children: Array<{ sessionId: string; subagent?: { profileName: string } }>;
 	};
 	const childProfiles = childrenRes.children.map((c) => c.subagent?.profileName ?? "?").sort();
-	expect(childProfiles, `expected three parallel children, got ${JSON.stringify(childProfiles)}`).toEqual([
-		"char-count",
-		"line-count",
-		"word-count",
-	]);
+	expect
+		.soft(childProfiles, `expected three parallel children, got ${JSON.stringify(childProfiles)}`)
+		.toEqual(["char-count", "line-count", "word-count"]);
 
 	const finalText = chunkedAgentText(h.updates).toLowerCase();
 	expect.soft(finalText, `parent reply missing word count: ${finalText}`).toMatch(/word.{0,25}\d+/);
 	expect.soft(finalText, `parent reply missing line count: ${finalText}`).toMatch(/line.{0,25}\d+/);
 	expect.soft(finalText, `parent reply missing char count: ${finalText}`).toMatch(/char.{0,25}\d+/);
+
+	const starts = h.events.filter((e): e is SubagentStartEvent => e.type === "subagent_start");
+	const ends = h.events.filter((e): e is SubagentEndEvent => e.type === "subagent_end");
+	expect.soft(starts, "three subagent_start events").toHaveLength(3);
+	expect.soft(ends, "three subagent_end events").toHaveLength(3);
+	if (starts.length === 3 && ends.length === 3) {
+		const startTimes = starts.map((e) => e.serverTime ?? 0);
+		const endTimes = ends.map((e) => e.serverTime ?? 0);
+		const maxStart = Math.max(...startTimes);
+		const minEnd = Math.min(...endTimes);
+		expect
+			.soft(
+				maxStart,
+				`true parallelism: latest subagent_start (${maxStart}) must precede earliest subagent_end (${minEnd}). If start>end the model emitted tool calls one-per-turn instead of three-in-one-turn — known limitation of reasoning models like gpt-5-mini.`,
+			)
+			.toBeLessThanOrEqual(minEnd);
+	}
 }, 120_000);
