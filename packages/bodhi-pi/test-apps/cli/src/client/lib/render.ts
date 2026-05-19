@@ -1,4 +1,5 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk";
+import { LIFECYCLE_EVENT_METHOD } from "@bodhiapp/bodhi-pi";
 import chalk from "chalk";
 
 interface ToolCallContent {
@@ -16,6 +17,7 @@ function extractContentText(content: unknown): string {
 
 export interface Renderer {
 	onNotification(notif: SessionNotification): void;
+	onExtNotification(method: string, params: unknown): void;
 	flush(): void;
 }
 
@@ -60,6 +62,19 @@ export function createRenderer(): Renderer {
 		}
 	}
 
+	function onExtNotification(method: string, params: unknown): void {
+		if (method !== LIFECYCLE_EVENT_METHOD) return;
+		const event = params as { type?: string; toolName?: string; reason?: string };
+		if (event?.type !== "tool_blocked") return;
+		if (inText) {
+			process.stdout.write("\n");
+			inText = false;
+		}
+		const tool = event.toolName ?? "(unknown)";
+		const reason = event.reason ?? "blocked";
+		process.stdout.write(`${chalk.yellow(`⛔ blocked ${tool}`)}\n${chalk.dim(`   ${reason}`)}\n`);
+	}
+
 	function flush(): void {
 		if (inText) {
 			process.stdout.write("\n");
@@ -67,5 +82,5 @@ export function createRenderer(): Renderer {
 		}
 	}
 
-	return { onNotification, flush };
+	return { onNotification, onExtNotification, flush };
 }

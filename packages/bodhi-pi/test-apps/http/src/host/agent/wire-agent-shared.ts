@@ -82,6 +82,7 @@ export function createForwardingEventHandlers(conn: AgentSideConnection, label: 
 		session_navigate: [post],
 		session_fork: [post],
 		session_clone: [post],
+		tool_blocked: [post],
 	};
 }
 

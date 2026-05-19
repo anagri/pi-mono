@@ -70,6 +70,7 @@ function eventForwardingHandlers(): BodhiPiEventHandlers {
 		model_select: [post],
 		subagent_start: [post],
 		subagent_end: [post],
+		tool_blocked: [post],
 	};
 }
 

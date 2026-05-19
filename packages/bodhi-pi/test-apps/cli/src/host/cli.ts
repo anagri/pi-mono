@@ -39,6 +39,7 @@ const ALL_EVENT_TYPES = [
 	"session_navigate",
 	"session_fork",
 	"session_clone",
+	"tool_blocked",
 ] as const;
 
 /**

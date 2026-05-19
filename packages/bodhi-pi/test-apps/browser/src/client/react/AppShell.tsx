@@ -134,6 +134,29 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 				}
 				return;
 			}
+			if (type === "tool_blocked") {
+				try {
+					const event = JSON.parse(payload) as { toolName?: string; reason?: string; mode?: string };
+					setChatMessages((prev) => [
+						...prev,
+						{
+							id: `custom-message-${prev.length}`,
+							role: "system",
+							text: `⛔ ${event.toolName ?? "tool"} blocked — ${event.reason ?? ""}`,
+							toolCalls: [],
+							dataAttrs: {
+								"data-testid": "custom-message",
+								"data-test-state": "tool-blocked",
+								"data-tool-name": event.toolName ?? "",
+								"data-mode": event.mode ?? "",
+							},
+						},
+					]);
+				} catch {
+					// payload not JSON — silently drop
+				}
+				return;
+			}
 			if (type === "mcp_oauth_status_change") {
 				// HTTP+WS server-side /oauth/callback path completes silently — there's no popup-to-opener
 				// postMessage path. Forward the lifecycle event to the in-process bus so the chat slash

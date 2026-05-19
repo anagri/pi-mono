@@ -69,6 +69,9 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 				renderer.onNotification(params);
 			},
 			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
+			extNotification: async (method, params) => {
+				renderer.onExtNotification(method, params);
+			},
 		}),
 		clientStream,
 	);
