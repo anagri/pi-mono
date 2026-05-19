@@ -9,7 +9,7 @@ import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
 
-test("subagent_batch: parent LLM dispatches three counters in parallel; aggregated results reach the final reply", async () => {
+test("parallel subagent calls: parent LLM dispatches three counters via separate subagent tool calls in one assistant turn; aggregated results reach the final reply", async () => {
 	const model = getModel("openai", "gpt-5-mini");
 	const h = harness.set(
 		await createE2EHarness({
@@ -27,7 +27,7 @@ test("subagent_batch: parent LLM dispatches three counters in parallel; aggregat
 		prompt: [
 			{
 				type: "text",
-				text: `Use the subagent_batch tool in a single tool call to dispatch the word-count, line-count, and char-count sub-agents in parallel against ${h.cwd}/sample.txt. Then summarise each sub-agent's count in your final reply.`,
+				text: `Dispatch the word-count, line-count, and char-count sub-agents against ${h.cwd}/sample.txt in parallel by issuing three separate \`subagent\` tool calls in the same assistant turn (one tool call per counter). Do not call any tool named subagent_batch — it does not exist. After all three return, summarise each sub-agent's count in your final reply.`,
 			},
 		],
 	});
@@ -36,7 +36,7 @@ test("subagent_batch: parent LLM dispatches three counters in parallel; aggregat
 		children: Array<{ sessionId: string; subagent?: { profileName: string } }>;
 	};
 	const childProfiles = childrenRes.children.map((c) => c.subagent?.profileName ?? "?").sort();
-	expect(childProfiles, `expected three batched children, got ${JSON.stringify(childProfiles)}`).toEqual([
+	expect(childProfiles, `expected three parallel children, got ${JSON.stringify(childProfiles)}`).toEqual([
 		"char-count",
 		"line-count",
 		"word-count",

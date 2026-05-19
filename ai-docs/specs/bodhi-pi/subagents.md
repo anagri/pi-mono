@@ -34,7 +34,15 @@ subagent({
 
 The tool params schema declares `additionalProperties: false`. Context mode is decided by the profile (see [`SubagentProfile.context`](#profile-frontmatter)) and is intentionally NOT exposed as an LLM-facing parameter — single-const optional fields attract free-text from LLMs and trigger validation failures; even with ≥2 valid values, a profile-level decision is more useful than asking the LLM to choose at call time (P2a chose to keep the LLM tool surface unchanged).
 
-### Parallel batch — `subagent_batch` tool
+### Parallel dispatch (current — Phase 1)
+
+Parallel sub-agent execution happens by the LLM emitting **multiple `subagent` tool calls in one assistant turn**. pi-agent-core dispatches them concurrently via `Promise.all` (see `packages/agent/src/agent-loop.ts:492`). Each child runs in its own session as a per-call independent spawn; per-child `subagent_start`/`subagent_end` lifecycle events fire as today. No batch-level envelope events fire in this path.
+
+The integration contract is verified in `packages/bodhi-pi/test/subagents-parallel-tool-calls.test.ts` using `serverTime` overlap on subagent_start/subagent_end events (true concurrency proof: latest start precedes earliest end).
+
+### Parallel batch — `subagent_batch` tool (Phase 1: internal-only, slated for Phase 2 deletion)
+
+> **Phase 1 (2026-05-19):** the `subagent_batch` LLM tool has been **unregistered** from the model's tool list. Source code below describes the historical batch surface — it still exists in `src/` but no longer reachable through the LLM tool channel. Phase 2 (gated on Phase 1 evidence) will delete the entire batch surface. Plan: [`ai-docs/plans/we-want-to-merge-jiggly-meteor.md`](../../plans/we-want-to-merge-jiggly-meteor.md).
 
 A sibling tool `subagent_batch` (`src/tools/subagent-batch.ts`) is registered alongside `subagent` whenever ≥1 profile is discovered. It dispatches 2-N children concurrently from a single tool call:
 
