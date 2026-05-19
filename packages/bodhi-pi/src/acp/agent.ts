@@ -62,7 +62,7 @@ import { SettingsService } from "@/settings/settings-service.js";
 import type { Skill } from "@/skills/skill.js";
 import { SubagentService } from "@/subagents/subagent-service.js";
 import type { Terminal } from "@/terminal/terminal.js";
-import { toolKindFor } from "@/tools/index.js";
+import { toolKindForAcp } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
 import { EXT_DELETE_SESSION, MODE_CONFIG_ID, MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/wire/constants.js";
 import { toolResultContentForAcp } from "@/wire/converters.js";
@@ -557,7 +557,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 							sessionUpdate: "tool_call",
 							toolCallId: toolCall.id,
 							title: `${toolCall.name} ${formatLocationHint(toolCall.arguments)}`.trim(),
-							kind: toolKindFor(toolCall.name),
+							kind: toolKindForAcp(toolCall.name),
 							status: "completed",
 							rawInput: toolCall.arguments,
 						},

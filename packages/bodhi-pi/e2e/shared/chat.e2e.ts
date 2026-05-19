@@ -76,7 +76,7 @@ test("switching model mid-session changes provenance", async () => {
 	// At least claude + gpt must be in the model select. The harness may have
 	// other models registered too (shared http server boots with a wider list);
 	// we don't assert the option count.
-	const initialOption = asSelectOption(configOptions?.[0]);
+	const initialOption = asSelectOption(configOptions?.find((o) => o.id === "model"));
 	const ids = (initialOption.options as Array<{ value: string }>).map((o) => o.value);
 	expect(ids).toContain(claude.id);
 	expect(ids).toContain(gpt.id);
@@ -105,7 +105,7 @@ test("switching model mid-session changes provenance", async () => {
 		configId: "model",
 		value: gpt.id,
 	});
-	const switched = asSelectOption(switchResult.configOptions[0]);
+	const switched = asSelectOption(switchResult.configOptions.find((o) => o.id === "model"));
 	expect(switched.currentValue).toBe(gpt.id);
 
 	h.updates.length = 0;

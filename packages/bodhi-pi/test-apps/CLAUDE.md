@@ -1,5 +1,44 @@
 # bodhi-pi test-apps — runtime split
 
+## These are TEST-APPS, not production apps
+
+`packages/bodhi-pi/test-apps/*` exist to prove that bodhi-pi works across
+its target runtime matrix (Node CLI, HTTP+SSE server, browser worker,
+chrome-ext sandbox). They are NOT production apps. Their job is to be
+**driveable** by automated tests — Vitest in-process / spawned-subprocess
+for `e2e/`, Playwright for `e2e-ui/`. Any UI surface inside `test-apps/*`
+exists so a Playwright spec can poke it, not because end-users need it.
+
+Concrete implication for new features that have a user-interaction step
+(approval prompts, multi-step wizards, confirmation flows):
+
+- **Don't build a UI element just to satisfy the feature.** Build the
+  feature against direct ACP messages — `requestPermission` is one such
+  ACP method; the Client side of the round-trip can be implemented in
+  the test-app's Client by accepting an in-memory queue of responses
+  rather than rendering a modal.
+- **e2e tests drive via direct ACP responses.** The test-app Client's
+  `requestPermission` handler reads from a per-test response queue (or
+  echoes a fixed verdict). Tests assert via the round-trip events
+  (`tool_approval_request` / `tool_approval_response` on
+  `LIFECYCLE_EVENT_METHOD`) — never by clicking a button.
+- **e2e-ui (Playwright) tests drive via slash commands or composer-input
+  typed responses.** Where a UI step is unavoidable (e.g. user types
+  "/approve once" into the chat composer to release a pending approval),
+  prefer typed text + a Playwright `chat.send(...)` over a dedicated
+  modal. The slash router or composer interceptor decodes it back into
+  the ACP `requestPermission` response shape.
+- **One channel; two drivers.** A single Client-side `requestPermission`
+  handler covers both Vitest e2e (programmatic queue) and Playwright
+  (composer-typed slash). The test-app stays minimal; tests stay
+  parallel-safe; no production-app UI grows in the wrong place.
+
+If a feature actually wants a polished UI surface, that surface belongs
+in a downstream consumer of `@bodhiapp/bodhi-pi` (a real Host app), not
+under `test-apps/`.
+
+## Runtime split
+
 Five sibling packages live here. They split into two import lanes by the
 runtimes they have to load in:
 

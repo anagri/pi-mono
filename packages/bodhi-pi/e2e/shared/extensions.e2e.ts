@@ -152,7 +152,7 @@ test("registerProvider with real Anthropic: switching to extension-supplied mode
 	const newSess = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
 	const sid = newSess.sessionId;
 
-	const opt = newSess.configOptions?.[0];
+	const opt = newSess.configOptions?.find((o) => o.id === "model");
 	if (!opt || opt.type !== "select") throw new Error("expected select option");
 	const ids = (opt.options as Array<{ value: string }>).map((o) => o.value);
 	expect(ids).toContain(claude.id);

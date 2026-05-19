@@ -99,3 +99,21 @@ export function toolKindFor(name: string): ToolCategory {
 	if (name.includes("__")) return "mcp";
 	return "other";
 }
+
+export type AcpToolKind =
+	| "read"
+	| "edit"
+	| "delete"
+	| "move"
+	| "search"
+	| "execute"
+	| "think"
+	| "fetch"
+	| "switch_mode"
+	| "other";
+
+export function toolKindForAcp(name: string): AcpToolKind {
+	const category = toolKindFor(name);
+	if (category === "mcp" || category === "subagent") return "other";
+	return category;
+}

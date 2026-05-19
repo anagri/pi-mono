@@ -16,7 +16,7 @@ import type { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.
 import type { SessionEntry } from "@/sessions/entries.js";
 import type { SessionState } from "@/sessions/session-state.js";
 import { expandSkillCommand } from "@/skills/invocation.js";
-import { toolKindFor } from "@/tools/index.js";
+import { toolKindForAcp } from "@/tools/index.js";
 import { MODEL_CONFIG_ID } from "@/wire/constants.js";
 import { agentToolContentForAcp, mapStopReason } from "@/wire/converters.js";
 
@@ -181,7 +181,7 @@ export function subscribeToAgent(
 						sessionUpdate: "tool_call",
 						toolCallId: event.toolCallId,
 						title: `${event.toolName} ${formatLocationHint(event.args)}`.trim(),
-						kind: toolKindFor(event.toolName),
+						kind: toolKindForAcp(event.toolName),
 						status: "in_progress",
 						rawInput: event.args,
 					},

@@ -63,7 +63,7 @@ The `BodhiPiAcpAgent` class at `src/acp/agent.ts:162-555` is a façade that dele
 | Service | File | Owns |
 |---|---|---|
 | `ModelRegistry` | `src/models/registry.ts` | pi-ai catalogue filtering, auth-aware model resolution, public `setSessionModel` / `setSessionThinkingLevel` / `buildModelConfigOption` / `buildThinkingConfigOption`. `setSessionConfigOption` dispatch lives in `BodhiPiAcpAgent` (see [modes.md § Dispatch ownership](./modes.md#dispatch-ownership-refactor-delivered-alongside-this-phase)). |
-| `PermissionService` | `src/permissions/permission-service.ts` | `buildModeConfigOption` + `setMode` + `evaluateToolCall` (stub in Phase 0; policy enforcement in milestone 030). Carries `allowsAllowAllMode` / `allowsAllowAllModeAsDefault` capability flags. See [modes.md](./modes.md). |
+| `PermissionService` | `src/permissions/permission-service.ts` | `buildModeConfigOption` + `setMode` + `evaluateToolCall(sessionId, { name, arguments }) → { kind: "allow" } \| { kind: "deny", reason }`. Milestone 030 shipped plan-mode enforcement (categories + MCP annotation lookup via injected `mcpAnnotationLookup` callback; redirect template). Ask/edit are effectively allow-all until milestone 040 wires the `session/request_permission` round-trip; allow-all is fully permissive. Carries `allowsAllowAllMode` / `allowsAllowAllModeAsDefault` capability flags. See [modes.md](./modes.md). |
 | `KvService` | `src/kv/kv-service.ts` | `_bodhi-pi/kv/{get,set,list,remove}` + secret masking |
 | `McpService` | `src/mcp/mcp-service.ts` | `_bodhi-pi/mcp/{add,remove,connect,disconnect,reconnect,list,tools,include,exclude,oauth/start,oauth/finish,oauth/cancel,oauth/discover,oauth/register}` + hydration + DCR add-flow |
 | `SettingsService` | `src/settings/settings-service.ts` | `_bodhi-pi/session/settings/{get,set,unset,list}` + layered merge |
@@ -102,7 +102,8 @@ src/
 │                     + mcp-stdio-env (resolveStdioEnv)
 ├── models/           ModelRegistry + provider-stream options resolution
 ├── permissions/      PermissionService + AgentMode/ToolCategory/ModePreset types
-│                     + mode presets (foundation in Phase 0; enforcement in milestone 030)
+│                     + mode presets (plan-mode enforcement live since milestone 030;
+│                     ask/edit/allow-all enforcement layered in 040+)
 ├── script-executor/  ScriptExecutor interface
 ├── sessions/         SessionStore + SessionEntry union + session-state + bootstrap
 │                     + compaction + branch-summary + build-context + resource-loader

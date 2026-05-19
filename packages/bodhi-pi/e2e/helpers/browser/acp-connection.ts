@@ -16,7 +16,7 @@ import type {
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
 import type { Page } from "playwright";
-import { type BodhiPiAcpConnection, type BodhiPiEvent, LIFECYCLE_EVENT_METHOD } from "@/index.js";
+import type { BodhiPiAcpConnection, BodhiPiEvent } from "@/index.js";
 import { readNewFramesAndEvents } from "./page-frame-reader.js";
 
 // ACP transport over a Playwright-driven page. Each call writes a JSON-RPC
@@ -124,8 +124,6 @@ export class BrowserAcpConnection implements BodhiPiAcpConnection {
 						const body = JSON.parse(f.payload) as { method?: string; params?: unknown };
 						if (body.method === "session/update" && body.params) {
 							this.onUpdate(body.params as SessionNotification);
-						} else if (body.method === LIFECYCLE_EVENT_METHOD && body.params && this.onLifecycleEvent) {
-							this.onLifecycleEvent(body.params as BodhiPiEvent);
 						}
 					} catch {
 						// malformed notification body — skip

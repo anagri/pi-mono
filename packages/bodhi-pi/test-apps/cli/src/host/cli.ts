@@ -40,6 +40,8 @@ const ALL_EVENT_TYPES = [
 	"session_fork",
 	"session_clone",
 	"tool_blocked",
+	"subagent_start",
+	"subagent_end",
 ] as const;
 
 /**
