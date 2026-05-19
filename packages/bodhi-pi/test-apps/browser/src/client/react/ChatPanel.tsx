@@ -25,6 +25,7 @@ export type ChatPanelState = "idle" | "streaming";
 export interface ChatPanelProps {
 	state: ChatPanelState;
 	currentModel: string;
+	currentMode: string;
 	sessionId: string;
 	messages: ChatMessage[];
 	composerValue: string;
@@ -88,6 +89,7 @@ function renderMessage(m: ChatMessage, idx: number, lastIdx: number, streaming: 
 export function ChatPanel({
 	state,
 	currentModel,
+	currentMode,
 	sessionId,
 	messages,
 	composerValue,
@@ -103,6 +105,7 @@ export function ChatPanel({
 			data-testid="chat-panel"
 			data-test-state={state}
 			data-current-model={currentModel}
+			data-current-mode={currentMode}
 			data-session-id={sessionId}
 		>
 			<div className="chat-messages" data-testid="chat-messages">

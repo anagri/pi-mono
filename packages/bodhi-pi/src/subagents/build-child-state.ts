@@ -90,6 +90,7 @@ export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChi
 			leafId: args.leafId,
 			overflowRecoveryAttempted: false,
 			subagentDepth: args.depth,
+			mode: args.parentSessionState.runtime.mode,
 		},
 	});
 }

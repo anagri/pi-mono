@@ -1,6 +1,7 @@
 import type { AgentTool, Agent as PiAgent } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
+import type { AgentMode } from "@/permissions/types.js";
 import type { BodhiPiProjectSettings } from "@/settings/settings.js";
 import type { Skill } from "@/skills/skill.js";
 import type { SubagentProfile } from "@/subagents/types.js";
@@ -48,6 +49,8 @@ export interface SessionRuntime {
 	overflowRecoveryAttempted: boolean;
 	/** 0 for top-level sessions; N for children spawned at depth N. Set at SessionState construction; read by SubagentService.spawn to bound recursion in O(1). */
 	subagentDepth: number;
+	/** Active agent mode. Inert in Phase 0 (no policy enforcement); milestone 030 wires enforcement. */
+	mode: AgentMode;
 }
 
 export interface SessionState {

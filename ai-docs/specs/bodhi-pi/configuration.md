@@ -40,6 +40,9 @@ The dependency bundle the Host passes to `createBodhiPiAgent(config)` (`src/acp/
 | `globalFilesystem` | `config.filesystem` | global settings file is read through the same FS as project |
 | `compaction` | `DEFAULT_COMPACTION_SETTINGS` (`src/sessions/compaction.ts`) | sensible defaults |
 | `defaultThinkingLevel` | none | model-default thinking level used |
+| `defaultMode` | `"ask"` (via the resolution chain in [modes.md](./modes.md)) | session-boot mode; `"allow-all"` requires both `allowsAllowAllMode` AND `allowsAllowAllModeAsDefault` |
+| `allowsAllowAllMode` | `false` | when false, `setSessionConfigOption("mode", "allow-all")` rejects with `-32603` and the option is omitted from advertised configOptions |
+| `allowsAllowAllModeAsDefault` | `false` | when false, settings-side `defaultMode: "allow-all"` is logged-and-ignored at boot |
 | `systemPrompt` | composed builtin prompt | **only sanctioned silent default** (per CLAUDE.md "Source code rules") |
 | `appendSystemPrompt` | none | nothing appended (or what disk settings say — see § Settings precedence) |
 | `eventHandlers` | `{}` | no Host-side observers; event bus still fires |
@@ -91,6 +94,8 @@ Source: `src/settings/settings.ts:35-42`.
 |---|---|---|
 | `defaultModelId` | `string` | Default model id. Canonical name (matches `BodhiPiConfig.defaultModelId`). The legacy `defaultModel` key is still read for back-compat — see § Known weaknesses D6 |
 | `defaultThinkingLevel` | `ModelThinkingLevel` | Default thinking budget |
+| `defaultMode` | `AgentMode` | Default session mode (`ask` \| `plan` \| `edit` \| `allow-all`). `allow-all` gated by `allowsAllowAllModeAsDefault`. See [modes.md](./modes.md) |
+| `permission.approvalTimeoutMs` | `number` | Phase 0: parse-and-store only (no timeout machinery wired yet). Approval flow lands in milestone 030 |
 | `appendSystemPrompt` | `string` | Appended after the composed system prompt |
 | `compaction` | `Partial<CompactionSettings>` | Compaction thresholds |
 | `providerOptions` | `Record<string, ProviderOptionsEntry>` | Per-provider retry/timeout/maxRetryDelay |

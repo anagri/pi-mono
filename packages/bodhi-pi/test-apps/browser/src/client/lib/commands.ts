@@ -35,8 +35,11 @@ import { onOauthStatusEvent } from "./oauth-event-bus.ts";
  */
 
 const MODEL_CONFIG_ID = "model";
+const MODE_CONFIG_ID = "mode";
 const EXT_SESSION_FORK = "_bodhi-pi/session/fork";
 const EXT_SESSION_CLONE = "_bodhi-pi/session/clone";
+
+export type AgentModeString = "ask" | "plan" | "edit" | "allow-all";
 
 export interface SlashState {
 	sessionId: string;
@@ -50,6 +53,9 @@ export interface SlashContext {
 	pushSystemMessage(text: string, dataAttrs?: Record<string, string>): void;
 	setSessionId(id: string): void;
 	setCurrentModel(id: string): void;
+	setCurrentMode(id: AgentModeString): void;
+	currentMode?: AgentModeString;
+	availableModes?: AgentModeString[];
 }
 
 export type SlashOutcome = { handled: boolean };
@@ -77,6 +83,28 @@ export function extractModelFromConfigOptions(options: SessionConfigOption[] | n
 	return undefined;
 }
 
+export function extractModeFromConfigOptions(
+	options: SessionConfigOption[] | null | undefined,
+): AgentModeString | undefined {
+	if (!options) return undefined;
+	for (const opt of options) {
+		if (opt.id === MODE_CONFIG_ID && typeof opt.currentValue === "string") {
+			return opt.currentValue as AgentModeString;
+		}
+	}
+	return undefined;
+}
+
+export function extractAvailableModes(options: SessionConfigOption[] | null | undefined): AgentModeString[] {
+	if (!options) return [];
+	for (const opt of options) {
+		if (opt.id === MODE_CONFIG_ID && opt.type === "select") {
+			return (opt.options ?? []).map((o) => (o as { value: string }).value as AgentModeString);
+		}
+	}
+	return [];
+}
+
 export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<SlashOutcome> {
 	if (!isSlash(line)) return { handled: false };
 	const name = commandName(line);
@@ -101,6 +129,45 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 				const next = extractModelFromConfigOptions(result.configOptions);
 				if (next) ctx.setCurrentModel(next);
 				ctx.pushSystemMessage(`model switched to: ${next ?? modelId}`);
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/modes": {
+			const modes = ctx.availableModes ?? [];
+			if (modes.length === 0) {
+				ctx.pushSystemMessage("(no modes advertised — try /new first)");
+			} else {
+				const lines = ["modes:"];
+				for (const m of modes) {
+					const marker = m === ctx.currentMode ? "*" : " ";
+					lines.push(`${marker} ${m}`);
+				}
+				ctx.pushSystemMessage(lines.join("\n"));
+			}
+			return { handled: true };
+		}
+
+		case "/mode": {
+			const modeId = parts[1];
+			if (!modeId) {
+				ctx.pushSystemMessage(`current mode: ${ctx.currentMode ?? "(unknown)"}`);
+				return { handled: true };
+			}
+			try {
+				const result = await ctx.conn.setSessionConfigOption({
+					sessionId: ctx.state.sessionId,
+					configId: MODE_CONFIG_ID,
+					value: modeId,
+				});
+				const next = extractModeFromConfigOptions(result.configOptions);
+				if (next) ctx.setCurrentMode(next);
+				ctx.pushSystemMessage(`mode switched to: ${next ?? modeId}`, {
+					"data-mode-event": "mode-set",
+					"data-mode-value": next ?? modeId,
+				});
 			} catch (err) {
 				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
 			}

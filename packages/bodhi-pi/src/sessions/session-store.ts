@@ -6,6 +6,7 @@ export type {
 	CustomMessageEntry,
 	ExtensionEntry,
 	MessageEntry,
+	ModeChangeEntry,
 	ModelChangeEntry,
 	ReadExtensionEntriesFilter,
 	SessionEntry,

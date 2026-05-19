@@ -24,6 +24,7 @@ import { createEvent } from "@/events/factory.js";
 import { mergeCommands, mergeSubagentProfiles, mergeTools } from "@/extensions/merge.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
 import { type ModelRegistry, resolveProviderStreamOptions } from "@/models/registry.js";
+import { type AgentMode, DEFAULT_AGENT_MODE, isAgentMode } from "@/permissions/types.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
 import { type CompactionSettings, DEFAULT_COMPACTION_SETTINGS } from "@/sessions/compaction.js";
 import type { CompactionOrchestrator } from "@/sessions/compaction-orchestrator.js";
@@ -238,6 +239,7 @@ export async function buildSessionState(
 		messages?: AgentMessage[];
 		leafId?: string | null;
 		initialThinkingLevel?: ModelThinkingLevel | null;
+		initialMode?: AgentMode | null;
 	},
 ): Promise<void> {
 	const { config, sessions, modelRegistry, compactionOrchestrator, events, extensionRunner } = deps;
@@ -283,6 +285,7 @@ export async function buildSessionState(
 		initialThinkingLevel ?? config.defaultThinkingLevel ?? mergedFileSettings.defaultThinkingLevel ?? "off";
 	const resolvedThinkingLevel = resolvedModel ? clampThinkingLevel(resolvedModel, requestedThinking) : "off";
 	const retryOptions = resolveProviderStreamOptions(resolvedModel?.provider ?? "openai", mergedFileSettings);
+	const resolvedMode = resolveInitialMode(config, mergedFileSettings, args.initialMode ?? null);
 
 	const piAgent = createPiAgent(
 		{ events, sessions, modelRegistry, compactionOrchestrator },
@@ -330,8 +333,57 @@ export async function buildSessionState(
 			leafId,
 			overflowRecoveryAttempted: false,
 			subagentDepth: 0,
+			mode: resolvedMode,
 		},
 	});
+}
+
+/**
+ * Default-mode resolution chain:
+ *   restored (rehydrate path) → config.defaultMode → settings.defaultMode → "ask"
+ *
+ * `allow-all` requires the host to opt-in via the matching capability:
+ *   - `config.defaultMode = "allow-all"` requires both `allowsAllowAllMode` AND
+ *     `allowsAllowAllModeAsDefault` (factory-time programmer error; caller already
+ *     threw at agent construction).
+ *   - `settings.defaultMode = "allow-all"` requires `allowsAllowAllModeAsDefault`.
+ *     When the capability is off, log and fall through.
+ *   - A restored persisted `allow-all` from session history requires `allowsAllowAllMode`.
+ *     When the capability is off, log and fall through.
+ *
+ * Unknown / invalid settings values log a warning and fall through.
+ */
+function resolveInitialMode(
+	config: BodhiPiConfig,
+	merged: BodhiPiProjectSettings,
+	restored: AgentMode | null,
+): AgentMode {
+	const logger = config.logger ?? console;
+	const allowsAllowAll = config.allowsAllowAllMode === true;
+	const allowsAllowAllAsDefault = config.allowsAllowAllModeAsDefault === true;
+	if (restored !== null) {
+		if (restored === "allow-all" && !allowsAllowAll) {
+			logger.warn(
+				`[bodhi-pi] persisted mode "allow-all" downgraded; host capability allowsAllowAllMode is disabled`,
+			);
+		} else {
+			return restored;
+		}
+	}
+	if (config.defaultMode !== undefined) return config.defaultMode;
+	const fromSettings = merged.defaultMode;
+	if (fromSettings !== undefined) {
+		if (!isAgentMode(fromSettings)) {
+			logger.warn(`[bodhi-pi] settings.defaultMode invalid value "${String(fromSettings)}" — falling back`);
+		} else if (fromSettings === "allow-all" && !allowsAllowAllAsDefault) {
+			logger.error(
+				`[bodhi-pi] settings.defaultMode="allow-all" rejected; host capability allowsAllowAllModeAsDefault is disabled`,
+			);
+		} else {
+			return fromSettings;
+		}
+	}
+	return DEFAULT_AGENT_MODE;
 }
 
 /**
@@ -366,6 +418,7 @@ export async function rehydrateSession(
 		messages: ctx.messages,
 		leafId,
 		initialThinkingLevel: ctx.currentThinkingLevel,
+		initialMode: ctx.currentMode,
 	});
 	return {
 		entries: record.entries,

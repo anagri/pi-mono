@@ -235,7 +235,7 @@ test("settings/set defaultModel emits config_option_update sessionUpdate", async
 	expect(result).not.toHaveProperty("configOptions");
 
 	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
-	expect(update.configOptions[0]?.id).toBe("model");
+	expect(update.configOptions.some((o) => o.id === "model")).toBe(true);
 });
 
 test("settings/set non-picker key emits no config_option_update", async () => {

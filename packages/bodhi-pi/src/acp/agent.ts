@@ -20,6 +20,7 @@ import {
 	RequestError,
 	type ResumeSessionRequest,
 	type ResumeSessionResponse,
+	type SessionConfigOption,
 	type SetSessionConfigOptionRequest,
 	type SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
@@ -40,6 +41,8 @@ import { createInProcessMcpConnectionProvider } from "@/mcp/in-process-provider.
 import type { McpConnectionProvider } from "@/mcp/mcp-connection-provider.js";
 import { McpService } from "@/mcp/mcp-service.js";
 import { ModelRegistry } from "@/models/registry.js";
+import { PermissionService } from "@/permissions/permission-service.js";
+import type { AgentMode } from "@/permissions/types.js";
 import type { ScriptExecutor } from "@/script-executor/script-executor.js";
 import { extractText, extractToolCalls, formatLocationHint, isToolResultMessage } from "@/sessions/_shared.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
@@ -61,7 +64,7 @@ import { SubagentService } from "@/subagents/subagent-service.js";
 import type { Terminal } from "@/terminal/terminal.js";
 import { toolKindFor } from "@/tools/index.js";
 import { BODHI_PI_VERSION } from "@/version.js";
-import { EXT_DELETE_SESSION } from "@/wire/constants.js";
+import { EXT_DELETE_SESSION, MODE_CONFIG_ID, MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/wire/constants.js";
 import { toolResultContentForAcp } from "@/wire/converters.js";
 import { validateSessionId } from "@/wire/validators.js";
 import { wireInternalEventHandlers } from "./event-wiring.js";
@@ -101,6 +104,25 @@ export interface BodhiPiConfig {
 	kvStore?: KvStore;
 	/** Host-explicit default thinking level; beats global/project settings. */
 	defaultThinkingLevel?: ModelThinkingLevel;
+	/**
+	 * Host-explicit default mode at session boot. Beats settings.defaultMode and the
+	 * "ask" fallback. `"allow-all"` is rejected at factory time unless BOTH
+	 * `allowsAllowAllMode` AND `allowsAllowAllModeAsDefault` are true.
+	 */
+	defaultMode?: AgentMode;
+	/**
+	 * When true, sessions may transition into `mode = "allow-all"` (via slash command,
+	 * setSessionConfigOption, or rehydration). When false (default), `setSessionConfigOption`
+	 * rejects allow-all with `-32603` and the option is omitted from advertised configOptions.
+	 */
+	allowsAllowAllMode?: boolean;
+	/**
+	 * When true, `settings.defaultMode = "allow-all"` is honored at session boot. When false
+	 * (default), it is rejected with a logged error and the bootstrap chain falls through.
+	 * Independent from `allowsAllowAllMode` so hosts can permit ad-hoc opt-in without
+	 * accepting an always-on default.
+	 */
+	allowsAllowAllModeAsDefault?: boolean;
 	/**
 	 * When `false`, `_bodhi-pi/mcp/add` rejects `command=…` (stdio) MCP entries with a clear error.
 	 *
@@ -173,6 +195,14 @@ export function createBodhiPiAgent(config: BodhiPiConfig) {
 	if (!config.filesystem) {
 		throw new Error("BodhiPiConfig.filesystem is required (no default fallback)");
 	}
+	if (config.defaultMode === "allow-all") {
+		if (!config.allowsAllowAllMode) {
+			throw new Error("BodhiPiConfig.defaultMode='allow-all' requires allowsAllowAllMode: true");
+		}
+		if (!config.allowsAllowAllModeAsDefault) {
+			throw new Error("BodhiPiConfig.defaultMode='allow-all' requires allowsAllowAllModeAsDefault: true");
+		}
+	}
 	return (conn: AgentSideConnection): AcpAgent => new BodhiPiAcpAgent(config, conn);
 }
 
@@ -183,6 +213,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 	private readonly events: EventDispatcher;
 	private readonly logger: BodhiPiLogger;
 	private readonly modelRegistry: ModelRegistry;
+	private readonly permissionService: PermissionService;
 	private readonly kvService: KvService;
 	private readonly mcpService: McpService;
 	private readonly settingsService: SettingsService;
@@ -223,11 +254,22 @@ class BodhiPiAcpAgent implements AcpAgent {
 			extensionRunner: () => this.extensionRunnerHost.current(),
 		});
 
+		this.permissionService = new PermissionService({
+			sessions: this.sessions,
+			events: this.events,
+			appendEntry: this.appendEntry.bind(this),
+			capabilities: {
+				allowsAllowAllMode: config.allowsAllowAllMode === true,
+				allowsAllowAllModeAsDefault: config.allowsAllowAllModeAsDefault === true,
+			},
+			logger,
+		});
+
 		wireInternalEventHandlers({
 			events: this.events,
 			conn: this.conn,
 			sessions: this.sessions,
-			modelRegistry: this.modelRegistry,
+			buildAllConfigOptions: (sessionId) => this.buildAllConfigOptions(sessionId),
 			logger,
 		});
 
@@ -408,7 +450,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		});
 		return {
 			sessionId: record.id,
-			configOptions: await this.modelRegistry.buildAllConfigOptions(record.id),
+			configOptions: await this.buildAllConfigOptions(record.id),
 			...metaWithNotFoundSlugs(notFoundSlugs),
 		};
 	}
@@ -425,7 +467,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			restoredSlugs: restored.mcpInclusion,
 		});
 		return {
-			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
+			configOptions: await this.buildAllConfigOptions(params.sessionId),
 			...metaWithNotFoundSlugs(notFoundSlugs),
 		};
 	}
@@ -442,7 +484,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			restoredSlugs: restored.mcpInclusion,
 		});
 		return {
-			configOptions: await this.modelRegistry.buildAllConfigOptions(params.sessionId),
+			configOptions: await this.buildAllConfigOptions(params.sessionId),
 			...metaWithNotFoundSlugs(notFoundSlugs),
 		};
 	}
@@ -574,8 +616,35 @@ class BodhiPiAcpAgent implements AcpAgent {
 		return {};
 	}
 
-	setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
-		return this.modelRegistry.setSessionConfigOption(params);
+	async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+		const session = this.sessions.get(params.sessionId);
+		if (!session) {
+			throw new RequestError(-32602, `unknown session: ${params.sessionId}`);
+		}
+		switch (params.configId) {
+			case MODEL_CONFIG_ID:
+				await this.modelRegistry.setSessionModel(params.sessionId, session, params.value);
+				break;
+			case THINKING_CONFIG_ID:
+				await this.modelRegistry.setSessionThinkingLevel(params.sessionId, session, params.value);
+				break;
+			case MODE_CONFIG_ID:
+				await this.permissionService.setMode(params.sessionId, params.value, "user");
+				break;
+			default:
+				throw new RequestError(-32602, `unknown configId: ${params.configId}`);
+		}
+		return { configOptions: await this.buildAllConfigOptions(params.sessionId) };
+	}
+
+	private async buildAllConfigOptions(sessionId: string): Promise<SessionConfigOption[]> {
+		const session = this.sessions.get(sessionId);
+		if (!session) return [];
+		const options: SessionConfigOption[] = [this.permissionService.buildModeConfigOption(session)];
+		options.push(await this.modelRegistry.buildModelConfigOption(session.runtime.currentModelId));
+		const thinking = this.modelRegistry.buildThinkingConfigOption(session);
+		if (thinking) options.push(thinking);
+		return options;
 	}
 
 	async prompt(params: PromptRequest): Promise<PromptResponse> {

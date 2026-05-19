@@ -231,5 +231,6 @@ test("setSessionConfigOption emits config_option_update notification (model_sele
 	await harness.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: m2.id });
 
 	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
-	expect(update.configOptions[0]?.currentValue).toBe(m2.id);
+	const modelOpt = update.configOptions.find((o) => o.id === "model");
+	expect(modelOpt?.currentValue).toBe(m2.id);
 });

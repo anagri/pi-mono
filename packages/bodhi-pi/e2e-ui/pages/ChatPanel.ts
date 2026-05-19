@@ -54,6 +54,10 @@ export class ChatPanelPage {
 		return (await this.root.getAttribute("data-current-model")) ?? "";
 	}
 
+	async currentMode(): Promise<string> {
+		return (await this.root.getAttribute("data-current-mode")) ?? "";
+	}
+
 	async sessionId(): Promise<string> {
 		return (await this.root.getAttribute("data-session-id")) ?? "";
 	}

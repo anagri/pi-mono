@@ -227,6 +227,10 @@ export function bootstrapAgentWorker(): void {
 					homeDir,
 					eventHandlers: eventForwardingHandlers(),
 					extensionFactories: extensionFactories.length > 0 ? extensionFactories : undefined,
+					// Per modes.md PoC defaults: every host opts into ad-hoc allow-all via /mode;
+					// settings-side default remains gated to avoid an unsafe persistent default.
+					allowsAllowAllMode: true,
+					allowsAllowAllModeAsDefault: false,
 				},
 			);
 

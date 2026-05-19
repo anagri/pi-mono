@@ -11,6 +11,7 @@ Canonical persistence unit. Discriminated by `type`. Source: `src/sessions/entri
 | `message` | `AgentMessage` (user / assistant / tool_result) | every assistant chunk, every tool round-trip, every user prompt |
 | `model_change` | `{provider, modelId}` | `setSessionConfigOption("model", …)` |
 | `thinking_change` | `{level}` | `setSessionConfigOption("thinking", …)` |
+| `mode_change` | `{mode, reason}` | `setSessionConfigOption("mode", …)`. Filtered out of LLM context; restored on session/load + session/resume. See [modes.md](./modes.md) |
 | `mcp_inclusion_set` | `{slugs: string[]}` (sorted) | `_bodhi-pi/mcp/include`/`exclude`, hydration with ephemeral `mcpServers` |
 | `compaction` | `{summary, firstKeptEntryId, tokensBefore, details?, fromHook?}` | `_bodhi-pi/session/compact`, proactive auto-compact, overflow recovery |
 | `branch_summary` | `{fromId, summary, details?, fromHook?}` | cross-branch `_bodhi-pi/session/navigate` |

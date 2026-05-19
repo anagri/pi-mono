@@ -10,6 +10,7 @@ import {
 import {
 	type createBodhiPiAgent,
 	createBodhiPiClient,
+	DEFAULT_AGENT_MODE,
 	modelConfigFromOptions,
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
@@ -48,6 +49,8 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 		currentModelId: "",
 		defaultModelId: "",
 		models: [],
+		currentMode: DEFAULT_AGENT_MODE,
+		availableModes: [],
 		availableCommands: [],
 		closed: false,
 	};
@@ -80,6 +83,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	state.models = derivedModels;
 	state.defaultModelId = derivedDefault;
 	state.currentModelId = derivedDefault;
+	refreshStateFromConfigOptions(state, created.configOptions ?? undefined);
 
 	// terminal: false when piped so readline doesn't try raw-mode on a non-TTY.
 	const rl = readline.createInterface({
@@ -102,7 +106,7 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 	for (;;) {
 		let line: string;
 		try {
-			line = await rl.question(chalk.green("> "));
+			line = await rl.question(`${chalk.cyan(`[${state.currentMode}]`)} ${chalk.green("> ")}`);
 		} catch {
 			break; // stdin EOF (Ctrl-D or piped input exhausted)
 		}

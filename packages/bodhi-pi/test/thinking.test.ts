@@ -7,7 +7,7 @@ import {
 	registerFauxProvider,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { EXT_SESSION_CONFIG, MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/wire/constants.js";
+import { EXT_SESSION_CONFIG, MODE_CONFIG_ID, MODEL_CONFIG_ID, THINKING_CONFIG_ID } from "@/wire/constants.js";
 import { stdInitParams } from "./helpers/acp-constants.js";
 import { createTestHarness } from "./helpers/harness.js";
 
@@ -60,7 +60,7 @@ test("session/new advertises thinking option for reasoning model", async () => {
 	await harness.clientConn.initialize(stdInitParams);
 	const res = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
 	const ids = (res.configOptions ?? []).map((o: SessionConfigOption) => o.id);
-	expect(ids).toEqual([MODEL_CONFIG_ID, THINKING_CONFIG_ID]);
+	expect(ids).toEqual([MODE_CONFIG_ID, MODEL_CONFIG_ID, THINKING_CONFIG_ID]);
 });
 
 test("session/new omits thinking option for non-reasoning model", async () => {
@@ -69,7 +69,7 @@ test("session/new omits thinking option for non-reasoning model", async () => {
 	await harness.clientConn.initialize(stdInitParams);
 	const res = await harness.clientConn.newSession({ cwd: "/proj", mcpServers: [] });
 	const ids = (res.configOptions ?? []).map((o: SessionConfigOption) => o.id);
-	expect(ids).toEqual([MODEL_CONFIG_ID]);
+	expect(ids).toEqual([MODE_CONFIG_ID, MODEL_CONFIG_ID]);
 });
 
 test("setSessionConfigOption thinking returns full configOptions list (bug fix)", async () => {
@@ -83,7 +83,7 @@ test("setSessionConfigOption thinking returns full configOptions list (bug fix)"
 		value: "medium",
 	});
 	const ids = (res.configOptions ?? []).map((o: SessionConfigOption) => o.id);
-	expect(ids).toEqual([MODEL_CONFIG_ID, THINKING_CONFIG_ID]);
+	expect(ids).toEqual([MODE_CONFIG_ID, MODEL_CONFIG_ID, THINKING_CONFIG_ID]);
 	const thinking = (res.configOptions ?? []).find((o: SessionConfigOption) => o.id === THINKING_CONFIG_ID);
 	expect(thinking && "currentValue" in thinking ? thinking.currentValue : undefined).toBe("medium");
 });

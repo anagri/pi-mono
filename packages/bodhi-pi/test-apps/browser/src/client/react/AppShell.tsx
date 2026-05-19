@@ -11,7 +11,14 @@ import type {
 	TransportAdapter,
 } from "@bodhiapp/bodhi-pi-test-app-utils/transport-types";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { extractModelFromConfigOptions, isSlash, tryHandleSlash } from "../lib/commands.ts";
+import {
+	type AgentModeString,
+	extractAvailableModes,
+	extractModeFromConfigOptions,
+	extractModelFromConfigOptions,
+	isSlash,
+	tryHandleSlash,
+} from "../lib/commands.ts";
 import { emitOauthStatusEvent } from "../lib/oauth-event-bus.ts";
 import { tryHandleSlash as tryHandleAcpSlash } from "../lib/slash-router.ts";
 import { ChatPanel, type ChatMessage, type ChatPanelState, type ChatToolCall } from "./ChatPanel.tsx";
@@ -42,6 +49,8 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 	const [chatState, setChatState] = useState<ChatPanelState>("idle");
 	const [currentModel, setCurrentModel] = useState<string>("");
+	const [currentMode, setCurrentMode] = useState<AgentModeString>("ask");
+	const [availableModes, setAvailableModes] = useState<AgentModeString[]>([]);
 	const [sessionId, setSessionId] = useState<string>("");
 	const [workspaceRoot, setWorkspaceRoot] = useState<string>("");
 	const availableCommandsRef = useRef<AvailableCommand[]>([]);
@@ -168,6 +177,10 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		if (u.sessionUpdate === "config_option_update") {
 			const m = extractModelFromConfigOptions(u.configOptions);
 			if (m) setCurrentModel(m);
+			const mode = extractModeFromConfigOptions(u.configOptions);
+			if (mode) setCurrentMode(mode);
+			const modes = extractAvailableModes(u.configOptions);
+			if (modes.length > 0) setAvailableModes(modes);
 			return;
 		}
 		setChatMessages((prev) => {
@@ -418,6 +431,10 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		setSessionId(r.sessionId);
 		const m = extractModelFromConfigOptions(r.configOptions);
 		if (m) setCurrentModel(m);
+		const mode = extractModeFromConfigOptions(r.configOptions);
+		if (mode) setCurrentMode(mode);
+		const modes = extractAvailableModes(r.configOptions);
+		if (modes.length > 0) setAvailableModes(modes);
 		return r.sessionId;
 	}, [dispatchAcp]);
 
@@ -440,6 +457,9 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 						setSessionId(id);
 					},
 					setCurrentModel,
+					setCurrentMode,
+					currentMode,
+					availableModes,
 				});
 				if (outcome.handled) return;
 			}
@@ -456,7 +476,16 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 			setErrorMsg((err as Error).message ?? String(err));
 			setChatState("idle");
 		}
-	}, [composerInput, dispatchAcp, ensureInitialized, ensureSession, pushSystemMessage, pushUserMessage]);
+	}, [
+		composerInput,
+		dispatchAcp,
+		ensureInitialized,
+		ensureSession,
+		pushSystemMessage,
+		pushUserMessage,
+		currentMode,
+		availableModes,
+	]);
 
 	const onComposerStop = useCallback(async () => {
 		const sid = sessionIdRef.current;
@@ -471,7 +500,7 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	return (
 		<main className="app-shell" data-testid="test-app-root" data-test-state={state}>
 			<section className="app-shell-main">
-				<StatusBar title={title} model={currentModel} sessionId={sessionId} state={state} />
+				<StatusBar title={title} model={currentModel} mode={currentMode} sessionId={sessionId} state={state} />
 				{headerSlot}
 				{state === "error" && <ErrorBanner message={errorMsg} />}
 				{state === "needs-init" && <SetupForm onSubmit={onSetupSubmit} />}
@@ -480,6 +509,7 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 						<ChatPanel
 							state={chatState}
 							currentModel={currentModel}
+							currentMode={currentMode}
 							sessionId={sessionId}
 							messages={chatMessages}
 							composerValue={composerInput}

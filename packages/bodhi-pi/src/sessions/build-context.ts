@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { AgentMode } from "@/permissions/types.js";
 import { buildEntryIndex } from "./_shared.js";
 import type { BranchSummaryEntry, CompactionEntry, CustomMessageEntry, SessionEntry } from "./entries.js";
 import type { SessionRecord } from "./session-store.js";
@@ -8,6 +9,7 @@ export interface SessionContext {
 	messages: AgentMessage[];
 	currentModelId: string | null;
 	currentThinkingLevel: ModelThinkingLevel | null;
+	currentMode: AgentMode | null;
 	name: string | null;
 	/** Last persisted MCP inclusion snapshot. `null` when the session has never written one. */
 	mcpInclusion: string[] | null;
@@ -82,13 +84,21 @@ export function buildSessionContext(
 	const entries = record.entries;
 	const targetLeaf = leafId !== undefined ? leafId : (record.leafId ?? null);
 	if (targetLeaf === null && entries.length === 0) {
-		return { messages: [], currentModelId: null, currentThinkingLevel: null, name: null, mcpInclusion: null };
+		return {
+			messages: [],
+			currentModelId: null,
+			currentThinkingLevel: null,
+			currentMode: null,
+			name: null,
+			mcpInclusion: null,
+		};
 	}
 
 	const path = walkPath(entries, targetLeaf);
 
 	let currentModelId: string | null = null;
 	let currentThinkingLevel: ModelThinkingLevel | null = null;
+	let currentMode: AgentMode | null = null;
 	let name: string | null = null;
 	let mcpInclusion: string[] | null = null;
 	let compaction: CompactionEntry | null = null;
@@ -97,6 +107,8 @@ export function buildSessionContext(
 			currentModelId = entry.modelId;
 		} else if (entry.type === "thinking_change") {
 			currentThinkingLevel = entry.level;
+		} else if (entry.type === "mode_change") {
+			currentMode = entry.mode;
 		} else if (entry.type === "session_info" && entry.name !== undefined) {
 			name = entry.name;
 		} else if (entry.type === "mcp_inclusion_set") {
@@ -133,5 +145,5 @@ export function buildSessionContext(
 		for (const entry of path) appendIfMessage(entry);
 	}
 
-	return { messages, currentModelId, currentThinkingLevel, name, mcpInclusion };
+	return { messages, currentModelId, currentThinkingLevel, currentMode, name, mcpInclusion };
 }

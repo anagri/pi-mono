@@ -1,7 +1,10 @@
-import type { AvailableCommand, SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
 import {
+	type AgentMode,
 	type BodhiPiClient,
+	DEFAULT_AGENT_MODE,
 	formatProviderAuth,
+	MODE_CONFIG_ID,
 	type ModelOption,
 	modelConfigFromOptions,
 	parseLoginArgs,
@@ -14,6 +17,8 @@ export interface ReplState {
 	currentModelId: string;
 	defaultModelId: string;
 	models: ModelOption[];
+	currentMode: AgentMode;
+	availableModes: AgentMode[];
 	availableCommands: AvailableCommand[];
 	closed: boolean;
 }
@@ -41,9 +46,18 @@ export function refreshStateFromConfigOptions(
 	options: readonly SessionConfigOption[] | undefined,
 ): void {
 	const next = modelConfigFromOptions(options);
-	if (next.models.length === 0 && !next.currentModelId) return;
-	state.models = next.models;
-	state.currentModelId = next.currentModelId || state.currentModelId;
+	if (next.models.length > 0 || next.currentModelId) {
+		state.models = next.models;
+		state.currentModelId = next.currentModelId || state.currentModelId;
+	}
+	const modeOpt = options?.find((o) => o.id === MODE_CONFIG_ID);
+	if (modeOpt && modeOpt.type === "select") {
+		const selectOptions = (modeOpt.options ?? []) as SessionConfigSelectOption[];
+		state.availableModes = selectOptions.map((o) => o.value as AgentMode);
+		if (typeof modeOpt.currentValue === "string") {
+			state.currentMode = modeOpt.currentValue as AgentMode;
+		}
+	}
 }
 
 /** Extract `--global|--project|--session` from a token list, returning the scope (or undefined) and remaining args. */
@@ -75,6 +89,8 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				"  /close             close the current session (data persists)",
 				"  /delete <id>       permanently delete a session",
 				"  /model <id>        switch model for current session",
+				"  /mode [<id>]       show or switch the session mode (ask|plan|edit|allow-all)",
+				"  /modes             list available modes",
 				"  /compact [hint]    summarize earlier turns to free context",
 				"  /entries           list message entry ids on the current branch",
 				"  /tree              show the full session DAG (all entries)",
@@ -221,6 +237,35 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 				ctx.state.models = next.models;
 				ctx.state.currentModelId = next.currentModelId || modelId;
 				process.stdout.write(`model switched to: ${ctx.state.currentModelId}\n`);
+			} catch (err) {
+				process.stdout.write(`error: ${String(err)}\n`);
+			}
+			return false;
+		}
+
+		case "/modes": {
+			const modes = ctx.state.availableModes.length > 0 ? ctx.state.availableModes : [DEFAULT_AGENT_MODE];
+			for (const m of modes) {
+				const marker = m === ctx.state.currentMode ? " *" : "  ";
+				process.stdout.write(`${marker} ${m}\n`);
+			}
+			return false;
+		}
+
+		case "/mode": {
+			const modeId = parts[1];
+			if (!modeId) {
+				process.stdout.write(`current mode: ${ctx.state.currentMode}\n`);
+				return false;
+			}
+			try {
+				const result = await ctx.client.setConfigOption({
+					sessionId: ctx.state.sessionId,
+					configId: MODE_CONFIG_ID,
+					value: modeId,
+				});
+				refreshStateFromConfigOptions(ctx.state, result.configOptions);
+				process.stdout.write(`mode switched to: ${ctx.state.currentMode}\n`);
 			} catch (err) {
 				process.stdout.write(`error: ${String(err)}\n`);
 			}

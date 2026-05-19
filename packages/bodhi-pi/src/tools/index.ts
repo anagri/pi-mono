@@ -75,7 +75,11 @@ export function resolvePath(cwd: string, userPath: string): string {
 	return normalize(join(cwd, userPath));
 }
 
-export function toolKindFor(name: string): "read" | "edit" | "search" | "execute" | "other" {
+import type { ToolCategory } from "@/permissions/types.js";
+
+export type { ToolCategory } from "@/permissions/types.js";
+
+export function toolKindFor(name: string): ToolCategory {
 	switch (name) {
 		case "read":
 			return "read";
@@ -88,9 +92,10 @@ export function toolKindFor(name: string): "read" | "edit" | "search" | "execute
 			return "search";
 		case "run_script":
 		case "bash":
-		case "subagent":
 			return "execute";
-		default:
-			return "other";
+		case "subagent":
+			return "subagent";
 	}
+	if (name.includes("__")) return "mcp";
+	return "other";
 }

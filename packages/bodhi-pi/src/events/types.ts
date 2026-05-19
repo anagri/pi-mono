@@ -1,5 +1,6 @@
 import type { AgentMessage, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AgentMode, ModeChangeReason, ToolCategory } from "@/permissions/types.js";
 
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "cancelled" | "refusal";
 
@@ -296,6 +297,44 @@ export interface SessionCloneEvent extends BodhiPiEventCommon {
 	fromLeafId: string;
 }
 
+// === Mode / permission lifecycle ===
+
+export interface ModeChangeEvent extends BodhiPiEventCommon {
+	type: "mode_change";
+	sessionId: string;
+	fromMode: AgentMode | null;
+	toMode: AgentMode;
+	reason: ModeChangeReason;
+}
+
+export interface ToolApprovalRequestEvent extends BodhiPiEventCommon {
+	type: "tool_approval_request";
+	sessionId: string;
+	correlationId: string;
+	toolCallId: string;
+	toolName: string;
+	category: ToolCategory;
+	pattern: string;
+	timeoutMs: number;
+}
+
+export type ToolApprovalKind =
+	| "allow_once"
+	| "allow_always"
+	| "reject_once"
+	| "reject_always"
+	| "cancelled"
+	| "timeout";
+
+export interface ToolApprovalResponseEvent extends BodhiPiEventCommon {
+	type: "tool_approval_response";
+	sessionId: string;
+	correlationId: string;
+	toolCallId: string;
+	toolName: string;
+	kind: ToolApprovalKind;
+}
+
 // === Sub-agent lifecycle ===
 
 export interface SubagentStartEvent extends BodhiPiEventCommon {
@@ -355,6 +394,9 @@ export type BodhiPiEvent =
 	| McpStatusChangeEvent
 	| McpToolsChangeEvent
 	| McpOAuthStatusChangeEvent
+	| ModeChangeEvent
+	| ToolApprovalRequestEvent
+	| ToolApprovalResponseEvent
 	| SubagentStartEvent
 	| SubagentEndEvent;
 
@@ -405,6 +447,9 @@ export interface BodhiPiEventHandlers {
 	mcp_status_change?: ((event: McpStatusChangeEvent) => Awaitable<void>)[];
 	mcp_tools_change?: ((event: McpToolsChangeEvent) => Awaitable<void>)[];
 	mcp_oauth_status_change?: ((event: McpOAuthStatusChangeEvent) => Awaitable<void>)[];
+	mode_change?: ((event: ModeChangeEvent) => Awaitable<void>)[];
+	tool_approval_request?: ((event: ToolApprovalRequestEvent) => Awaitable<void>)[];
+	tool_approval_response?: ((event: ToolApprovalResponseEvent) => Awaitable<void>)[];
 	subagent_start?: ((event: SubagentStartEvent) => Awaitable<void>)[];
 	subagent_end?: ((event: SubagentEndEvent) => Awaitable<void>)[];
 }

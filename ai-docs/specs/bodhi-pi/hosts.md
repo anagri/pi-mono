@@ -15,6 +15,17 @@ Four reference Hosts under `packages/bodhi-pi/test-apps/{cli,http,browser,chrome
 
 All four host packages are `private: true`. None is published to npm.
 
+### Mode capability defaults
+
+Per [modes.md § Capabilities](./modes.md#capabilities). PoCs demonstrate full feasibility (allow-all reachable via `/mode`) while keeping persisted-default opt-in two-step:
+
+| Host | `allowsAllowAllMode` | `allowsAllowAllModeAsDefault` |
+|---|---|---|
+| cli | true | false |
+| http | true | false |
+| browser | true | false |
+| chrome-ext (via shared browser bootstrap) | true | false |
+
 ## cli (`test-apps/cli/`)
 
 - **Entrypoint**: `src/cli.ts` (shebang Node entry). Three modes: interactive REPL, headless one-shot, RPC (ndjson over stdio).

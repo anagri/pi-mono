@@ -12,6 +12,7 @@ Living architecture map for `packages/bodhi-pi/`. Optimised for **AI coding assi
 | How do MCP servers get added, connected, and per-session scoped? Why the recent decomposition? | [mcp.md](./mcp.md) |
 | What's the difference between an Extension, a Skill, a Command, and an MCP server? | [extensions-skills-commands.md](./extensions-skills-commands.md) |
 | How do sub-agents work — what's a profile, how does the parent spawn a child, how does the result come back? | [subagents.md](./subagents.md) |
+| What modes does bodhi-pi support, how are permissions wired (mode foundation + future enforcement)? | [modes.md](./modes.md) |
 | How are the four reference Hosts (`test-apps/{cli,http,browser,chrome-ext}/`) wired? | [hosts.md](./hosts.md) |
 | What are the three config surfaces (app-start, disk hierarchy, session-mutable) and how do they compose? | [configuration.md](./configuration.md) |
 | What's already in `src/client/` and how will it become `@bodhiapps/bodhi-pi-client-*`? | [client-sdk-seed.md](./client-sdk-seed.md) |

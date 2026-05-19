@@ -1,3 +1,4 @@
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import { LLMock } from "@copilotkit/aimock";
 import {
 	type Api,
@@ -61,7 +62,7 @@ test("simple chat round-trips via ACP through aimock", async () => {
 		mcpServers: [],
 	});
 
-	const modelOption = asSelectOption(newSession.configOptions?.[0]);
+	const modelOption = asSelectOption(newSession.configOptions?.find((o: SessionConfigOption) => o.id === "model"));
 	expect(modelOption.id).toBe("model");
 	expect(modelOption.currentValue).toBe(baseModel.id);
 	expect(modelOption.options).toHaveLength(1);
@@ -106,7 +107,7 @@ test("switch model via setSessionConfigOption routes to second mock", async () =
 		cwd: process.cwd(),
 		mcpServers: [],
 	});
-	const initialOption = asSelectOption(configOptions?.[0]);
+	const initialOption = asSelectOption(configOptions?.find((o: SessionConfigOption) => o.id === "model"));
 	expect(initialOption.currentValue).toBe("model-a");
 	expect(initialOption.options).toHaveLength(2);
 
@@ -119,7 +120,7 @@ test("switch model via setSessionConfigOption routes to second mock", async () =
 		configId: "model",
 		value: "model-b",
 	});
-	const switched = asSelectOption(switchResult.configOptions[0]);
+	const switched = asSelectOption(switchResult.configOptions.find((o: SessionConfigOption) => o.id === "model"));
 	expect(switched.currentValue).toBe("model-b");
 
 	updates.length = 0;
@@ -168,7 +169,7 @@ test("persists messages and replays via session/load", async () => {
 		cwd,
 		mcpServers: [],
 	});
-	const loadedOption = asSelectOption(loadResult.configOptions?.[0]);
+	const loadedOption = asSelectOption(loadResult.configOptions?.find((o: SessionConfigOption) => o.id === "model"));
 	expect(loadedOption.currentValue).toBe(baseModel.id);
 
 	expect(userChunkText(reader.updates)).toBe("say noted");
@@ -294,7 +295,7 @@ test("model change persists across load", async () => {
 	});
 	await reader.clientConn.initialize(stdInitParams);
 	const loadResult = await reader.clientConn.loadSession({ sessionId, cwd, mcpServers: [] });
-	const loadedOption = asSelectOption(loadResult.configOptions?.[0]);
+	const loadedOption = asSelectOption(loadResult.configOptions?.find((o: SessionConfigOption) => o.id === "model"));
 	expect(loadedOption.currentValue).toBe("model-b");
 
 	reader.updates.length = 0;
@@ -327,7 +328,7 @@ test("resumeSession rehydrates without replaying history", async () => {
 	await reader.clientConn.initialize(stdInitParams);
 
 	const resumeResult = await reader.clientConn.resumeSession({ sessionId, cwd, mcpServers: [] });
-	const resumedOption = asSelectOption(resumeResult.configOptions?.[0]);
+	const resumedOption = asSelectOption(resumeResult.configOptions?.find((o: SessionConfigOption) => o.id === "model"));
 	expect(resumedOption.currentValue).toBe(baseModel.id);
 
 	// Critical contrast vs loadSession: NO history replay notifications.

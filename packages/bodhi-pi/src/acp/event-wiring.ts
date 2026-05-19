@@ -1,7 +1,6 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import type { AgentSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { BodhiPiLogger } from "@/acp/agent.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
-import type { ModelRegistry } from "@/models/registry.js";
 import type { SessionState } from "@/sessions/session-state.js";
 import { LIFECYCLE_EVENT_METHOD } from "@/wire/constants.js";
 
@@ -9,7 +8,7 @@ export interface EventWiringDeps {
 	events: EventDispatcher;
 	conn: AgentSideConnection;
 	sessions: Map<string, SessionState>;
-	modelRegistry: ModelRegistry;
+	buildAllConfigOptions: (sessionId: string) => Promise<SessionConfigOption[]>;
 	logger: BodhiPiLogger;
 }
 
@@ -20,14 +19,14 @@ export interface EventWiringDeps {
  * that have a domain shape — keep the translation here so SDK extraction can stub one module.
  *
  * Two translation families today:
- *   1. State-change events → `config_option_update` (model picker refresh).
- *   2. MCP lifecycle events → `LIFECYCLE_EVENT_METHOD` notification (Client status panel).
+ *   1. State-change events (auth, settings, model, mode) → `config_option_update`.
+ *   2. MCP / sub-agent lifecycle events → `LIFECYCLE_EVENT_METHOD` notification (Client status panel).
  */
 export function wireInternalEventHandlers(deps: EventWiringDeps): void {
-	const { events, conn, sessions, modelRegistry, logger } = deps;
+	const { events, conn, sessions, buildAllConfigOptions, logger } = deps;
 	const emitUpdate = async (sessionId: string) => {
 		if (!sessions.has(sessionId)) return;
-		const configOptions = await modelRegistry.buildAllConfigOptions(sessionId);
+		const configOptions = await buildAllConfigOptions(sessionId);
 		await conn.sessionUpdate({
 			sessionId,
 			update: { sessionUpdate: "config_option_update", configOptions },
@@ -45,6 +44,11 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 		},
 	]);
 	events.appendHandlers("model_select", [
+		async (e) => {
+			await emitUpdate(e.sessionId);
+		},
+	]);
+	events.appendHandlers("mode_change", [
 		async (e) => {
 			await emitUpdate(e.sessionId);
 		},
@@ -73,6 +77,8 @@ function affectsPickerKey(key: string): boolean {
 		key === "defaultModel" ||
 		key.startsWith("defaultModel.") ||
 		key === "defaultThinkingLevel" ||
-		key.startsWith("defaultThinkingLevel.")
+		key.startsWith("defaultThinkingLevel.") ||
+		key === "defaultMode" ||
+		key.startsWith("defaultMode.")
 	);
 }

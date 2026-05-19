@@ -1,6 +1,7 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { join } from "pathe";
 import type { Filesystem } from "@/filesystem/filesystem.js";
+import type { AgentMode } from "@/permissions/types.js";
 import type { CompactionSettings } from "@/sessions/compaction.js";
 
 /**
@@ -32,6 +33,11 @@ export interface RetrySettings {
 	enabled?: boolean;
 }
 
+/** Permission-related settings (mode foundation lands in Phase 0; policy in Phase 1). */
+export interface PermissionSettings {
+	approvalTimeoutMs?: number;
+}
+
 export interface BodhiPiProjectSettings {
 	compaction?: Partial<CompactionSettings>;
 	appendSystemPrompt?: string;
@@ -44,6 +50,12 @@ export interface BodhiPiProjectSettings {
 	/** @deprecated Legacy name; read for back-compat. Write `defaultModelId` instead. */
 	defaultModel?: string;
 	defaultThinkingLevel?: ModelThinkingLevel;
+	/**
+	 * Default agent mode at session boot. `"allow-all"` is rejected at bootstrap unless
+	 * the host advertises `allowsAllowAllModeAsDefault: true`.
+	 */
+	defaultMode?: AgentMode;
+	permission?: PermissionSettings;
 	providerOptions?: Record<string, ProviderOptionsEntry>;
 	retry?: RetrySettings;
 	/** Unknown keys are preserved here so /config can surface them for debugging. */

@@ -130,6 +130,9 @@ export async function buildAgentFactory(opts: WireAgentOptions, label: string): 
 				// Multi-tenant: oauth/start emits a state token of the form
 				// `<base64url(userId)>.<random>` so /oauth/callback can route the redirect.
 				tenantId: String(opts.user.id),
+				// Per modes.md PoC defaults: allow-all reachable via /mode, default still gated.
+				allowsAllowAllMode: true,
+				allowsAllowAllModeAsDefault: false,
 			},
 		);
 		const inner = innerFactory(conn);

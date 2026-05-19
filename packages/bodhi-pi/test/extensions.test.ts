@@ -226,7 +226,7 @@ test("registerProvider: extension-registered model is selectable and routes prom
 	const sid = newSess.sessionId;
 
 	// Both models are advertised in the configOptions list (extension model is additive).
-	const opt = newSess.configOptions?.[0];
+	const opt = newSess.configOptions?.find((o: { id: string }) => o.id === "model");
 	if (!opt || opt.type !== "select") throw new Error("expected select option");
 	const ids = opt.options.map((o: { value: string }) => o.value);
 	expect(ids).toEqual(["model-a", "model-b"]);

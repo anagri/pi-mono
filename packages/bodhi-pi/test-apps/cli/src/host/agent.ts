@@ -63,6 +63,10 @@ export function createCliAgent(opts: CliAgentOptions): CliAgent {
 			extensionFactories: opts.extensionFactories,
 			homeDir: opts.homeDir,
 			globalFilesystem,
+			// Per ai-docs/specs/bodhi-pi/modes.md: PoCs demonstrate full mode feasibility.
+			// allow-all is reachable via /mode allow-all; settings-side default still gated.
+			allowsAllowAllMode: true,
+			allowsAllowAllModeAsDefault: false,
 		},
 	);
 	return { factory, sessionStore, filesystem, kvStore, cwd: opts.cwd };

@@ -1,6 +1,8 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { BodhiPiLogger } from "@/acp/agent.js";
 import {
+	type AgentMode,
 	type BodhiPiEventHandlers,
 	type CompactionSettings,
 	createBodhiPiAgent,
@@ -32,6 +34,10 @@ export interface TestHarnessOptions {
 	homeDir?: string;
 	kvStore?: KvStore;
 	defaultThinkingLevel?: ModelThinkingLevel;
+	defaultMode?: AgentMode;
+	allowsAllowAllMode?: boolean;
+	allowsAllowAllModeAsDefault?: boolean;
+	logger?: BodhiPiLogger;
 	supportsMcpStdio?: boolean;
 }
 
@@ -73,6 +79,12 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			...(opts.compaction ? { compaction: opts.compaction } : {}),
 			...(opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {}),
 			...(opts.defaultThinkingLevel !== undefined ? { defaultThinkingLevel: opts.defaultThinkingLevel } : {}),
+			...(opts.defaultMode !== undefined ? { defaultMode: opts.defaultMode } : {}),
+			...(opts.allowsAllowAllMode !== undefined ? { allowsAllowAllMode: opts.allowsAllowAllMode } : {}),
+			...(opts.allowsAllowAllModeAsDefault !== undefined
+				? { allowsAllowAllModeAsDefault: opts.allowsAllowAllModeAsDefault }
+				: {}),
+			...(opts.logger !== undefined ? { logger: opts.logger } : {}),
 			...(opts.supportsMcpStdio !== undefined ? { supportsMcpStdio: opts.supportsMcpStdio } : {}),
 		}),
 		() => ({

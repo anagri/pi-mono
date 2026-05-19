@@ -93,6 +93,7 @@ export type {
 	MessageEndEvent,
 	MessageStartEvent,
 	MessageUpdateEvent,
+	ModeChangeEvent,
 	ModelSelectEvent,
 	SessionCloneEvent,
 	SessionForkEvent,
@@ -103,6 +104,9 @@ export type {
 	StopReason,
 	SubagentEndEvent,
 	SubagentStartEvent,
+	ToolApprovalKind,
+	ToolApprovalRequestEvent,
+	ToolApprovalResponseEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolExecutionEndEvent,
@@ -157,6 +161,26 @@ export {
 	serializeMcpServerEntry,
 } from "./mcp/mcp-types.js";
 export { decodeTenantFromState } from "./mcp/oauth-state-token.js";
+export { PermissionService } from "./permissions/permission-service.js";
+export { MODE_PRESETS } from "./permissions/presets.js";
+export {
+	type AgentMode,
+	ALL_AGENT_MODES,
+	ALL_TOOL_CATEGORIES,
+	type ApprovalDecision,
+	DEFAULT_AGENT_MODE,
+	isAgentMode,
+	MODE_DISPLAY,
+	MODES_BY_PERMISSIVENESS,
+	type ModeChangeReason,
+	type ModeDisplay,
+	type ModePreset,
+	type ModeRuntimeCapabilities,
+	type PermissionDecision,
+	type PermissionPattern,
+	type PermissionPolicy,
+	type ToolCategory,
+} from "./permissions/types.js";
 export type {
 	ScriptExecuteParams,
 	ScriptExecuteResult,
@@ -179,6 +203,7 @@ export type {
 	ListSessionsRequest,
 	ListSessionsResult,
 	MessageEntry,
+	ModeChangeEntry,
 	ModelChangeEntry,
 	ReadExtensionEntriesFilter,
 	SessionEntry,
@@ -193,6 +218,7 @@ export {
 	type BodhiPiProjectSettings,
 	GLOBAL_SETTINGS_PATH,
 	loadProjectSettings,
+	type PermissionSettings,
 	type ProviderOptionsEntry,
 	type RetrySettings,
 	SETTINGS_PATH,
@@ -251,6 +277,7 @@ export {
 	EXT_SUBAGENT_LIST,
 	EXT_SUBAGENT_RUN,
 	LIFECYCLE_EVENT_METHOD,
+	MODE_CONFIG_ID,
 	MODEL_CONFIG_ID,
 	THINKING_CONFIG_ID,
 	WIRE_ROW_ATTRS,

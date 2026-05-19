@@ -15,7 +15,7 @@ Implemented on `BodhiPiAcpAgent` (`src/acp/agent.ts`). The agent does NOT implem
 | `resumeSession` | `:439-454` | `rehydrateSession`, hydrates MCP, emits `session_start{reason:"resume"}` | **Does not replay** to Client per ACP spec. Same `_meta.notFoundSlugs` shape as `newSession` when ephemeral `mcpServers` names unknown slugs. |
 | `listSessions` | `:456-469` | none | Backed by `sessionStore.list({cwd?, cursor?})`. Returns `{sessions:[…], nextCursor?}`. Stores encode `{updatedAt,id}` base64url cursors |
 | `closeSession` | `:471-479` | `piAgent.abort()`, `mcpService.closeSession`, drops in-memory state, emits `session_shutdown` | Persisted record remains |
-| `setSessionConfigOption` | `:497-499` | delegated to `ModelRegistry.setSessionConfigOption` | Returns FULL `configOptions[]` (not just changed entry — schema fix) |
+| `setSessionConfigOption` | `:577-595` | `BodhiPiAcpAgent` owns the dispatch; `configId: "model" \| "thinking"` delegate to `ModelRegistry`, `configId: "mode"` delegates to `PermissionService.setMode`. See [modes.md § Dispatch ownership](./modes.md#dispatch-ownership-refactor-delivered-alongside-this-phase). | Returns FULL `configOptions[]` (mode first, then model, then optional thinking). `mode='allow-all'` rejected with `-32603` when `allowsAllowAllMode: false` |
 | `prompt` | `:501-507` | runs prompt loop, emits assistant + tool_call updates, may auto-compact + retry on overflow | Throws `-32602` when session not loaded |
 | `cancel` | `:519-524` | sets `runtime.cancelled=true`, `piAgent.abort()` | No response (ACP notification) |
 | `extMethod` | `:481-485` | dispatches to `extHandlers` map | Returns `-32601` for unknown method names |

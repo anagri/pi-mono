@@ -19,6 +19,9 @@ export const WIRE_ROW_ATTRS = {
 /** ACP `SessionConfigOption.id` for the reasoning/thinking-level select. Omitted from configOptions when the active model has no thinking support. */
 export const THINKING_CONFIG_ID = "thinking";
 
+/** ACP `SessionConfigOption.id` for the agent mode selector (ask | plan | edit | allow-all). */
+export const MODE_CONFIG_ID = "mode";
+
 /** Custom ACP extension method (per `extensibility.mdx` `_`-prefix rule) for permanently deleting a session. */
 export const EXT_DELETE_SESSION = "_bodhi-pi/session/delete";
 

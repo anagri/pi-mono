@@ -122,8 +122,8 @@ test("kv/set with auth/* key emits config_option_update sessionUpdate", async ()
 	expect(result).not.toHaveProperty("configOptions");
 
 	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
-	expect(update.configOptions[0]?.id).toBe("model");
-	expect(update.configOptions[0]?.currentValue).toBe(model.id);
+	const modelOpt = update.configOptions.find((o) => o.id === "model");
+	expect(modelOpt?.currentValue).toBe(model.id);
 });
 
 test("kv/set non-auth key emits no config_option_update", async () => {
@@ -160,7 +160,7 @@ test("kv/remove with auth/* key emits config_option_update sessionUpdate", async
 	expect(result).not.toHaveProperty("configOptions");
 
 	const update = findUpdateOfKind(harness.updates, "config_option_update", sessionId);
-	expect(update.configOptions[0]?.id).toBe("model");
+	expect(update.configOptions.some((o) => o.id === "model")).toBe(true);
 });
 
 test("kv handlers throw -32601 when kvStore is not configured", async () => {

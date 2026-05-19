@@ -1,9 +1,4 @@
-import {
-	RequestError,
-	type SessionConfigOption,
-	type SetSessionConfigOptionRequest,
-	type SetSessionConfigOptionResponse,
-} from "@agentclientprotocol/sdk";
+import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
 	type Api,
 	clampThinkingLevel,
@@ -180,7 +175,7 @@ export class ModelRegistry {
 		return models[0] ?? null;
 	}
 
-	private async buildModelConfigOption(currentValue: string | null): Promise<SessionConfigOption> {
+	async buildModelConfigOption(currentValue: string | null): Promise<SessionConfigOption> {
 		const models = await this.allModels();
 		return {
 			id: MODEL_CONFIG_ID,
@@ -192,7 +187,7 @@ export class ModelRegistry {
 		};
 	}
 
-	private buildThinkingConfigOption(session: SessionState): SessionConfigOption | undefined {
+	buildThinkingConfigOption(session: SessionState): SessionConfigOption | undefined {
 		const model = session.runtime.piAgent.state.model;
 		const supported = getSupportedThinkingLevels(model);
 		if (supported.length <= 1) return undefined;
@@ -206,38 +201,7 @@ export class ModelRegistry {
 		};
 	}
 
-	async buildAllConfigOptions(sessionId: string): Promise<SessionConfigOption[]> {
-		const session = this.sessions.get(sessionId);
-		if (!session) return [];
-		const options: SessionConfigOption[] = [await this.buildModelConfigOption(session.runtime.currentModelId)];
-		const thinking = this.buildThinkingConfigOption(session);
-		if (thinking) options.push(thinking);
-		return options;
-	}
-
-	/** Dispatch table for `setSessionConfigOption`. Add a new entry to support a new config option. */
-	private readonly configOptionSetters: Record<
-		string,
-		(sessionId: string, session: SessionState, value: unknown) => Promise<void>
-	> = {
-		[MODEL_CONFIG_ID]: (sid, s, v) => this.setSessionModel(sid, s, v),
-		[THINKING_CONFIG_ID]: (sid, s, v) => this.setSessionThinkingLevel(sid, s, v),
-	};
-
-	async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
-		const session = this.sessions.get(params.sessionId);
-		if (!session) {
-			throw new RequestError(-32602, `unknown session: ${params.sessionId}`);
-		}
-		const setter = this.configOptionSetters[params.configId];
-		if (!setter) {
-			throw new RequestError(-32602, `unknown configId: ${params.configId}`);
-		}
-		await setter(params.sessionId, session, params.value);
-		return { configOptions: await this.buildAllConfigOptions(params.sessionId) };
-	}
-
-	private async setSessionModel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
+	async setSessionModel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
 		if (typeof value !== "string") {
 			throw new RequestError(-32602, `model config requires string value, got ${typeof value}`);
 		}
@@ -268,7 +232,7 @@ export class ModelRegistry {
 		);
 	}
 
-	private async setSessionThinkingLevel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
+	async setSessionThinkingLevel(sessionId: string, session: SessionState, value: unknown): Promise<void> {
 		if (typeof value !== "string") {
 			throw new RequestError(-32602, `thinking config requires string value, got ${typeof value}`);
 		}

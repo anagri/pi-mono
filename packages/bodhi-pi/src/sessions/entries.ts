@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { AgentMode, ModeChangeReason } from "@/permissions/types.js";
 
 /**
  * `parentId` forms the conversation DAG. Optional during the Phase A1 migration
@@ -26,6 +27,12 @@ export interface ModelChangeEntry extends BaseEntry {
 export interface ThinkingChangeEntry extends BaseEntry {
 	type: "thinking_change";
 	level: ModelThinkingLevel;
+}
+
+export interface ModeChangeEntry extends BaseEntry {
+	type: "mode_change";
+	mode: AgentMode;
+	reason: ModeChangeReason;
 }
 
 /**
@@ -113,6 +120,7 @@ export type SessionEntry =
 	| MessageEntry
 	| ModelChangeEntry
 	| ThinkingChangeEntry
+	| ModeChangeEntry
 	| McpInclusionEntry
 	| CompactionEntry
 	| BranchSummaryEntry
