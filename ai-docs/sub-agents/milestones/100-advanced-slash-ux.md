@@ -19,7 +19,7 @@ Candidate commands (the implementing agent picks based on what's actually useful
 - **`/subagent <name> <task>`** — already exists. Extension: `--background` flag once milestone 050 ships.
 - **`/run <name> <task>`** — possible alias of `/subagent` if the shorter name is preferred.
 - **`/chain <name1> <task1> <name2> <task2> …`** — sequential dispatch: each step's output is appended to the next step's task description. Implements a manual chain pattern without core changes.
-- **`/parallel <name1> <task1> ; <name2> <task2> ; …`** — concrete trigger of `subagent_batch` from the slash side. Currently the LLM has to invoke the tool; this lets the user dispatch directly.
+- **`/parallel <name1> <task1> ; <name2> <task2> ; …`** — slash-driven multi-child dispatch. The host emits N `_bodhi-pi/subagent/run` calls in parallel (or a new `_bodhi-pi/subagent/run-many` ext method) so users can trigger concurrency without going through the LLM.
 - **`/children`** — list this session's children with status (currently exists as `/subagent children` — could be promoted).
 - **`/cancel <childSessionId>`** — cancel a running background child (requires milestone 050).
 - **`/resume <childSessionId>`** — re-attach to a child that may have outlived the host process (requires milestone 060).

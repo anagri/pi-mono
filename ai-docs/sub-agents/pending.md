@@ -17,12 +17,12 @@ Both items below shipped in v2 (P2c + P2d). See [v2-retrospective.md](./v2-retro
 - **Selected transcript slice** — child gets a curated subset of parent messages (per-call `slice: {...}` override). Future. Not in current roadmap.
 - **Mid-pair pair-completeness hardening** — placeholder-injection for slicing that lands mid `tool_call`/`tool_result`. P2a inherits the existing `_bodhi-pi/session/fork` gap. Revisit if it bites.
 
-## Execution modes — ✅ parallel batch resolved in P2b
+## Execution modes — ✅ parallel resolved
 
-`subagent_batch` LLM tool + `SubagentService.spawnBatch` shipped in P2b. See [p2b-retrospective.md](./p2b-retrospective.md).
+Parallel sub-agent execution: the LLM emits multiple `subagent` tool calls in one assistant message, pi-agent-core dispatches them concurrently via `Promise.all`. Phase 1 unregistered `subagent_batch` from the LLM tool list (commit 6a2bd218); Phase 2 deleted the entire batch surface (2026-05-19). See `milestones/040-parallel-batch.md` (Superseded), `milestones/005-architecture-decisions.md` Decision 3 (Superseded), and `../plans/we-want-to-merge-jiggly-meteor.md`.
 
 - **Background runs** — fire-and-forget child with synthetic result injection. Roadmap: P3a.
-- ~~**Parallel batch** — multiple children launched together.~~ ✅ landed in P2b.
+- ~~**Parallel batch** — multiple children launched together.~~ ✅ via LLM parallel tool-use of `subagent`.
 - **Resume mid-run** — re-attach to a child that was running when the tab closed. Roadmap: P3b.
 
 ## Policy surfaces
@@ -54,7 +54,6 @@ Both items below shipped in v2 (P2c + P2d). See [v2-retrospective.md](./v2-retro
 
 ## Open knobs to revisit per phase
 
-- **Consolidate `subagent` + `subagent_batch` into one tool** — P2b ships them side-by-side with `subagent_batch.tasks` `minItems: 2` so single dispatch must go through `subagent`. Future option: drop the single tool, lower batch `minItems` to 1, route every dispatch through `subagent_batch` as a degenerate N=1 case. Pros: one less LLM-facing tool surface, no risk of the LLM picking the wrong one. Cons: every single-shot loses the cleaner schema; the wire/UI batch envelope fires for trivially-N=1 cases. Revisit after P3 watches real LLM-invocation patterns in production.
 - Recursion: v1 hard cap at depth 2, child opt-in disabled (the `subagent` tool is excluded from child tool sets unconditionally in v1). Should we expose `maxDepth` per profile in a later phase?
 - Profile model fallback: v1 uses `profile.model → params.modelOverride → parent's current`. Should there be a `subagents.defaultModel` setting layer? Revisit when bundled profiles land (P2c).
 - Compaction: child sessions follow the same compaction rules as parents. Probably fine, but watch for cost surprises in long children. Revisit if retrospective surfaces issues.
@@ -75,6 +74,6 @@ Both items below shipped in v2 (P2c + P2d). See [v2-retrospective.md](./v2-retro
 | `subagentDepth` cached on SessionState | **In v2** | C3b |
 | `evictChild` lifecycle per-status | **In v2** | C3c |
 | Forked context | **In P2a** | C3 — `context: "fork"` accepted in schema + spawn flow wired |
-| Parallel batch | **In P2b** | `subagent_batch` LLM tool + `SubagentService.spawnBatch` + `BatchProgressAccumulator` |
+| Parallel batch | **Shipped P2b, retired Phase 2 (2026-05-19)** | Initially `subagent_batch` LLM tool; replaced by LLM parallel tool-use of `subagent`. |
 | Background mode | Deferred | P3a |
 | Worktree | Deferred | P4a (cli-only) |

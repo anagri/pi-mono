@@ -8,7 +8,7 @@ Seven decisions diverge from one or more harnesses in the research spectrum, and
 
 1. **In-process spawn** — not separate process, not separate ACP session
 2. **Profile is the source of truth** — context mode, model, tools all locked at discovery time; no per-call overrides
-3. **Two LLM tools, not one** — `subagent` (single) and `subagent_batch` (N≥2) are intentionally separate
+3. **Two LLM tools, not one** — `subagent` (single) and `subagent_batch` (N≥2) intentionally separate ⛔ **Superseded (Phase 2, 2026-05-19)** — now one tool `subagent`; parallelism via LLM parallel tool-use
 4. **Fresh context is the default** — fork is opt-in per profile
 5. **Hard depth-cap of 2** — recursion is not configurable; children cannot spawn grandchildren
 6. **MCP-empty for children in v1** — children get zero MCP tools regardless of parent
@@ -55,9 +55,13 @@ Each decision is followed by what we did instead, why, what we gave up, and wher
 
 ---
 
-## Decision 3 — Two LLM tools, not one
+## Decision 3 — Two LLM tools, not one ⛔ Superseded (Phase 2, 2026-05-19)
 
-> **Phase 1 in flight (2026-05-19):** Re-evaluation underway. After surveying the harness landscape more carefully (cc, MastraCode, OpenCode, Gemini CLI, Qwen Code, deepagents all ship a single-task tool and rely on LLM parallel tool-use for concurrency), the dual-tool stance is being empirically tested. Phase 1 has unregistered `subagent_batch` from the LLM tool list while keeping the source code in place; concurrency now comes from the LLM emitting multiple `subagent` tool calls in one assistant turn (verified parallel via pi-agent-core's `Promise.all` dispatch at `packages/agent/src/agent-loop.ts:492`). A load-bearing integration test (`test/subagents-parallel-tool-calls.test.ts`) proves true concurrency using `serverTime` overlap on subagent_start/subagent_end events. If Phase 1 evidence (integration + e2e + e2e-ui + manual cross-runtime check) holds, Phase 2 will delete `subagent_batch` entirely and this decision will be marked Superseded. Plan: `ai-docs/plans/we-want-to-merge-jiggly-meteor.md`.
+> **Superseded by Phase 2 (2026-05-19).** Empirical evidence from Phase 1 (`subagent_batch` LLM tool unregistered + serverTime concurrency proof in integration / e2e / e2e-ui / browser manual smoke) confirmed that pi-agent-core's `Promise.all` dispatch correctly executes multiple `subagent` tool calls emitted in one assistant message — no batch primitive is required for parallelism. Phase 2 deleted `src/tools/subagent-batch.ts`, `src/subagents/batch-progress-accumulator.ts`, `SubagentService.spawnBatch`, `SubagentBatchEntry`, the batch lifecycle events, and the batch wire forwarders. The new locked stance is **one LLM-facing sub-agent tool (`subagent`), with parallelism via LLM parallel tool-use**. Plan: `ai-docs/plans/we-want-to-merge-jiggly-meteor.md`.
+>
+> Reasoning models (gpt-5-mini, o-series) reliably chunk tool calls one-per-assistant-turn → serial execution; non-reasoning models (claude-haiku-4-5, gpt-4o-mini) emit parallel calls → true concurrent execution. The model-dependency is now an authoring concern, not an architectural one.
+>
+> The historical content below describes what the dual-tool stance was and why; it is retained for context but no longer authoritative.
 
 **The spectrum:** Mastra and cc fold single-child and batch into one tool with an array-of-tasks parameter (`minItems: 1`).
 
@@ -97,7 +101,7 @@ Each decision is followed by what we did instead, why, what we gave up, and wher
 
 **The spectrum:** Mastra allows unlimited recursion behind an opt-in. cc caps at 3 by default with config override. OpenHands has no hardcoded cap.
 
-**What bodhi-pi does:** `SUBAGENT_MAX_DEPTH = 2` is a constant. Top-level session is depth 0; a child of the top-level is depth 1; a grandchild would be depth 2 but is never spawned because **the `subagent` and `subagent_batch` tools are unconditionally excluded from every child's tool list, regardless of profile.tools**. The cap is enforced as a tool-availability gate, not a runtime check.
+**What bodhi-pi does:** `SUBAGENT_MAX_DEPTH = 2` is a constant. Top-level session is depth 0; a child of the top-level is depth 1; a grandchild would be depth 2 but is never spawned because **the `subagent` tool is unconditionally excluded from every child's tool list, regardless of profile.tools**. The cap is enforced as a tool-availability gate, not a runtime check.
 
 **Why:**
 - **Loop-safety by construction.** The cap cannot be bypassed by a misbehaving profile or by a model that "really wants" to spawn another child.
@@ -132,7 +136,7 @@ Each decision is followed by what we did instead, why, what we gave up, and wher
 
 **The spectrum:** cc clones the full conversation. Gemini clones the full conversation minus tool internals. Mastra has multiple fork modes. OpenCode does not fork.
 
-**What bodhi-pi does:** When `context: "fork"`, the child receives `cloneTranscriptSlice(parent)` — the full parent message history filtered by `SUBAGENT_FORK_FILTER` to exclude entry types that don't belong in a child's view (`mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`, `subagent_batch`). No "last user prompt only" mode, no per-call slice override, no curated-summary mode.
+**What bodhi-pi does:** When `context: "fork"`, the child receives `cloneTranscriptSlice(parent)` — the full parent message history filtered by `SUBAGENT_FORK_FILTER` to exclude entry types that don't belong in a child's view (`mcp_inclusion_set`, `extension`, `subagent_link`, `subagent_complete`). No "last user prompt only" mode, no per-call slice override, no curated-summary mode.
 
 **Why:**
 - **The child needs the prior context to be useful at depth.** A reviewer child wants to see what the parent saw, not just the task.

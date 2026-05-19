@@ -19,7 +19,7 @@ This milestone is the **biggest single landing** in the sub-agent arc — everyt
 - **`subagent` LLM tool** — registered iff at least one profile was discovered. Schema enumerates profile names so the model can only pick a valid one. Three parameters: `agent`, `task`, `model?`.
 - **Three ext methods** under `_bodhi-pi/subagent/*`: `list` (returns profile summaries with metadata), `run` (host-facing single spawn — same internal code path as the LLM tool), `children` (queries `SessionStore` for sessions where `parentSessionId === <given>`).
 - **`SessionStore` schema additions** — every record gains an optional `parentSessionId` and an optional `subagent: { profileName }` block. `list()` gains an `includeChildren?: boolean` filter that defaults to `false` so parent-facing UIs don't see children.
-- **Three new session-entry variants:** `subagent_link` (parent's record of the spawn), `subagent_complete` (parent's record of the result), and the framing for `subagent_batch` (variant exists in V1 but spawn-batch is milestone 040).
+- **Two new session-entry variants:** `subagent_link` (the spawn record, appended as the first entry of a child session) and `subagent_complete` (terminal marker for the child).
 - **Two `BodhiPiEvent` variants:** `subagent_start` and `subagent_end`. Carry the parent session id, child session id, profile name, task, toolCallId, duration, and status.
 - **Depth tracking on `SessionState`** — `subagentDepth: number` (0 for top-level, incremented on spawn). The `subagent` tool is excluded from the child's tool list at any depth ≥ 1, enforcing the hard cap by construction.
 - **Two slash commands** in reference hosts (cli, browser, chrome-ext, http): `/agents` (list available profiles), `/subagent <name> <task>` (run one). Implemented host-side, calling the ext methods.
@@ -29,7 +29,7 @@ This milestone is the **biggest single landing** in the sub-agent arc — everyt
 - **Built-in profiles** — V1 ships zero bundled profiles; `explore` and `planner` land in milestone 020.
 - **Extension-registered profiles** — `ExtensionAPI.registerSubagentProfile` lands in milestone 020.
 - **Forked context** — milestone 030. V1 only exercises `context: "fresh"`.
-- **Parallel batch** — milestone 040. The `SubagentBatchEntry` variant is declared but no spawn-batch path exists.
+- **Parallel batch tool** — shipped in P2b (milestone 040), retired in Phase 2 (2026-05-19). Parallelism is now achieved by the LLM emitting multiple `subagent` tool calls in one assistant message; pi-agent-core executes them concurrently.
 - **Background mode + resume** — milestones 050, 060.
 - **MCP for children** — out by Decision 6; children get zero MCP tools in V1.
 
@@ -80,7 +80,7 @@ V1 commits bodhi-pi to four of the seven locked decisions:
 - **MCP-empty for children (Decision 6).** Children get nothing despite parent registrations.
 
 V1 does NOT commit yet to:
-- Decision 3 (separate tools) — only `subagent` exists; `subagent_batch` arrives in milestone 040.
+- Decision 3 (separate tools) — only `subagent` exists. Note: Decision 3 was later Superseded in Phase 2 (2026-05-19); the dual-tool stance never made it past P2b.
 - Decision 4 (fresh-default) — only fresh exists; the fork option arrives in milestone 030.
 - Decision 7 (full-transcript fork) — no fork yet.
 
@@ -114,6 +114,6 @@ The test scaffolding helper `scriptSubagentRun` (in `packages/bodhi-pi/test/help
 
 - Built-in profiles + extension-registered sources → milestone [020](020-profile-sources-and-precedence.md).
 - Forked context for richer child input → milestone [030](030-forked-context.md).
-- Parallel batch via `subagent_batch` → milestone [040](040-parallel-batch.md).
+- Parallel sub-agent dispatch → LLM emits multiple `subagent` tool calls in one assistant message; concurrent execution by pi-agent-core. (Originally shipped as `subagent_batch` in milestone [040](040-parallel-batch.md); retired in Phase 2.)
 - The MCP-empty stance from Decision 6 → unblocked by milestone [070](070-mcp-and-skill-inheritance.md).
 - The "discovery warns on dropped files" cleanup work that originally fell out of V1 → hardened during the cleanup wave; current source in `src/subagents/discovery.ts` carries the final form.

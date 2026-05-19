@@ -34,35 +34,13 @@ subagent({
 
 The tool params schema declares `additionalProperties: false`. Context mode is decided by the profile (see [`SubagentProfile.context`](#profile-frontmatter)) and is intentionally NOT exposed as an LLM-facing parameter — single-const optional fields attract free-text from LLMs and trigger validation failures; even with ≥2 valid values, a profile-level decision is more useful than asking the LLM to choose at call time (P2a chose to keep the LLM tool surface unchanged).
 
-### Parallel dispatch (current — Phase 1)
+### Parallel dispatch
 
-Parallel sub-agent execution happens by the LLM emitting **multiple `subagent` tool calls in one assistant turn**. pi-agent-core dispatches them concurrently via `Promise.all` (see `packages/agent/src/agent-loop.ts:492`). Each child runs in its own session as a per-call independent spawn; per-child `subagent_start`/`subagent_end` lifecycle events fire as today. No batch-level envelope events fire in this path.
+Parallel sub-agent execution happens by the LLM emitting **multiple `subagent` tool calls in one assistant turn**. pi-agent-core dispatches them concurrently via `Promise.all` (`packages/agent/src/agent-loop.ts::executeToolCallsParallel`). Each child runs in its own session as a per-call independent spawn; per-child `subagent_start` / `subagent_end` lifecycle events fire, carrying `serverTime` so consumers can prove wall-clock overlap (`max(start.serverTime) <= min(end.serverTime)`). There is no batch envelope tool, batch session-entry type, or batch lifecycle event — concurrency is purely a function of how many `subagent` tool_use blocks the model puts in one assistant message.
 
-The integration contract is verified in `packages/bodhi-pi/test/subagents-parallel-tool-calls.test.ts` using `serverTime` overlap on subagent_start/subagent_end events (true concurrency proof: latest start precedes earliest end).
+The model is expected to issue parallel tool calls when tasks are independent. The tool description (`src/tools/subagent.ts`) carries an explicit "Parallel dispatch (IMPORTANT)" hint instructing the model to bundle independent tasks into one turn. Non-reasoning models (claude-haiku-4-5, gpt-4o-mini) do this reliably; reasoning models (gpt-5-mini, o-series) tend to chunk one tool call per turn, which serialises execution.
 
-### Parallel batch — `subagent_batch` tool (Phase 1: internal-only, slated for Phase 2 deletion)
-
-> **Phase 1 (2026-05-19):** the `subagent_batch` LLM tool has been **unregistered** from the model's tool list. Source code below describes the historical batch surface — it still exists in `src/` but no longer reachable through the LLM tool channel. Phase 2 (gated on Phase 1 evidence) will delete the entire batch surface. Plan: [`ai-docs/plans/we-want-to-merge-jiggly-meteor.md`](../../plans/we-want-to-merge-jiggly-meteor.md).
-
-A sibling tool `subagent_batch` (`src/tools/subagent-batch.ts`) is registered alongside `subagent` whenever ≥1 profile is discovered. It dispatches 2-N children concurrently from a single tool call:
-
-```ts
-subagent_batch({
-  tasks: [{ agent, task, model? }, ...],     // minItems: 2 — for one task use `subagent`
-  failFast?: boolean,                        // default false (collect-all)
-}) -> AgentToolResult with results[] in input order
-```
-
-- `additionalProperties: false` on both the root and each task entry. The schema enumerates available profile names via the same `Type.Union(Type.Literal(...))` pattern as `subagent`.
-- **`minItems: 2`** forces single dispatch through the cleaner `subagent` tool, so the two LLM-facing tools have non-overlapping use cases.
-- **Concurrency cap** lives in `BodhiPiConfig.subagents.maxBatchConcurrency` (default 5; constant `SUBAGENT_DEFAULT_MAX_BATCH_CONCURRENCY` in `src/subagents/subagent-service.ts`). NOT an LLM-facing parameter — `tasks.length > cap` is rejected with a clean error that names the cap. No FIFO queueing.
-- **Failure modes**: `failFast: true` aborts in-flight siblings on the first child that does not complete successfully; the default (collect-all) lets every child run to completion and surfaces per-child status in `results[]`.
-- **Cancellation**: the parent's `client.cancel` aborts every in-flight child via `AbortSignal.any([parentSignal, batchController.signal])` on each child.
-- **Fork mode + parallel**: when ≥1 child is fork-mode, `SubagentService.spawnBatch` computes `cloneTranscriptSlice` ONCE at batch-start time (parent's leafId snapshot) and reuses the resulting `inheritedMessages` for every fork-mode child. Mixed fork+fresh batches are allowed; each child uses its own profile's `context`.
-- **Persistence**: per-child `SubagentLinkEntry`/`SubagentCompleteEntry` land in each child as today. A new `SubagentBatchEntry` lands on the PARENT session recording `{batchToolCallId, childSessionIds[], profileNames[], statuses[], durationMs}` so replays can reconstruct the batch grouping. See [lifecycle.md](./lifecycle.md).
-- **Wire events**: `subagent_batch_start` + `subagent_batch_end` envelope events flow alongside per-child `subagent_start`/`subagent_end` on the `LIFECYCLE_EVENT_METHOD` channel (see [acp.md](./acp.md)). Hosts can render the batch as one collapsible group with N child rows.
-- **Per-child progress mirroring**: `BatchProgressAccumulator` (`src/subagents/batch-progress-accumulator.ts`) coalesces N children's tool/message events into a single `tool_call_update` on the batch's `toolCallId`. The `details` payload carries `kind: "subagent_batch_progress"`, `batchToolCallId`, and an ordered `children[]` snapshot — one entry per child with `{childSessionId, profile, toolCount, status, lastTool?}`. The accumulator only activates when `spawnBatch` receives an `onUpdate`; single-child `spawn` keeps the existing direct `run.onUpdate` path.
-- **No slash command**: `subagent_batch` is LLM-invocation only; the existing `/subagent <name> <task>` (single-shot) covers slash dispatch. Fuller slash UX (`/parallel`, `/chain`) is deferred to P4b.
+The integration contract is verified in `packages/bodhi-pi/test/subagents-parallel-tool-calls.test.ts` (faux provider, deterministic serverTime overlap assertion) and the real-LLM e2e at `packages/bodhi-pi/e2e/shared/subagents-parallel.e2e.ts` (gpt-5-mini / claude-haiku-4-5 round-trip with the same assertion against `h.events`).
 
 ### Profile frontmatter
 

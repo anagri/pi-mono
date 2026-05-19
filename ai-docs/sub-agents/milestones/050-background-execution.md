@@ -93,5 +93,5 @@ The cross-runtime divergence on lifecycle persistence is the hard part. The impl
 
 - **Re-attach after process death** → milestone [060](060-resume-after-disconnect.md). May need to ship together with 050 depending on how the http + chrome-ext lifecycle question is answered.
 - **Auto-injection vs LLM-polling** — synthetic injection is OpenCode's approach. Whether bodhi-pi adopts it depends on whether the LLM-as-poller pattern proves wasteful in practice. The implementing agent designs both surfaces and picks defaults.
-- **Background batch** — `subagent_batch { background: true }` or a `subagent_batch_background` tool? Same Decision-3-style call as the single-child case.
+- **Background parallel dispatch** — when the LLM emits N `subagent` tool calls in one assistant turn AND each carries a `background: true` flag (or the tool is dispatched via a `subagent_background` variant), should the runtime detach from all N in parallel? Mirrors the foreground parallel-dispatch story but at the background layer.
 - **Notification on completion** — if the parent is idle when a child completes, can the host surface a notification? Out of scope here but a natural sequel.

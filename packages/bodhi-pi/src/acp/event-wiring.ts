@@ -62,8 +62,6 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 	events.appendHandlers("mcp_oauth_status_change", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 	events.appendHandlers("subagent_start", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 	events.appendHandlers("subagent_end", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
-	events.appendHandlers("subagent_batch_start", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
-	events.appendHandlers("subagent_batch_end", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 }
 
 /** Dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */

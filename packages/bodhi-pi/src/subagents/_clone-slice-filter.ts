@@ -5,5 +5,4 @@ export const SUBAGENT_FORK_FILTER: Set<SessionEntry["type"]> = new Set([
 	"extension",
 	"subagent_link",
 	"subagent_complete",
-	"subagent_batch",
 ]);

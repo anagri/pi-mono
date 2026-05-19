@@ -26,7 +26,7 @@ Use this when:
 - The task is self-contained and can be delegated to a specialist
 - You want to isolate a focused investigation from the main conversation
 
-**Parallel dispatch (IMPORTANT)**: when you have N independent sub-agent tasks (e.g. word-count + line-count + char-count on the same file, or "review correctness", "review tests", "review docs" of the same PR), emit ALL N \`subagent\` tool calls **in a single assistant message** — do NOT emit one, wait for it, then emit the next. The runtime executes simultaneously-emitted tool calls concurrently via Promise.all; emitting them sequentially across turns serialises them and multiplies wall-clock time. There is no "subagent_batch" tool — parallelism comes from you emitting multiple subagent tool calls together.
+**Parallel dispatch (IMPORTANT)**: when you have N independent sub-agent tasks (e.g. word-count + line-count + char-count on the same file, or "review correctness", "review tests", "review docs" of the same PR), emit ALL N \`subagent\` tool calls **in a single assistant message** — do NOT emit one, wait for it, then emit the next. The runtime executes simultaneously-emitted tool calls concurrently via Promise.all; emitting them sequentially across turns serialises them and multiplies wall-clock time.
 
 Context behavior is decided by the profile, not by this call:
 - context: fresh — the sub-agent starts with NO parent history; include all relevant context in the task description.

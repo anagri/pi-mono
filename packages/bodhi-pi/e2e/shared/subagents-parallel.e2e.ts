@@ -31,7 +31,7 @@ test("parallel subagent calls: parent LLM dispatches three counters via separate
 		prompt: [
 			{
 				type: "text",
-				text: `Dispatch the word-count, line-count, and char-count sub-agents against ${h.cwd}/sample.txt in parallel by issuing three separate \`subagent\` tool calls in the same assistant turn (one tool call per counter). Do not call any tool named subagent_batch — it does not exist. After all three return, summarise each sub-agent's count in your final reply.`,
+				text: `Dispatch the word-count, line-count, and char-count sub-agents against ${h.cwd}/sample.txt in parallel by issuing three separate \`subagent\` tool calls in the same assistant turn (one tool call per counter). After all three return, summarise each sub-agent's count in your final reply.`,
 			},
 		],
 	});

@@ -18,11 +18,15 @@ Shipped 2026-05-18. `context: "fork"` profile mode clones the parent's transcrip
 
 See [p2a-retrospective.md](./p2a-retrospective.md) for what shipped and what's deferred to v3.
 
-### P2b — Parallel batch ✅ landed 2026-05-18
+### P2b → Phase 2 retirement — Parallel sub-agent dispatch ⛔ rewritten 2026-05-19
 
-Shipped a separate `subagent_batch` LLM tool alongside `subagent` (single). `tasks` array is `minItems: 2`; `failFast?: boolean` per-call (collect-all default); `BodhiPiConfig.subagents.maxBatchConcurrency` cap (default 5) is config-only, never an LLM param, and hard-rejects overflow. `SubagentService.spawnBatch` composes the existing per-child `spawn()` via `Promise.all`; AbortSignal.any chains the parent + batch-internal abort controller so failFast aborts in-flight siblings. New `subagent_batch_start`/`subagent_batch_end` envelope events flow alongside per-child `subagent_start`/`subagent_end` on `LIFECYCLE_EVENT_METHOD`; new `SubagentBatchEntry` lands on the parent. `BatchProgressAccumulator` coalesces N children's events into one `details.children[]` payload per tick — retires the v1-retrospective "progress mirroring is one global handler" debt.
+P2b originally shipped a separate `subagent_batch` LLM tool (2026-05-18). Phase 2 (2026-05-19) deleted that entire surface — `src/tools/subagent-batch.ts`, `src/subagents/batch-progress-accumulator.ts`, `SubagentService.spawnBatch`, `SubagentBatchEntry`, the batch lifecycle events, and the batch wire forwarders are gone.
 
-See [p2b-retrospective.md](./p2b-retrospective.md).
+Current shape: **parallelism via LLM parallel tool-use.** When the LLM emits N `subagent` tool calls in one assistant message, pi-agent-core's `Promise.all` executor (`packages/agent/src/agent-loop.ts::executeToolCallsParallel`) runs them concurrently. Each child fires its own `subagent_start` / `subagent_end` lifecycle events stamped with `serverTime`, which consumers use to prove wall-clock overlap (`max(start.serverTime) <= min(end.serverTime)`). No batch envelope tool, batch session-entry, or batch lifecycle event.
+
+Model-dependency: non-reasoning models (claude-haiku-4-5, gpt-4o-mini) emit parallel tool calls reliably; reasoning models (gpt-5-mini, o-series) chunk one-per-turn → sequential execution. The tool description in `src/tools/subagent.ts` instructs the model to bundle independent tasks into one turn.
+
+See [p2b-retrospective.md](./p2b-retrospective.md) for what shipped originally, [`milestones/040-parallel-batch.md`](./milestones/040-parallel-batch.md) for the Phase 2 superseded banner, and [`../plans/we-want-to-merge-jiggly-meteor.md`](../plans/we-want-to-merge-jiggly-meteor.md) for the retirement plan.
 
 ### P2c — Bundled built-in profiles ✅ landed in v2
 
