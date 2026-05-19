@@ -11,12 +11,15 @@ import { useHarness } from "../helpers/use-harness.js";
 const harness = useHarness();
 
 test("parallel subagent calls: parent LLM dispatches three counters via separate subagent tool calls in one assistant turn; children run concurrently (serverTime overlap) and aggregated results reach the final reply", async () => {
-	const model = getModel("openai", "gpt-5-mini");
+	// Anthropic claude-haiku-4-5 is the model that reliably emits multiple tool
+	// calls in one assistant turn — reasoning models like gpt-5-mini chunk
+	// one-per-turn regardless of how strongly the prompt asks for parallel.
+	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("openai"),
+			getApiKey: envKeysFor("anthropic"),
 		}),
 	);
 	await h.setupFiles(await loadScenarioFiles("subagents-batch"));
@@ -43,9 +46,16 @@ test("parallel subagent calls: parent LLM dispatches three counters via separate
 		.toEqual(["char-count", "line-count", "word-count"]);
 
 	const finalText = chunkedAgentText(h.updates).toLowerCase();
-	expect.soft(finalText, `parent reply missing word count: ${finalText}`).toMatch(/word.{0,25}\d+/);
-	expect.soft(finalText, `parent reply missing line count: ${finalText}`).toMatch(/line.{0,25}\d+/);
-	expect.soft(finalText, `parent reply missing char count: ${finalText}`).toMatch(/char.{0,25}\d+/);
+	const countToken = /(?:\d+|[a-z]+(?:[ -][a-z]+)?)/.source;
+	expect
+		.soft(finalText, `parent reply missing word count: ${finalText}`)
+		.toMatch(new RegExp(`word.{0,25}${countToken}`));
+	expect
+		.soft(finalText, `parent reply missing line count: ${finalText}`)
+		.toMatch(new RegExp(`line.{0,25}${countToken}`));
+	expect
+		.soft(finalText, `parent reply missing char count: ${finalText}`)
+		.toMatch(new RegExp(`char.{0,25}${countToken}`));
 
 	const starts = h.events.filter((e): e is SubagentStartEvent => e.type === "subagent_start");
 	const ends = h.events.filter((e): e is SubagentEndEvent => e.type === "subagent_end");

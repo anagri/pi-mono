@@ -39,6 +39,11 @@ export const ALL_EVENT_TYPES: readonly BodhiPiEventType[] = [
 	"session_clone",
 	"mcp_status_change",
 	"mcp_tools_change",
+	"mcp_oauth_status_change",
+	"subagent_start",
+	"subagent_end",
+	"subagent_batch_start",
+	"subagent_batch_end",
 ] as const;
 
 export interface EventRecorder {
