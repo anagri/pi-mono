@@ -372,6 +372,8 @@ class BodhiPiAcpAgent implements AcpAgent {
 			compactionOrchestrator: this.compactionOrchestrator,
 			extensionRunner: () => this.extensionRunnerHost.current(),
 			subagentService: this.subagentService,
+			permissionService: this.permissionService,
+			appendEntry: this.appendEntry.bind(this),
 		};
 	}
 

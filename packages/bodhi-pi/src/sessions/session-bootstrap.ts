@@ -16,6 +16,7 @@ import {
 	type ModelThinkingLevel,
 	type ProviderResponse,
 } from "@earendil-works/pi-ai";
+import { randomUUID } from "@/_internal/uuid.js";
 import type { BodhiPiConfig } from "@/acp/agent.js";
 import { buildSystemPrompt } from "@/acp/system-prompt.js";
 import { loadProjectCommands } from "@/commands/discovery.js";
@@ -24,6 +25,8 @@ import { createEvent } from "@/events/factory.js";
 import { mergeCommands, mergeSubagentProfiles, mergeTools } from "@/extensions/merge.js";
 import type { ExtensionRunner } from "@/extensions/runner.js";
 import { type ModelRegistry, resolveProviderStreamOptions } from "@/models/registry.js";
+import type { AppendEntry, PermissionService } from "@/permissions/permission-service.js";
+import { MODE_PRESETS } from "@/permissions/presets.js";
 import { type AgentMode, DEFAULT_AGENT_MODE, isAgentMode } from "@/permissions/types.js";
 import { buildSessionContext } from "@/sessions/build-context.js";
 import { type CompactionSettings, DEFAULT_COMPACTION_SETTINGS } from "@/sessions/compaction.js";
@@ -39,7 +42,7 @@ import { loadProjectSubagents } from "@/subagents/discovery.js";
 import { getBuiltinSubagentProfiles } from "@/subagents/profiles/index.js";
 import type { SubagentService } from "@/subagents/subagent-service.js";
 import type { SubagentProfile } from "@/subagents/types.js";
-import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools } from "@/tools/index.js";
+import { BUILTIN_TOOL_SNIPPETS, createBuiltinTools, toolKindFor } from "@/tools/index.js";
 import { type ContextFile, loadProjectContextFiles } from "./resource-loader.js";
 
 export interface BootstrapDeps {
@@ -51,6 +54,8 @@ export interface BootstrapDeps {
 	compactionOrchestrator: CompactionOrchestrator;
 	extensionRunner: () => ExtensionRunner | undefined;
 	subagentService: SubagentService;
+	permissionService: PermissionService;
+	appendEntry: AppendEntry;
 }
 
 /**
@@ -111,6 +116,7 @@ export async function loadProjectArtifacts(
 /**
  * Build the composed system prompt: optional host-supplied base + builtin tool list + skills section
  * + cwd context-files. `appendSystemPrompt` precedence: host-explicit > `mergedFileSettings.appendSystemPrompt`.
+ * `mode` controls which `MODE_PRESETS[mode].systemPromptSuffix` is appended after the standard prompt.
  */
 export function composeSystemPrompt(
 	config: BodhiPiConfig,
@@ -120,10 +126,11 @@ export function composeSystemPrompt(
 		contextFiles: ContextFile[];
 		skills: Skill[];
 		cwd: string;
+		mode: AgentMode;
 	},
 ): { prompt: string; resolvedAppend: string | undefined } {
 	const resolvedAppend = config.appendSystemPrompt ?? args.mergedFileSettings.appendSystemPrompt ?? undefined;
-	const prompt = buildSystemPrompt({
+	const basePrompt = buildSystemPrompt({
 		...(config.systemPrompt !== undefined ? { customPrompt: config.systemPrompt } : {}),
 		selectedTools: args.tools.map((t) => t.name),
 		toolSnippets: BUILTIN_TOOL_SNIPPETS,
@@ -132,6 +139,8 @@ export function composeSystemPrompt(
 		contextFiles: args.contextFiles,
 		skills: args.skills,
 	});
+	const modeSuffix = MODE_PRESETS[args.mode].systemPromptSuffix;
+	const prompt = modeSuffix ? `${basePrompt}\n\n${modeSuffix}` : basePrompt;
 	return { prompt, resolvedAppend };
 }
 
@@ -145,6 +154,8 @@ export function createPiAgent(
 		sessions: Map<string, SessionState>;
 		modelRegistry: ModelRegistry;
 		compactionOrchestrator: CompactionOrchestrator;
+		permissionService: PermissionService;
+		appendEntry: AppendEntry;
 	},
 	args: {
 		sessionId: string;
@@ -156,7 +167,7 @@ export function createPiAgent(
 		retryOptions: ResolvedRetryOptions;
 	},
 ): Agent {
-	const { events, sessions, modelRegistry, compactionOrchestrator } = deps;
+	const { events, sessions, modelRegistry, compactionOrchestrator, permissionService, appendEntry } = deps;
 	const resolveApiKey = (provider: string) => modelRegistry.resolveProviderApiKey(provider);
 	return new Agent({
 		...args.retryOptions,
@@ -177,9 +188,41 @@ export function createPiAgent(
 					input: ctx.args as Record<string, unknown>,
 				}),
 			);
-			return result.block
-				? { block: true, ...(result.reason !== undefined ? { reason: result.reason } : {}) }
-				: undefined;
+			if (result.block) {
+				return { block: true, ...(result.reason !== undefined ? { reason: result.reason } : {}) };
+			}
+			const decision = await permissionService.evaluateToolCall(args.sessionId, {
+				name: ctx.toolCall.name,
+				arguments: ctx.args,
+			});
+			if (decision.kind === "deny") {
+				const session = sessions.get(args.sessionId);
+				if (session) {
+					const category = toolKindFor(ctx.toolCall.name);
+					await events.emit(
+						createEvent("tool_blocked", {
+							sessionId: args.sessionId,
+							toolCallId: ctx.toolCall.id,
+							toolName: ctx.toolCall.name,
+							category,
+							mode: session.runtime.mode,
+							reason: decision.reason,
+						}),
+					);
+					await appendEntry(args.sessionId, session, {
+						type: "custom_message",
+						id: randomUUID(),
+						parentId: session.runtime.leafId,
+						timestamp: Date.now(),
+						extensionName: "modes",
+						customType: "tool_blocked",
+						content: decision.reason,
+						display: true,
+					});
+				}
+				return { block: true, reason: decision.reason };
+			}
+			return undefined;
 		},
 		afterToolCall: async (ctx: AfterToolCallContext): Promise<AfterToolCallResult | undefined> => {
 			const overrides = await events.emitToolResult(
@@ -269,12 +312,14 @@ export async function buildSessionState(
 	const tools = runner ? mergeTools(builtinTools, runner.getTools()) : builtinTools;
 	const commands = runner ? mergeCommands(projectCommands, runner.getCommands()) : projectCommands;
 
+	const resolvedMode = resolveInitialMode(config, mergedFileSettings, args.initialMode ?? null);
 	const { prompt: composedSystemPrompt, resolvedAppend } = composeSystemPrompt(config, {
 		tools,
 		mergedFileSettings,
 		contextFiles,
 		skills,
 		cwd,
+		mode: resolvedMode,
 	});
 	const effectiveCompaction: CompactionSettings = {
 		...DEFAULT_COMPACTION_SETTINGS,
@@ -285,10 +330,16 @@ export async function buildSessionState(
 		initialThinkingLevel ?? config.defaultThinkingLevel ?? mergedFileSettings.defaultThinkingLevel ?? "off";
 	const resolvedThinkingLevel = resolvedModel ? clampThinkingLevel(resolvedModel, requestedThinking) : "off";
 	const retryOptions = resolveProviderStreamOptions(resolvedModel?.provider ?? "openai", mergedFileSettings);
-	const resolvedMode = resolveInitialMode(config, mergedFileSettings, args.initialMode ?? null);
 
 	const piAgent = createPiAgent(
-		{ events, sessions, modelRegistry, compactionOrchestrator },
+		{
+			events,
+			sessions,
+			modelRegistry,
+			compactionOrchestrator,
+			permissionService: deps.permissionService,
+			appendEntry: deps.appendEntry,
+		},
 		{
 			sessionId,
 			model: resolvedModel,

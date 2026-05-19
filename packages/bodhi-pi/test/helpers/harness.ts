@@ -16,6 +16,7 @@ import {
 	type SessionStore,
 	type Terminal,
 } from "@/index.js";
+import type { McpConnectionProvider } from "@/mcp/mcp-connection-provider.js";
 import { createInProcessAcpPair } from "./in-process-connection.js";
 
 export interface TestHarnessOptions {
@@ -39,6 +40,7 @@ export interface TestHarnessOptions {
 	allowsAllowAllModeAsDefault?: boolean;
 	logger?: BodhiPiLogger;
 	supportsMcpStdio?: boolean;
+	mcpConnectionProvider?: McpConnectionProvider;
 }
 
 export interface TestHarness {
@@ -86,6 +88,7 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 				: {}),
 			...(opts.logger !== undefined ? { logger: opts.logger } : {}),
 			...(opts.supportsMcpStdio !== undefined ? { supportsMcpStdio: opts.supportsMcpStdio } : {}),
+			...(opts.mcpConnectionProvider !== undefined ? { mcpConnectionProvider: opts.mcpConnectionProvider } : {}),
 		}),
 		() => ({
 			sessionUpdate: async (params) => {

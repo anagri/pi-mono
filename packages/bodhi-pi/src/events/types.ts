@@ -335,6 +335,21 @@ export interface ToolApprovalResponseEvent extends BodhiPiEventCommon {
 	kind: ToolApprovalKind;
 }
 
+/**
+ * Fired when `PermissionService.evaluateToolCall` returns `{ kind: "deny" }` and the
+ * gate in `createPiAgent.beforeToolCall` rejects the call. One-shot lifecycle event
+ * (no wire round-trip); Hosts subscribe via the lifecycle channel for live UI updates.
+ */
+export interface ToolBlockedEvent extends BodhiPiEventCommon {
+	type: "tool_blocked";
+	sessionId: string;
+	toolCallId: string;
+	toolName: string;
+	category: ToolCategory;
+	mode: AgentMode;
+	reason: string;
+}
+
 // === Sub-agent lifecycle ===
 
 export interface SubagentStartEvent extends BodhiPiEventCommon {
@@ -397,6 +412,7 @@ export type BodhiPiEvent =
 	| ModeChangeEvent
 	| ToolApprovalRequestEvent
 	| ToolApprovalResponseEvent
+	| ToolBlockedEvent
 	| SubagentStartEvent
 	| SubagentEndEvent;
 
@@ -450,6 +466,7 @@ export interface BodhiPiEventHandlers {
 	mode_change?: ((event: ModeChangeEvent) => Awaitable<void>)[];
 	tool_approval_request?: ((event: ToolApprovalRequestEvent) => Awaitable<void>)[];
 	tool_approval_response?: ((event: ToolApprovalResponseEvent) => Awaitable<void>)[];
+	tool_blocked?: ((event: ToolBlockedEvent) => Awaitable<void>)[];
 	subagent_start?: ((event: SubagentStartEvent) => Awaitable<void>)[];
 	subagent_end?: ((event: SubagentEndEvent) => Awaitable<void>)[];
 }

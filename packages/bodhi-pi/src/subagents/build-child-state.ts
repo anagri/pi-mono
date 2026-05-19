@@ -18,7 +18,7 @@ export interface BuildChildSessionStateArgs {
 }
 
 export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChildSessionStateArgs): Promise<void> {
-	const { config, sessions, modelRegistry, events, compactionOrchestrator } = deps;
+	const { config, sessions, modelRegistry, events, compactionOrchestrator, permissionService, appendEntry } = deps;
 	const cwd = args.parentSessionState.cwd;
 
 	const requestedModelId =
@@ -45,7 +45,7 @@ export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChi
 	const retryOptions = { ...args.parentSessionState.retryOptions };
 
 	const piAgent = createPiAgent(
-		{ events, sessions, modelRegistry, compactionOrchestrator },
+		{ events, sessions, modelRegistry, compactionOrchestrator, permissionService, appendEntry },
 		{
 			sessionId: args.childSessionId,
 			model,
