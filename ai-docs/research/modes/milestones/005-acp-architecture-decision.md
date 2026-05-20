@@ -25,7 +25,9 @@ And the four key architectural pillars:
 
 3. **Bodhi-pi extends the existing `setSessionConfigOption` dispatch** — does NOT add a new `setSessionMode` handler. The bodhi-pi codebase already has `MODEL_CONFIG_ID = "model"` and `THINKING_CONFIG_ID = "thinking"` in `src/wire/constants.ts:2,20`; the dispatch table is in `src/models/registry.ts:217-236`. Adding `MODE_CONFIG_ID = "mode"` is one more entry in that table. `PermissionService` provides the `buildModeConfigOption(session)` builder and the `setSessionMode(sessionId, modeId)` action; the registry's dispatch glue is unchanged in shape.
 
-4. **In-process EventDispatcher events stay** — `mode_change`, `tool_approval_request`, `tool_approval_response` remain on the bodhi-pi event bus for extensions to subscribe to. They are NOT wire-forwarded via `LIFECYCLE_EVENT_METHOD` because the same information goes over the wire via native ACP messages (`config_option_update` and `request_permission` round-trip). One source of truth on the wire.
+4. **In-process EventDispatcher events stay** — `mode_change`, `tool_approval_request`, `tool_approval_response` remain on the bodhi-pi event bus for extensions to subscribe to. `mode_change`'s wire view is the native `config_option_update`, so it is NOT separately wire-forwarded.
+
+   **Revised in milestone 040 (implementation):** `tool_approval_request` / `tool_approval_response` ARE forwarded via `LIFECYCLE_EVENT_METHOD` (mirroring 030's `tool_blocked`). The native `request_permission` round-trip carries the *decision*; the two lifecycle notifications are pure *observability* so remote Clients and the e2e/Playwright suites can watch the request→response pair (the repo's "major components expose lifecycle events on both rails" pillar mandates the wire forwarder + an `extNotifications` regression test). This supersedes the original "NOT wire-forwarded" stance for the two approval events; `mode_change` stays in-process-only.
 
 ## Why ACP-native (not custom `_bodhi-pi/*`)
 

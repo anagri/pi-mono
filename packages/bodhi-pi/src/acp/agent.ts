@@ -257,6 +257,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 		this.permissionService = new PermissionService({
 			sessions: this.sessions,
 			events: this.events,
+			conn: this.conn,
 			appendEntry: this.appendEntry.bind(this),
 			capabilities: {
 				allowsAllowAllMode: config.allowsAllowAllMode === true,
@@ -673,6 +674,10 @@ class BodhiPiAcpAgent implements AcpAgent {
 		const session = this.sessions.get(params.sessionId);
 		if (!session) return;
 		session.runtime.cancelled = true;
+		for (const pending of session.runtime.pendingApprovals.values()) {
+			pending.resolve({ outcome: { outcome: "cancelled" } });
+		}
+		session.runtime.pendingApprovals.clear();
 		session.runtime.piAgent.abort();
 	}
 

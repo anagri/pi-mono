@@ -125,8 +125,10 @@ Three new events on `EventDispatcher` (`src/events/types.ts`):
 Both approval events carry `correlationId: string` so extensions can match request → response cleanly.
 
 **Wire view**: `mode_change` is forwarded to the wire as a native `config_option_update`
-`SessionUpdate` (NOT through `LIFECYCLE_EVENT_METHOD`). The approval events will route through
-`session/request_permission` in Phase 1.
+`SessionUpdate` (NOT through `LIFECYCLE_EVENT_METHOD`). The approval round-trip itself rides native
+`session/request_permission` (request/response). As of milestone 040 the two approval events are
+ALSO forwarded as `LIFECYCLE_EVENT_METHOD` notifications (mirroring `tool_blocked`) so remote Clients
+and e2e/Playwright suites can observe the request → response pair on the wire.
 
 ## Per-Host UI
 
@@ -148,7 +150,7 @@ Phase 0 ships read-only visual surface + slash commands. No interactive dropdown
 | 010 — ground prep (types + tool-cat + event types + settings schema) | ☑ | Phase 0 |
 | 020 — mode-state + setSessionConfigOption | ☑ | Phase 0 |
 | 030 — plan-mode plumbing (preset + evaluator + gate + suffix + tool_blocked + custom_message renderers) | ☑ | Phase 1 |
-| 040 — ask-mode `request_permission` round-trip | ☐ | |
+| 040 — ask-mode `request_permission` round-trip | ☑ | Phase 2 |
 | 050 — edit-mode preset + fine-grained patterns | ☐ | |
 | 060 — plan-mode `submit_plan` + 3-option approval UI + plan→edit auto-transition | ☐ | |
 | 070 — allow-all semantics & guardrails | ☐ | |
@@ -187,10 +189,68 @@ Phase 0 ships read-only visual surface + slash commands. No interactive dropdown
   reuse `AppShell` to push a `[data-testid="custom-message"][data-test-state="tool-blocked"]`
   system message). Ask/edit/allow-all enforcement stays inert in this phase.
 
+### Phase 2 deliverables (milestone 040 — ask mode + approval round-trip)
+
+- `MODE_PRESETS.ask.policy.categories` filled: `read`/`search`/`subagent` allow;
+  `edit`/`execute`/`mcp`/`other` ask. Subagent AUTO-ALLOWS — a parent→child
+  `subagent` call does not prompt (child still gates its own tools).
+- `PermissionService.evaluateToolCall` resolves an `ask`-category call internally
+  (the public return stays `allow | deny`): it checks `runtime.permissionGrants`
+  first, else emits a pending `tool_call` card (`status: "pending"`) + a
+  `tool_approval_request` lifecycle event, then awaits `conn.requestPermission`
+  raced against `runtime.approvalTimeoutMs` (default 30000) and `session/cancel`.
+  It decodes the verdict, records `*_always` grants, emits `tool_approval_response`,
+  and returns `allow`/`deny`. The 030 gate is unchanged — a `deny` reuses the
+  existing `tool_blocked` + `custom_message` path (which also flips the pending card
+  to `failed`).
+- 4 approval options: `allow_once`, `allow_always`, `reject_once`, `reject_always`
+  (6-option scope-encoding deferred to milestone 100). On reject BOTH
+  `tool_approval_response{kind:"reject_*"}` and `tool_blocked` fire.
+- `runtime.permissionGrants: Map<toolName, "allow"|"deny">` is in-memory, per-session,
+  cleared on `setMode` (no cross-mode leak), and NOT inherited by child sessions.
+  KV persistence + glob patterns are milestone 100.
+- MCP: `evaluateMcpTool` honors ask — `readOnlyHint===true` auto-allows; otherwise the
+  call runs the same approval round-trip.
+- `tool_approval_request` / `tool_approval_response` forward via `LIFECYCLE_EVENT_METHOD`.
+- Compaction is NOT gated (its summarization is tool-less direct model calls; the
+  `beforeToolCall` hook never fires during compaction — no bypass flag is needed).
+- Approval flow:
+
+```mermaid
+sequenceDiagram
+  participant Gate as beforeToolCall (030, unchanged)
+  participant PS as PermissionService
+  participant Conn as conn (ACP)
+  participant Cli as Client
+  Gate->>PS: evaluateToolCall(sid, {id,name,args})
+  alt allow category / known grant
+    PS-->>Gate: allow | deny (no prompt)
+  else ask category
+    PS->>Conn: sessionUpdate(tool_call, status:"pending")
+    PS->>PS: emit tool_approval_request (→ wire)
+    PS->>Conn: requestPermission(toolCall, 4 options)
+    Conn->>Cli: session/request_permission
+    Note over PS: race( response , timeout , cancel )
+    Cli-->>PS: selected{optionId} | cancelled
+    PS->>PS: decode → kind; record *_always grant
+    PS->>PS: emit tool_approval_response (→ wire)
+    PS-->>Gate: allow (allow_*) | deny (reject_*/cancel/timeout)
+  end
+```
+
+### Test-app drivers (no UI modals — `test-apps/CLAUDE.md` doctrine)
+
+- Vitest: harness `requestPermission` reads `autoApproveAll` (default `true` →
+  `allow_once`) or a per-test `approvalResponses` FIFO queue.
+- Playwright + CLI: a Client-side pending-approval registry decodes a composer-typed
+  `/approve [once|always]` / `/reject [once|always]` into the `RequestPermissionResponse`.
+- HTTP+SSE cannot carry `requestPermission` (server→client request); the WS transport
+  covers the HTTP runtime for approvals. Documented gap; SSE bridge deferred.
+
 ## References
 
 - Research wave: `ai-docs/research/modes/` (000-overview, 005-acp-architecture-decision, 010-100).
 - Source: `src/permissions/`, `src/sessions/session-bootstrap.ts`, `src/acp/agent.ts`, `src/acp/event-wiring.ts`, `src/mcp/`.
-- Tests: `test/modes-state.test.ts`, `test/permissions-types.test.ts`, `test/tools-categorisation.test.ts`, `test/plan-mode-policy.test.ts`, `test/plan-mode-mcp.test.ts`, `test/plan-mode-subagent.test.ts`, `src/permissions/permission-evaluator.test.ts`, `src/mcp/mcp-registry.test.ts`.
-- E2E: `e2e/shared/mode.e2e.ts`, `e2e/shared/plan-mode.e2e.ts`.
-- Playwright: `e2e-ui/shared/mode-switch.spec.ts`, `e2e-ui/shared/plan-mode.spec.ts`.
+- Tests: `test/modes-state.test.ts`, `test/permissions-types.test.ts`, `test/tools-categorisation.test.ts`, `test/plan-mode-policy.test.ts`, `test/plan-mode-mcp.test.ts`, `test/plan-mode-subagent.test.ts`, `test/ask-mode-policy.test.ts`, `test/ask-mode-approval-flow.test.ts`, `src/permissions/permission-evaluator.test.ts`, `src/mcp/mcp-registry.test.ts`.
+- E2E: `e2e/shared/mode.e2e.ts`, `e2e/shared/plan-mode.e2e.ts`, `e2e/shared/ask-mode.e2e.ts`.
+- Playwright: `e2e-ui/shared/mode-switch.spec.ts`, `e2e-ui/shared/plan-mode.spec.ts`, `e2e-ui/shared/ask-mode.spec.ts`.

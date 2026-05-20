@@ -95,7 +95,7 @@ Source: `src/settings/settings.ts:35-42`.
 | `defaultModelId` | `string` | Default model id. Canonical name (matches `BodhiPiConfig.defaultModelId`). The legacy `defaultModel` key is still read for back-compat — see § Known weaknesses D6 |
 | `defaultThinkingLevel` | `ModelThinkingLevel` | Default thinking budget |
 | `defaultMode` | `AgentMode` | Default session mode (`ask` \| `plan` \| `edit` \| `allow-all`). `allow-all` gated by `allowsAllowAllModeAsDefault`. See [modes.md](./modes.md) |
-| `permission.approvalTimeoutMs` | `number` | Phase 0: parse-and-store only (no timeout machinery wired yet). Approval flow lands in milestone 030 |
+| `permission.approvalTimeoutMs` | `number` | Ask-mode approval timeout (default `30000`). Resolved at session bootstrap into `runtime.approvalTimeoutMs`; `PermissionService` races `conn.requestPermission` against it, resolving to a `deny` (`kind: "timeout"`) when it fires. Wired in milestone 040 |
 | `appendSystemPrompt` | `string` | Appended after the composed system prompt |
 | `compaction` | `Partial<CompactionSettings>` | Compaction thresholds |
 | `providerOptions` | `Record<string, ProviderOptionsEntry>` | Per-provider retry/timeout/maxRetryDelay |

@@ -1,3 +1,4 @@
+import type { AgentSideConnection, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { describe, expect, it } from "vitest";
 import { EventDispatcher } from "@/events/dispatcher.js";
 import type { McpToolAnnotations } from "@/mcp/mcp-types.js";
@@ -6,27 +7,45 @@ import { PermissionService } from "./permission-service.js";
 import { MODE_PRESETS } from "./presets.js";
 import type { AgentMode } from "./types.js";
 
-function makeSessionWithMode(mode: AgentMode): SessionState {
-	return { runtime: { mode } } as unknown as SessionState;
+function makeSessionWithMode(mode: AgentMode, approvalTimeoutMs: number): SessionState {
+	return {
+		runtime: { mode, permissionGrants: new Map(), pendingApprovals: new Map(), approvalTimeoutMs },
+	} as unknown as SessionState;
 }
 
 interface BuildOpts {
 	mcpAnnotationLookup?: (sessionId: string, fullName: string) => McpToolAnnotations | undefined;
+	/** Verdict the stub `conn.requestPermission` returns; defaults to `allow_once`. */
+	requestPermission?: () => Promise<RequestPermissionResponse>;
+	approvalTimeoutMs?: number;
 }
 
-function buildService(mode: AgentMode, opts: BuildOpts = {}): { service: PermissionService; sessionId: string } {
+function buildService(
+	mode: AgentMode,
+	opts: BuildOpts = {},
+): { service: PermissionService; sessionId: string; session: SessionState } {
 	const sessions = new Map<string, SessionState>();
 	const sessionId = "s1";
-	sessions.set(sessionId, makeSessionWithMode(mode));
+	const session = makeSessionWithMode(mode, opts.approvalTimeoutMs ?? 30000);
+	sessions.set(sessionId, session);
+	const conn = {
+		sessionUpdate: async () => {},
+		requestPermission:
+			opts.requestPermission ??
+			(async (): Promise<RequestPermissionResponse> => ({
+				outcome: { outcome: "selected", optionId: "allow_once" },
+			})),
+	} as unknown as AgentSideConnection;
 	const service = new PermissionService({
 		sessions,
 		events: new EventDispatcher(),
+		conn,
 		appendEntry: async () => {},
 		capabilities: { allowsAllowAllMode: true, allowsAllowAllModeAsDefault: false },
 		logger: console,
 		...(opts.mcpAnnotationLookup ? { mcpAnnotationLookup: opts.mcpAnnotationLookup } : {}),
 	});
-	return { service, sessionId };
+	return { service, sessionId, session };
 }
 
 describe("PermissionService.evaluateToolCall — plan mode", () => {
@@ -114,16 +133,99 @@ describe("PermissionService.evaluateToolCall — plan mode", () => {
 	});
 });
 
-describe("PermissionService.evaluateToolCall — non-plan modes stay inert", () => {
-	it("ask mode allows every tool (phase 1 placeholder; enforcement is milestone 040)", async () => {
-		const { service, sessionId } = buildService("ask");
-		for (const name of ["read", "write", "edit", "bash", "subagent", "totally_unknown_tool"]) {
+describe("PermissionService.evaluateToolCall — ask mode (040)", () => {
+	it("auto-allows read/search/subagent without prompting", async () => {
+		const { service, sessionId } = buildService("ask", {
+			requestPermission: async () => {
+				throw new Error("should not prompt for auto-allow categories");
+			},
+		});
+		for (const name of ["read", "ls", "find", "grep", "subagent"]) {
 			const d = await service.evaluateToolCall(sessionId, { id: "tc1", name, arguments: {} });
 			expect(d, `${name} in ask mode`).toEqual({ kind: "allow" });
 		}
 	});
 
-	it("edit mode allows every tool (phase 1 placeholder; enforcement is milestone 040)", async () => {
+	it("prompts for edit/execute/other and resolves the verdict (allow_once → allow)", async () => {
+		const { service, sessionId } = buildService("ask");
+		for (const name of ["write", "edit", "bash", "totally_unknown_tool"]) {
+			const d = await service.evaluateToolCall(sessionId, { id: "tc1", name, arguments: {} });
+			expect(d, `${name} in ask mode`).toEqual({ kind: "allow" });
+		}
+	});
+
+	it("blocks when the user rejects (reject_once → deny)", async () => {
+		const { service, sessionId } = buildService("ask", {
+			requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "reject_once" } }),
+		});
+		const d = await service.evaluateToolCall(sessionId, { id: "tc1", name: "write", arguments: {} });
+		expect(d.kind).toBe("deny");
+	});
+
+	it("blocks when the prompt is cancelled", async () => {
+		const { service, sessionId } = buildService("ask", {
+			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+		});
+		const d = await service.evaluateToolCall(sessionId, { id: "tc1", name: "bash", arguments: {} });
+		expect(d.kind).toBe("deny");
+	});
+
+	it("blocks when the prompt times out", async () => {
+		const { service, sessionId } = buildService("ask", {
+			approvalTimeoutMs: 10,
+			requestPermission: () => new Promise(() => {}),
+		});
+		const d = await service.evaluateToolCall(sessionId, { id: "tc1", name: "write", arguments: {} });
+		expect(d.kind).toBe("deny");
+	});
+});
+
+describe("PermissionService.evaluateToolCall — ask-mode session grants", () => {
+	it("allow_always records a grant so the same tool skips the second prompt", async () => {
+		let calls = 0;
+		const { service, sessionId, session } = buildService("ask", {
+			requestPermission: async () => {
+				calls++;
+				return { outcome: { outcome: "selected", optionId: "allow_always" } };
+			},
+		});
+		const first = await service.evaluateToolCall(sessionId, { id: "tc1", name: "write", arguments: {} });
+		const second = await service.evaluateToolCall(sessionId, { id: "tc2", name: "write", arguments: {} });
+		expect(first).toEqual({ kind: "allow" });
+		expect(second).toEqual({ kind: "allow" });
+		expect(calls, "only the first call prompts").toBe(1);
+		expect(session.runtime.permissionGrants.get("write")).toBe("allow");
+	});
+
+	it("reject_always records a deny grant so the same tool is blocked without re-prompting", async () => {
+		let calls = 0;
+		const { service, sessionId, session } = buildService("ask", {
+			requestPermission: async () => {
+				calls++;
+				return { outcome: { outcome: "selected", optionId: "reject_always" } };
+			},
+		});
+		const first = await service.evaluateToolCall(sessionId, { id: "tc1", name: "bash", arguments: {} });
+		const second = await service.evaluateToolCall(sessionId, { id: "tc2", name: "bash", arguments: {} });
+		expect(first.kind).toBe("deny");
+		expect(second.kind).toBe("deny");
+		expect(calls, "only the first call prompts").toBe(1);
+		expect(session.runtime.permissionGrants.get("bash")).toBe("deny");
+	});
+
+	it("setMode clears session grants so a later mode does not inherit an allow_always", async () => {
+		const { service, sessionId, session } = buildService("ask", {
+			requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "allow_always" } }),
+		});
+		await service.evaluateToolCall(sessionId, { id: "tc1", name: "write", arguments: {} });
+		expect(session.runtime.permissionGrants.size).toBe(1);
+		await service.setMode(sessionId, "plan", "user");
+		expect(session.runtime.permissionGrants.size).toBe(0);
+	});
+});
+
+describe("PermissionService.evaluateToolCall — edit/allow-all stay permissive", () => {
+	it("edit mode allows every tool (enforcement is milestone 050)", async () => {
 		const { service, sessionId } = buildService("edit");
 		for (const name of ["read", "write", "edit", "bash", "subagent", "totally_unknown_tool"]) {
 			const d = await service.evaluateToolCall(sessionId, { id: "tc1", name, arguments: {} });

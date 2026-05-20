@@ -1,6 +1,15 @@
-# Milestone 030 — `ask` mode + ACP `requestPermission` flow
+# Milestone 040 — `ask` mode + ACP `requestPermission` flow
 
 > **Read [005-acp-architecture-decision.md](005-acp-architecture-decision.md) BEFORE this milestone.** It revises the option-set design here.
+>
+> **Phase-2 implementation scope delta (what actually shipped):** 4 approval options only —
+> `allow_once` / `allow_always` / `reject_once` / `reject_always` (the 6-option scope-encoded
+> `optionId` set described below is deferred to milestone 100 alongside KV-persistent rules). No
+> per-Host UI modals — Vitest drives via a programmatic verdict queue, Playwright/CLI via a
+> composer-typed `/approve`·`/reject` slash (per `test-apps/CLAUDE.md`). The compaction permission
+> bypass was dropped (compaction is tool-less, so the gate never fires). `tool_approval_request` /
+> `tool_approval_response` ARE wire-forwarded via `LIFECYCLE_EVENT_METHOD` (see the 005 revision).
+> HTTP+SSE cannot carry `requestPermission`; the WS transport covers the HTTP runtime.
 > Also read [000-overview.md](000-overview.md), [010-ground-preparation.md](010-ground-preparation.md), [020-mode-state-and-set-session-mode.md](020-mode-state-and-set-session-mode.md). Milestones 010 and 020 must be merged before this milestone starts. **This is the biggest milestone in the plan — both the policy engine and the 4-runtime approval UI land here.**
 
 ## Updated approach (per 005)

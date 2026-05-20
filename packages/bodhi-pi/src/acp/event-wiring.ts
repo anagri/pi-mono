@@ -67,6 +67,8 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 	events.appendHandlers("subagent_start", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 	events.appendHandlers("subagent_end", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 	events.appendHandlers("tool_blocked", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
+	events.appendHandlers("tool_approval_request", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
+	events.appendHandlers("tool_approval_response", [(e) => notifyLifecycle(e as unknown as Record<string, unknown>)]);
 }
 
 /** Dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */
