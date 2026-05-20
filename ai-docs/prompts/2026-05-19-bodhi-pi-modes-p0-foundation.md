@@ -1,6 +1,6 @@
 # Kickoff: bodhi-pi modes phase 0 — ground prep + mode state via ACP-native `setSessionConfigOption`
 
-**Output**: an exploratory plan written to `ai-docs/plans/YYYY-MM-DD-bodhi-pi-modes-p0-foundation.md` AFTER you've grilled the user on the open questions below. Read code first, batch decision points via `AskUserQuestion` (each option marked with your recommended answer), get plan approval before any code edits. Same shape as the sub-agents v1/v2 kickoff workflow.
+**Output**: implement the feature AFTER you've grilled the user on the open questions below. Read code first, batch decision points via `AskUserQuestion` (each option marked with your recommended answer), get plan approval before any code edits. Same shape as the sub-agents v1/v2 kickoff workflow.
 
 ## Status going in
 
