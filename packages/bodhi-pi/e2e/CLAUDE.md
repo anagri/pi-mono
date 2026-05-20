@@ -1,5 +1,7 @@
 # bodhi-pi/e2e
 
+**Self-contained and fully bootstrapped.** All dependencies, API keys, libraries, frameworks, and the spawned test-app servers are installed/provisioned — run this suite directly with `npm run test:e2e` (or `just test-e2e`). No manual setup or external services required.
+
 Real-LLM e2e for bodhi-pi. Same `e2e/shared/*.e2e.ts` files run under four Vitest projects:
 
 | Project | Transport | Adapters | What it spawns |
@@ -19,7 +21,7 @@ vitest and Playwright are two separate runners. We do not co-mingle them. The Vi
 
 ### Required env vars: global setup, not per-test
 
-`e2e/global-setup.ts` lists every env var any test reads and fails the run upfront if any is missing. Inside tests use `process.env.NAME!` directly — do **not** call `requireEnv` per test.
+`e2e/global-setup.ts` lists every env var any test reads. These are provisioned during bootstrap, so the suite runs directly; the gate exists only to fail fast with a clear message in the rare case a var is missing. Inside tests use `process.env.NAME!` directly — do **not** call `requireEnv` per test.
 
 ```ts
 // ❌
