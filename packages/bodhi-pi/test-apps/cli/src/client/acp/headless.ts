@@ -329,7 +329,8 @@ export async function runHeadless(opts: HeadlessOptions): Promise<void> {
 					if (content?.type === "text" && content.text) turnText += content.text;
 				}
 			},
-			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
+			// Headless turns run to completion before the next stdin line; auto-approve with a valid verdict.
+			requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "allow_once" } }),
 			extNotification: async (method, params) => {
 				if (method !== LIFECYCLE_EVENT_METHOD) return;
 				const event = params as { type?: string; slug?: string; status?: string; errorMessage?: string };

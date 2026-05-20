@@ -112,7 +112,10 @@ export function createTransportAdapter(opts: CreateTransportAdapterOptions): Tra
 				sessionUpdate: async (params) => {
 					callbacks.onSessionUpdate(params);
 				},
-				requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+				requestPermission: async (params) =>
+					callbacks.onPermissionRequest
+						? callbacks.onPermissionRequest(params)
+						: { outcome: { outcome: "cancelled" } },
 			};
 			const conn = new ClientSideConnection((_agent: Agent): Client => client, stream);
 

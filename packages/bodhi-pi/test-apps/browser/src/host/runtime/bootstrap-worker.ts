@@ -71,6 +71,8 @@ function eventForwardingHandlers(): BodhiPiEventHandlers {
 		subagent_start: [post],
 		subagent_end: [post],
 		tool_blocked: [post],
+		tool_approval_request: [post],
+		tool_approval_response: [post],
 	};
 }
 

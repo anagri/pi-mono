@@ -32,6 +32,7 @@ export interface ChatPanelProps {
 	onComposerChange(v: string): void;
 	onSend(): void;
 	onStop(): void;
+	awaitingApproval?: boolean;
 }
 
 import type { ReactElement } from "react";
@@ -96,6 +97,7 @@ export function ChatPanel({
 	onComposerChange,
 	onSend,
 	onStop,
+	awaitingApproval = false,
 }: ChatPanelProps) {
 	const streaming = state === "streaming";
 	const lastIdx = messages.length - 1;
@@ -111,15 +113,17 @@ export function ChatPanel({
 			<div className="chat-messages" data-testid="chat-messages">
 				{messages.map((m, idx) => renderMessage(m, idx, lastIdx, streaming))}
 			</div>
-			<div className="composer" data-testid="composer">
+			<div className="composer" data-testid="composer" data-awaiting-approval={String(awaitingApproval)}>
 				<textarea
 					data-testid="composer-input"
 					value={composerValue}
 					onChange={(e) => onComposerChange(e.target.value)}
 					rows={3}
-					disabled={streaming}
+					placeholder={awaitingApproval ? "awaiting approval; type /approve or /reject" : ""}
+					// Stay editable while a turn is suspended awaiting approval so the user can type /approve.
+					disabled={streaming && !awaitingApproval}
 				/>
-				{streaming ? (
+				{streaming && !awaitingApproval ? (
 					<button data-testid="composer-send" data-mode="stop" type="button" onClick={onStop}>
 						stop
 					</button>

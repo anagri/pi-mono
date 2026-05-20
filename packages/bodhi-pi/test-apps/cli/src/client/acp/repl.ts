@@ -68,7 +68,9 @@ export async function runRepl(opts: ReplOptions): Promise<void> {
 				}
 				renderer.onNotification(params);
 			},
-			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
+			// The interactive REPL blocks on `await prompt()` while a turn runs, so it cannot read a
+			// composer-typed /approve mid-turn — auto-approve ask-mode prompts with a valid verdict.
+			requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "allow_once" } }),
 			extNotification: async (method, params) => {
 				renderer.onExtNotification(method, params);
 			},

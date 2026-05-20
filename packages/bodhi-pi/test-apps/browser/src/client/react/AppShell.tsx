@@ -4,6 +4,7 @@ import type {
 	ContentBlock,
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
+import { createApprovalRegistry } from "@bodhiapp/bodhi-pi-test-app-utils/approval-registry";
 import type {
 	EventEntry,
 	FrameEntry,
@@ -53,7 +54,9 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 	const [availableModes, setAvailableModes] = useState<AgentModeString[]>([]);
 	const [sessionId, setSessionId] = useState<string>("");
 	const [workspaceRoot, setWorkspaceRoot] = useState<string>("");
+	const [awaitingApproval, setAwaitingApproval] = useState<boolean>(false);
 	const availableCommandsRef = useRef<AvailableCommand[]>([]);
+	const approvalRef = useRef(createApprovalRegistry());
 
 	const initializedRef = useRef(false);
 	const seqRef = useRef(0);
@@ -248,13 +251,15 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 					case "agent_message_chunk":
 						upsertLast("assistant", applyContentBlocks([u.content]));
 						break;
-					case "tool_call":
-						addToolCall({
-							id: u.toolCallId,
-							name: u.title ?? u.kind ?? "tool",
-							status: mapToolStatus(u.status),
-						});
+					case "tool_call": {
+						// Upsert by toolCallId: an ask-mode pending card and the later in_progress card
+						// share an id, so update in place rather than rendering a duplicate.
+						const name = u.title ?? u.kind ?? "tool";
+						const exists = out.some((m) => m.toolCalls.some((t) => t.id === u.toolCallId));
+						if (exists) updateToolCall(u.toolCallId, { name, status: mapToolStatus(u.status) });
+						else addToolCall({ id: u.toolCallId, name, status: mapToolStatus(u.status) });
 						break;
+					}
 					case "tool_call_update":
 						updateToolCall(u.toolCallId, u.status ? { status: mapToolStatus(u.status) } : {});
 						break;
@@ -289,6 +294,12 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 					onFrame: pushFrame,
 					onEvent: pushEvent,
 					onSessionUpdate,
+					onPermissionRequest: async (req) => {
+						setAwaitingApproval(true);
+						const res = await approvalRef.current.awaitVerdict(req);
+						setAwaitingApproval(false);
+						return res;
+					},
 				});
 				connRef.current = result.conn;
 				cwdRef.current = result.cwd;
@@ -465,6 +476,21 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 		const input = composerInput.trim();
 		if (!input) return;
 		setComposerInput("");
+		// Approval slashes release a pending requestPermission locally — no agent round-trip, no session needed.
+		const approvalMatch = /^\/(approve|reject)(?:\s+(once|always))?\s*$/.exec(input);
+		if (approvalMatch) {
+			const verdict = approvalMatch[1] as "approve" | "reject";
+			const scope = approvalMatch[2] === "always" ? "always" : "once";
+			pushUserMessage(input);
+			if (approvalRef.current.resolve(verdict, scope)) {
+				pushSystemMessage(`${verdict} ${scope}`, {
+					"data-approval-event": `${verdict}-${scope}`,
+				});
+			} else {
+				pushSystemMessage("no approval pending", { "data-approval-event": "none" });
+			}
+			return;
+		}
 		try {
 			await ensureInitialized();
 			const sid = await ensureSession();
@@ -539,6 +565,7 @@ export function AppShell({ title, adapter, headerSlot }: AppShellProps) {
 							onComposerChange={setComposerInput}
 							onSend={onComposerSend}
 							onStop={onComposerStop}
+							awaitingApproval={awaitingApproval}
 						/>
 						{/* `open` keeps the acp-input textarea visible so page-driven
 						harnesses can fill it without first expanding the details

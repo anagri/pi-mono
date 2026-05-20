@@ -44,6 +44,7 @@ export function createWsAdapter(): TransportAdapter {
 				user: { id, email: values.userEmail },
 				handlers: {
 					onSessionUpdate: (n) => callbacks.onSessionUpdate(n),
+					...(callbacks.onPermissionRequest ? { onPermissionRequest: callbacks.onPermissionRequest } : {}),
 					onExtNotification: (method, params) => {
 						if (method !== LIFECYCLE_EVENT_METHOD) return;
 						const type = typeof params.type === "string" ? params.type : "lifecycle";

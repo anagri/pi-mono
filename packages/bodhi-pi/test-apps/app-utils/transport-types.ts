@@ -1,4 +1,9 @@
-import type { ClientSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
+import type {
+	ClientSideConnection,
+	RequestPermissionRequest,
+	RequestPermissionResponse,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 
 /**
  * User-supplied form values for connecting a browser-runtime Host (browser,
@@ -34,6 +39,12 @@ export interface ConnectCallbacks {
 	onFrame(f: Omit<FrameEntry, "seq">): void;
 	onEvent(type: string, payload: string): void;
 	onSessionUpdate(n: SessionNotification): void;
+	/**
+	 * Ask-mode approval handler. When present, the adapter's Client `requestPermission` delegates
+	 * here (the UI parks it on an ApprovalRegistry and a composer-typed `/approve`·`/reject` releases
+	 * it). When absent, the adapter resolves to `cancelled`.
+	 */
+	onPermissionRequest?(r: RequestPermissionRequest): Promise<RequestPermissionResponse>;
 }
 
 /** Result of a successful TransportAdapter.connect(). */

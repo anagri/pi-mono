@@ -12,6 +12,7 @@
 		"./just-bash-terminal": "./dist/just-bash-terminal.js",
 		"./just-bash-fs-adapter": "./dist/just-bash-fs-adapter.js",
 		"./transport-types": "./dist/transport-types.js",
+		"./approval-registry": "./dist/approval-registry.js",
 		"./seed-parser": "./dist/seed-parser.js",
 		"./message-port-stream": "./dist/message-port-stream.js",
 		"./worker-message-types": "./dist/worker-message-types.js"
