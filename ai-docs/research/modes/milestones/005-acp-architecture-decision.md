@@ -228,7 +228,7 @@ The contrast is Goose: it COULD own fs (it's a full native agent) but chose to r
 
 **Significant simplification.** Updates:
 - Drop the `_bodhi-pi/permission/policy/{get,set,list,unset}` wire methods entirely. They were redundant — the existing `_bodhi-pi/session/settings/*` already supports arbitrary keys, and `permission.alwaysAllow` / `permission.alwaysDeny` slot in naturally.
-- Scope picker UI per host is replaced by the "scope encoded in optionId" pattern (already added in updated milestone 030). 090 becomes mostly about:
+- Scope picker UI per host is replaced by the "scope encoded in optionId" pattern (already added in milestone 040). 090 becomes mostly about:
   - Reading `session.settings.effective.permission.alwaysAllow` / `alwaysDeny` in `PermissionService.evaluateToolCall`
   - Writing those keys via existing `SettingsService.set` when the user picks an `allow_always_*` option
 - `/permissions` slash command in hosts becomes `/settings list permission.*` (uses existing `/settings` slash from Phase I).

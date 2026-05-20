@@ -128,7 +128,7 @@ src/permissions/
 ├── types.ts                  (milestone 010)
 ├── presets.ts                (placeholder map { ask, plan, edit, allow-all } → ALLOW_ALL_PRESET — milestone 030 replaces)
 ├── permission-service.ts     (NEW)
-└── (later) approval-flow.ts  (milestone 030)
+└── (later) approval-flow.ts  (milestone 040)
 ```
 
 The service registers as a domain service alongside `KvService`, `McpService`, `SettingsService`, `SessionInfoService`, etc. in `BodhiPiAcpAgent`'s constructor (`src/acp/agent.ts:185-315`). It owns:
@@ -140,7 +140,7 @@ The service registers as a domain service alongside `KvService`, `McpService`, `
 - A `register()` method that returns `[]` in this milestone (no extension methods yet — `setSessionMode` is native ACP, not extension)
 - Public methods:
   - `getCurrentMode(sessionId): AgentMode`
-  - `setMode(sessionId, modeId, reason): Promise<void>` — used by both the native ACP handler and (in milestone 050) the `submit_plan` auto-transition
+  - `setMode(sessionId, modeId, reason): Promise<void>` — used by both the native ACP handler and (in milestone 060) the `submit_plan` auto-transition
   - `getAvailableModes(): SessionMode[]` — returns the four-entry `SessionMode[]` for advertisement
   - (placeholder for milestone 030) `evaluateToolCall(sessionId, toolCall): ApprovalDecision`
 
@@ -216,11 +216,11 @@ Validation:
 ### OUT
 
 - Any preset other than placeholder ALLOW_ALL (milestones 030+)
-- `requestPermission` invocation (milestone 030)
+- `requestPermission` invocation (milestone 040)
 - Any tool gating (milestone 030)
-- `submit_plan` tool (milestone 050)
-- `setActiveTools` API (milestone 080)
-- Persistent rules (milestone 090)
+- `submit_plan` tool (milestone 060)
+- `setActiveTools` API (milestone 090)
+- Persistent rules (milestone 100)
 
 ## Implementation order
 
@@ -331,7 +331,7 @@ describe("session mode state", () => {
 });
 ```
 
-Also a sub-agent-aware test: child sessions inherit parent mode (placeholder until milestone 070 implements the Qwen rule):
+Also a sub-agent-aware test: child sessions inherit parent mode (placeholder until milestone 080 implements the Qwen rule):
 
 ```ts
 it("child sub-agent session inherits parent's mode in 020 (qwen rule lands in 070)", async () => {
@@ -440,7 +440,7 @@ CLI gets /mode /modes slashes and a footer badge. HTTP/browser/chrome-ext
 expose a mode dropdown. Mode persists across session load/resume/close-reopen
 and survives the http per-turn rebuild via the SessionEntry.
 
-No tool gating yet — milestone 030 wires the ask preset and native
+No tool gating yet — milestone 040 wires the ask preset and native
 requestPermission flow.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

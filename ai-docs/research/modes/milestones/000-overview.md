@@ -9,7 +9,7 @@
 
 This folder is a **sequential implementation plan** for adding agent operating modes and permission policies to `packages/bodhi-pi`. Each milestone (`010-…`, `020-…`, …) is a self-contained brief sized to land as a single commit (or a tight commit sequence) on `main`, fully green against `npm run check`, `npm test`, `just test-e2e`, and `just test-e2e-ui`. The numbering uses 10-unit gaps so additional milestones can be inserted between (e.g. `035-`) without renaming.
 
-The milestones are **depth-first**: each milestone delivers a slice end-to-end across all four reference Hosts (`test-apps/{cli,http,browser,chrome-ext}`) before the next milestone begins. The first three milestones (010/020/030) are the heaviest because they introduce the entire enforcement skeleton; milestones 040-090 layer additional mode presets and refinements on the same skeleton.
+The milestones are **depth-first**: each milestone delivers a slice end-to-end across all four reference Hosts (`test-apps/{cli,http,browser,chrome-ext}`) before the next milestone begins. The first two milestones (010/020) lay the inert plumbing — types, mode state, dispatch refactor — and have shipped. **The current next phase is milestone 030 (plan-mode plumbing)**, which makes plan mode the first mode that actually rejects tool calls. Ask + edit + the approval round-trip + the `submit_plan` exit layer on top in subsequent milestones.
 
 ## What we're shipping
 
@@ -86,7 +86,11 @@ New sessions default to `ask` mode. Read and search auto-allow; everything else 
 
 ### 7. `submit_plan` is a built-in tool registered only when mode = plan
 
-`createBuiltinTools(...)` adds `submit_plan` to the tool list iff `session.runtime.mode === "plan"`. The tool emits a structured plan-approval event over the wire, awaits a user response (approve / request-changes / deny), and on approve auto-transitions the session to `edit` mode. This keeps the plan-mode-exit affordance native — no extension required.
+`createBuiltinTools(...)` adds `submit_plan` to the tool list iff `session.runtime.mode === "plan"`. The tool emits a structured plan-approval event via ACP-native `session/request_permission` (3 options: `accept_to_edit` → switch to `edit`, `accept_to_allow_all` → switch to `allow-all`, `reject` → stay in `plan`), awaits the user reply, and on approval auto-transitions the session mode + lets the LLM continue with execution in the new mode. Ships in milestone 060. Phase 030 lands plan-mode enforcement WITHOUT this tool — exit is via `/mode edit` slash for now.
+
+### 7b. Plan-mode rejections use the Codex `amendment` pattern, not pure prompt steering
+
+Per the modes-research harness audit (cf. `report.md` and the per-harness notes on cc / opencode / codex / cline-roo): when a tool is denied by policy, the LLM gets a normal `AgentToolResult` with `isError: true` and **redirect text** ("plan mode is read-only — `write` blocked. Use `read` to inspect or `/mode edit` to proceed."). This outperforms cc's pure prompt-steering — the model gets a structured reason it can adapt to in the same turn. A parallel `custom_message` entry surfaces the block in the chat transcript so the user understands what happened. The LLM's tool list stays unchanged (active-tools-swap is deferred to milestone 090).
 
 ### 8. Approval timeout: 30 seconds, configurable
 
@@ -127,24 +131,25 @@ Built-in `explore` + `planner` profiles get `mode: "plan"` so they're always rea
 
 - **Custom modes (markdown discovery)** — Roo Code-style user-defined modes. Defer to a separate plan; the 4 hardcoded modes are sufficient initial coverage.
 - **LLM-self-annotated `security_risk` field** (OpenHands pattern). Speculative; needs model-coverage testing first.
-- **MCP per-server permission overrides** — depends on whether MCP spec exposes a read-vs-mutate annotation we can map onto. Tracked as a follow-up; v1 treats all MCP tools as the `mcp` category and ask-by-default.
+- **MCP per-tool annotation classification** is **shipped in milestone 030** (not deferred): plan-mode reads `tool.annotations.readOnlyHint` / `destructiveHint` from the MCP SDK spec v2025-03-26 and gates accordingly. Research-permissive default — unknown/unannotated MCPs are allowed in plan mode per user requirement that "read mcps stay critical during research".
 - **`argFingerprint` patterns** (`bash:npm test`, `edit:*.md`). Useful but adds per-tool fingerprint plumbing; ship coarse `<toolName>` patterns first.
 - **LLM-callable `switch_mode` tool** (Roo Code style). Self-elevation risk; mode change stays user-initiated.
 
 ## Milestone sequence
 
-| # | Title | Brief |
-|---|---|---|
-| **[005](005-acp-architecture-decision.md)** | **ACP architecture decision (READ FIRST)** | **Locks the ACP-native wire-surface choices. Supersedes wire-method drafts in 010/020/030/090. Not an implementation milestone — a binding decision doc.** |
-| [010](010-ground-preparation.md) | Ground preparation | Tool categories expansion, `AgentMode` + `PermissionPolicy` types, `MODE_CONFIG_ID` constant, settings schema additions, in-process event-type declarations. **No behaviour change.** |
-| [020](020-mode-state-and-set-config-option.md) | Mode state + extend `setSessionConfigOption` | `SessionState.runtime.mode`, `PermissionService` skeleton, new entry in `ModelRegistry.setters` dispatch table calling `PermissionService.setMode`, `buildModeConfigOption` prepended in `buildAllConfigOptions`, `ConfigOptionUpdate` notifications (emit BEFORE response per Goose pattern), default-mode bootstrap. |
-| [030](030-ask-mode-and-approval-flow.md) | `ask` mode + native ACP `request_permission` flow | PermissionService policy engine + `ask` preset + `conn.requestPermission(...)` invocation + scope-encoded-in-`optionId` (6-option `ask`-mode prompt) + 4-runtime UI parity (Zed-style inline cards for browser/chrome-ext) + 30s timeout. **Biggest milestone.** |
-| [040](040-edit-mode-preset.md) | `edit` mode preset | Add `edit` preset, mark write/edit tools with `respectsEditMode: true`, parity tests. |
-| [050](050-plan-mode-and-submit-plan-tool.md) | `plan` mode + `submit_plan` tool | Add `plan` preset, planner system-prompt suffix, built-in `submit_plan` tool (registered only when mode=plan), mode auto-transition on approval. |
-| [060](060-allow-all-and-safety-gate.md) | `allow-all` + capability + safety-immune deny | Add `allow-all` preset, `allowsAllowAllMode` capability gate, hardcoded safety-immune deny list (`.git/**` writes, `.bodhi-pi/**` writes, `.env*` reads, `~/.ssh/**` reads). |
-| [070](070-subagent-mode-inheritance.md) | Sub-agent mode inheritance | `SubagentProfile.mode?` field, Qwen-rule `resolveChildMode`, built-in `explore`/`planner` profiles get `mode: "plan"`, approval requests bubble to parent. |
-| [080](080-active-tools-swap.md) | Active-tools swap on mode change | `ExtensionAPI.setActiveTools(sessionId, names)` + `getActiveTools(sessionId)`. Mode change auto-rebuilds the tool list so the LLM never sees denied tools. |
-| [090](090-persistent-permission-rules.md) | Persistent always-allow / always-deny | `alwaysAllow` + `alwaysDeny` patterns at session / project / global scope. `allow_always` reply persists at the user-chosen scope. |
+| # | Title | Status | Brief |
+|---|---|---|---|
+| **[005](005-acp-architecture-decision.md)** | **ACP architecture decision (READ FIRST)** | (decision doc) | **Locks the ACP-native wire-surface choices. Supersedes wire-method drafts in 010/020/030+. Not an implementation milestone — a binding decision doc.** |
+| [010](010-ground-preparation.md) | Ground preparation | ☑ shipped (`c93fc25a`) | Tool categories expansion, `AgentMode` + `PermissionPolicy` types, `MODE_CONFIG_ID` constant, settings schema additions, in-process event-type declarations. **No behaviour change.** |
+| [020](020-mode-state-and-set-config-option.md) | Mode state + extend `setSessionConfigOption` | ☑ shipped (`c93fc25a`) | `SessionState.runtime.mode`, `PermissionService` skeleton, dispatch refactor (lifted `setSessionConfigOption` from `ModelRegistry` to `BodhiPiAcpAgent`), `buildModeConfigOption`, `ConfigOptionUpdate` notifications, default-mode bootstrap, 4-runtime `/mode` + `/modes` + badge. |
+| [030](030-plan-mode-plumbing.md) | **Plan-mode plumbing (NEXT)** | ☐ in design | Plan-mode preset becomes real; `evaluateToolCall` consults policy + MCP annotation hints; tool-call gating in `beforeToolCall`; plan system-prompt suffix; block-as-tool-result + `custom_message` entry (Codex amendment pattern, no UI changes). Ask/edit modes remain allow-all (request_permission deferred to 040). **First phase where plan mode actually rejects edits.** |
+| [040](040-ask-mode-and-approval-flow.md) | `ask` mode + native ACP `request_permission` flow | ☐ | PermissionService policy engine for ask + `conn.requestPermission(...)` invocation + scope-encoded-in-`optionId` (6-option `ask`-mode prompt) + 4-runtime UI parity (Zed-style inline cards for browser/chrome-ext) + 30s timeout. **Biggest milestone.** |
+| [050](050-edit-mode-preset.md) | `edit` mode preset | ☐ | Add `edit` preset, mark write/edit tools with `respectsEditMode: true`, parity tests. |
+| [060](060-plan-mode-and-submit-plan-tool.md) | `plan`-mode `submit_plan` tool + 3-option approval UI | ☐ | Built-in `submit_plan` tool (registered only when mode=plan), 3-option `request_permission` exit (accept→edit / accept→allow-all / reject), mode auto-transition on approval, plan persistence as `custom_message`. **Plan mode goes from inert-rejection to interactive-graduation.** |
+| [070](070-allow-all-and-safety-gate.md) | `allow-all` + capability + safety-immune deny | ☐ | Add `allow-all` preset, `allowsAllowAllMode` capability gate (already partially live since 020), hardcoded safety-immune deny list (`.git/**` writes, `.bodhi-pi/**` writes, `.env*` reads, `~/.ssh/**` reads). |
+| [080](080-subagent-mode-inheritance.md) | Sub-agent mode inheritance | ☐ | `SubagentProfile.mode?` field, Qwen-rule `resolveChildMode`, built-in `explore`/`planner` profiles get `mode: "plan"`, approval requests bubble to parent. |
+| [090](090-active-tools-swap.md) | Active-tools swap on mode change | ☐ | `ExtensionAPI.setActiveTools(sessionId, names)` + `getActiveTools(sessionId)`. Mode change auto-rebuilds the tool list so the LLM never sees denied tools. |
+| [100](100-persistent-permission-rules.md) | Persistent always-allow / always-deny | ☐ | `alwaysAllow` + `alwaysDeny` patterns at session / project / global scope. `allow_always` reply persists at the user-chosen scope. |
 
 ## Cross-cutting conventions
 

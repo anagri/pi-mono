@@ -7,7 +7,7 @@
 
 The original draft added `mode_change` / `tool_approval_request` / `tool_approval_response` to the in-process `BodhiPiEvent` union. **Keep those** — they're for extensions to subscribe to via `pi.on("mode_change", ...)`. They are NOT wire methods.
 
-The original draft mentioned "lifecycle event declarations" implying wire emission via `LIFECYCLE_EVENT_METHOD`. **Don't wire-forward** these events. The wire view of mode change goes through ACP-native `config_option_update` `SessionUpdate` (added in milestone 020); the wire view of permission requests goes through native `session/request_permission` (added in milestone 030). Wire-forwarding the in-process events too would duplicate information.
+The original draft mentioned "lifecycle event declarations" implying wire emission via `LIFECYCLE_EVENT_METHOD`. **Don't wire-forward** these events. The wire view of mode change goes through ACP-native `config_option_update` `SessionUpdate` (added in milestone 020); the wire view of permission requests goes through native `session/request_permission` (added in milestone 040). Wire-forwarding the in-process events too would duplicate information.
 
 Also: add `MODE_CONFIG_ID = "mode"` to `src/wire/constants.ts`. Do NOT add `EXT_MODE_*` or `EXT_PERMISSION_*` constants. They're not needed.
 
@@ -106,9 +106,9 @@ export interface PermissionPolicy {
   categories: Partial<Record<ToolCategory, PermissionDecision>>;
   /** Per-tool override; takes priority over the category. Key = tool name. */
   tools: Record<string, PermissionDecision>;
-  /** Persistent allow patterns; populated by milestone 090. */
+  /** Persistent allow patterns; populated by milestone 100. */
   alwaysAllow: PermissionPattern[];
-  /** Persistent deny patterns; populated by milestone 090. */
+  /** Persistent deny patterns; populated by milestone 100. */
   alwaysDeny: PermissionPattern[];
 }
 
@@ -133,7 +133,7 @@ export type ApprovalDecision =
  * `allowsAllowAllModeAsDefault`. Read by:
  *   - PermissionService (rejects setSessionMode("allow-all") if `allowsAllowAllMode === false`)
  *   - Bootstrap (rejects `defaultMode: "allow-all"` from settings if `allowsAllowAllModeAsDefault === false`)
- *   - resolveChildMode (sub-agent inheritance — milestone 070)
+ *   - resolveChildMode (sub-agent inheritance — milestone 080)
  */
 export interface ModeRuntimeCapabilities {
   allowsAllowAllMode: boolean;
@@ -477,7 +477,7 @@ canonical mode + permission reference; update index.md, configuration.md,
 extensions-skills-commands.md to point at it.
 
 No behaviour change — types and spec scaffold only. Milestone 020 reads
-defaultMode and adds the PermissionService; milestone 030 wires native
+defaultMode and adds the PermissionService; milestone 040 wires native
 ACP requestPermission for ask mode.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
@@ -486,9 +486,9 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ## Interactions with other features
 
 - **MCP**: now classified as `"mcp"` category. The existing per-server include/exclude story is unchanged; modes 020+ will add category-level policy decisions on top. No behaviour change in 010.
-- **Sub-agents**: now classified as `"subagent"` category. `SubagentProfile` is unchanged in 010 (gets `mode?` field in milestone 070).
+- **Sub-agents**: now classified as `"subagent"` category. `SubagentProfile` is unchanged in 010 (gets `mode?` field in milestone 080).
 - **Skills**: `allowed-tools` runtime enforcement is now achievable (the `Permissioner` line in `PARITY.md` becomes "shipped via PermissionService" in milestone 030). Note in the modes.md spec but don't wire enforcement yet.
-- **Extensions**: `ExtensionAPI` unchanged in 010 (gets `setActiveTools` in milestone 080).
+- **Extensions**: `ExtensionAPI` unchanged in 010 (gets `setActiveTools` in milestone 090).
 - **Settings layering**: `defaultMode` is a new key but no read site exists yet.
 
 ## Risks

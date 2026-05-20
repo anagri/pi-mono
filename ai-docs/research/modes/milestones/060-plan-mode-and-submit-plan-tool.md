@@ -229,7 +229,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 ## Interactions
 
-- **Sub-agents**: `planner` built-in profile (already exists) — milestone 070 gives it `mode: "plan"`. Today it just runs in whatever the parent's mode is; in 070 a planner-profile child always runs in plan mode regardless of parent. The `submit_plan` tool inside a planner child auto-transitions the CHILD's mode but the child's session ends shortly anyway — verify behaviour.
+- **Sub-agents**: `planner` built-in profile (already exists) — milestone 080 gives it `mode: "plan"`. Today it just runs in whatever the parent's mode is; in 080 a planner-profile child always runs in plan mode regardless of parent. The `submit_plan` tool inside a planner child auto-transitions the CHILD's mode but the child's session ends shortly anyway — verify behaviour.
 - **Compaction**: compaction calls bypass policy (per 030 decision). Plan-mode compaction still works.
 - **Skills with `allowed-tools`**: skills loaded in plan mode that include tools like `write` — calling those tools while in plan mode triggers deny. Document.
 

@@ -28,7 +28,7 @@ const options: PermissionOption[] = [
 ];
 ```
 
-When the agent receives `{ optionId: "allow_always_project" }`, it (a) lets the tool run, AND (b) writes the pattern to `permission.alwaysAllow` at PROJECT scope via existing `SettingsService.set` (milestone 090 wires the write itself; 030 just decodes the optionId).
+When the agent receives `{ optionId: "allow_always_project" }`, it (a) lets the tool run, AND (b) writes the pattern to `permission.alwaysAllow` at PROJECT scope via existing `SettingsService.set` (milestone 100 wires the write itself; 040 just decodes the optionId).
 
 ### 3. No new wire methods at all
 
@@ -53,7 +53,7 @@ Wire the policy engine and the approval round-trip end-to-end so that **`ask` mo
 - Tool calls that resolve to `ask` cause the agent to invoke **native ACP `conn.requestPermission(...)`** with 4 options (`allow_once`, `allow_always`, `reject_once`, `reject_always`)
 - The agent suspends the tool call (via the async `beforeToolCall` hook) until the user responds OR the 30s timeout fires
 - `allow_once` / `allow_always` → tool executes; `reject_once` / `reject_always` → tool blocked with reason
-- `allow_always` and `reject_always` add the `<toolName>` pattern to `SessionState.runtime.permissionGrants` (in-memory only in this milestone; persistent rules across sessions ship in milestone 090)
+- `allow_always` and `reject_always` add the `<toolName>` pattern to `SessionState.runtime.permissionGrants` (in-memory only in this milestone; persistent rules across sessions ship in milestone 100)
 - Each of the four reference Hosts implements the Client side of `requestPermission` with a runtime-appropriate UI: CLI prompt; HTTP modal; browser modal; chrome-ext popup
 - `tool_call_update` notification carries `status: "pending"` while approval is in flight, so client UIs render a pending tool card
 - `tool_approval_request` and `tool_approval_response` lifecycle events fire on both rails
@@ -391,7 +391,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 - **Sub-agents**: child sessions in 030 inherit parent's mode (effectively); the formal Qwen rule lands in 070. In 030, a sub-agent in `ask` mode that calls an edit tool will trigger an approval prompt that bubbles to the parent's UI (because the child's `conn` is the same as the parent's). Verify this via test.
 - **MCP**: MCP tools (category `mcp`) ask by default in `ask` mode. The `requestPermission` UI shows the namespaced name (`<slug>__<tool>`). Future milestone (out of scope here) adds per-MCP-server overrides.
-- **Skills**: Skills with `allowed-tools` in their frontmatter — milestone 030 does NOT yet enforce this. Skills that invoke tools go through the same `tool_call` path; the policy engine treats them like any tool call. `allowed-tools` enforcement is a follow-on.
+- **Skills**: Skills with `allowed-tools` in their frontmatter — milestone 040 does NOT yet enforce this. Skills that invoke tools go through the same `tool_call` path; the policy engine treats them like any tool call. `allowed-tools` enforcement is a follow-on.
 - **Extensions**: extensions that register tools (`pi.registerTool`) go through the same `beforeToolCall` hook, so their tools are policy-gated too. Extension-tool categories: an extension's tool name doesn't match any builtin → `toolKindFor` returns `"other"`. The default for `"other"` in `ask` preset must be defined — likely `ask`. Document.
 - **Compaction**: when compaction runs, the LLM may call tools as part of summarisation — but compaction has its own model + no user UI. Policy should NOT gate compaction-internal tool calls. Add a `bypassPermissions: boolean` flag on `CompactionOrchestrator` that the PermissionService respects (skip policy for that session-scoped invocation). Verify via test.
 - **Settings**: `permission.approvalTimeoutMs` joins the settings keys reported by `_bodhi-pi/session/settings/list`.

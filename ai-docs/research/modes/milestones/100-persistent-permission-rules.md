@@ -13,7 +13,7 @@ The original draft introduced `_bodhi-pi/permission/policy/{get,set,list,unset}`
 
 ### 2. NO scope-picker UI step
 
-The original draft proposed a secondary modal that pops up after the user clicks `allow_always` to ask "session / project / global?". **Drop.** The scope is encoded in `optionId` (3 distinct `allow_always_*` buttons) per milestone 030's updated approach. When the user clicks `allow_always_project`, the agent simply writes the pattern to project scope.
+The original draft proposed a secondary modal that pops up after the user clicks `allow_always` to ask "session / project / global?". **Drop.** The scope is encoded in `optionId` (3 distinct `allow_always_*` buttons) per milestone 040's updated approach. When the user clicks `allow_always_project`, the agent simply writes the pattern to project scope.
 
 ### 3. The work in 090 is mostly:
 
@@ -21,7 +21,7 @@ The original draft proposed a secondary modal that pops up after the user clicks
 - When `requestPermission` returns `{ optionId: "allow_always_<scope>" }`, the PermissionService calls `SettingsService.set(sessionId, "permission.alwaysAllow", [...existing, toolName], scope)`. Same for `reject_always` (defaults to session scope).
 - New `/permissions` slash command (per host) is just a thin shortcut over `/settings list permission.*` — optional UX sugar.
 
-### 4. Safety-immune deny list from milestone 060 still wins
+### 4. Safety-immune deny list from milestone 070 still wins
 
 `isSafetyImmuneDeny` is consulted BEFORE `alwaysAllow`. A user CANNOT alwaysAllow a path like `.git/HEAD`.
 
