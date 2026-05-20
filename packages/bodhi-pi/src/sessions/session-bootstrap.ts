@@ -192,6 +192,7 @@ export function createPiAgent(
 				return { block: true, ...(result.reason !== undefined ? { reason: result.reason } : {}) };
 			}
 			const decision = await permissionService.evaluateToolCall(args.sessionId, {
+				id: ctx.toolCall.id,
 				name: ctx.toolCall.name,
 				arguments: ctx.args,
 			});
@@ -330,6 +331,7 @@ export async function buildSessionState(
 		initialThinkingLevel ?? config.defaultThinkingLevel ?? mergedFileSettings.defaultThinkingLevel ?? "off";
 	const resolvedThinkingLevel = resolvedModel ? clampThinkingLevel(resolvedModel, requestedThinking) : "off";
 	const retryOptions = resolveProviderStreamOptions(resolvedModel?.provider ?? "openai", mergedFileSettings);
+	const approvalTimeoutMs = mergedFileSettings.permission?.approvalTimeoutMs ?? 30000;
 
 	const piAgent = createPiAgent(
 		{
@@ -385,6 +387,9 @@ export async function buildSessionState(
 			overflowRecoveryAttempted: false,
 			subagentDepth: 0,
 			mode: resolvedMode,
+			pendingApprovals: new Map(),
+			permissionGrants: new Map(),
+			approvalTimeoutMs,
 		},
 	});
 }

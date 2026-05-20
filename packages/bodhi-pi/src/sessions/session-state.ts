@@ -1,7 +1,8 @@
+import type { RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { AgentTool, Agent as PiAgent } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { PromptTemplate } from "@/commands/prompt-templates.js";
-import type { AgentMode } from "@/permissions/types.js";
+import type { AgentMode, PermissionGrant } from "@/permissions/types.js";
 import type { BodhiPiProjectSettings } from "@/settings/settings.js";
 import type { Skill } from "@/skills/skill.js";
 import type { SubagentProfile } from "@/subagents/types.js";
@@ -51,6 +52,12 @@ export interface SessionRuntime {
 	subagentDepth: number;
 	/** Active agent mode. Inert in Phase 0 (no policy enforcement); milestone 030 wires enforcement. */
 	mode: AgentMode;
+	/** In-flight ask-mode approvals keyed by correlationId; resolved by the Client response, the timeout race, or cancel(). */
+	pendingApprovals: Map<string, { resolve: (response: RequestPermissionResponse) => void; toolCallId: string }>;
+	/** Per-session always-allow / always-deny grants from `*_always` verdicts. In-memory only; cleared on mode change; KV persistence is milestone 100. */
+	permissionGrants: Map<string, PermissionGrant>;
+	/** Resolved approval timeout (ms) for ask-mode prompts; from `permission.approvalTimeoutMs`, default 30000. */
+	approvalTimeoutMs: number;
 }
 
 export interface SessionState {

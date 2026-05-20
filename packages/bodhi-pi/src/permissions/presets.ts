@@ -14,6 +14,21 @@ const ALLOW_ALL_POLICY: PermissionPolicy = {
 	alwaysDeny: [],
 };
 
+const ASK_POLICY: PermissionPolicy = {
+	categories: {
+		read: "allow",
+		search: "allow",
+		subagent: "allow",
+		edit: "ask",
+		execute: "ask",
+		mcp: "ask",
+		other: "ask",
+	},
+	tools: {},
+	alwaysAllow: [],
+	alwaysDeny: [],
+};
+
 const PLAN_POLICY: PermissionPolicy = {
 	categories: {
 		read: "allow",
@@ -40,7 +55,7 @@ language text. The user will review and either ask you to revise (stay in
 plan mode) or approve and switch to edit/allow-all mode for execution.`;
 
 export const MODE_PRESETS: Record<AgentMode, ModePreset> = {
-	ask: { mode: "ask", description: MODE_DISPLAY.ask.description, policy: EMPTY_POLICY },
+	ask: { mode: "ask", description: MODE_DISPLAY.ask.description, policy: ASK_POLICY },
 	plan: {
 		mode: "plan",
 		description: MODE_DISPLAY.plan.description,

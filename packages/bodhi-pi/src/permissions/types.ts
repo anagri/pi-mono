@@ -62,6 +62,8 @@ export interface ModePreset {
 
 export type ApprovalDecision = { kind: "allow" } | { kind: "deny"; reason: string };
 
+export type PermissionGrant = "allow" | "deny";
+
 export interface ModeRuntimeCapabilities {
 	allowsAllowAllMode: boolean;
 	allowsAllowAllModeAsDefault: boolean;

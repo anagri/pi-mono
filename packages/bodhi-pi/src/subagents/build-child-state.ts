@@ -91,6 +91,9 @@ export async function buildChildSessionState(deps: BootstrapDeps, args: BuildChi
 			overflowRecoveryAttempted: false,
 			subagentDepth: args.depth,
 			mode: args.parentSessionState.runtime.mode,
+			pendingApprovals: new Map(),
+			permissionGrants: new Map(),
+			approvalTimeoutMs: args.parentSessionState.runtime.approvalTimeoutMs,
 		},
 	});
 }

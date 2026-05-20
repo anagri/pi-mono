@@ -35,6 +35,7 @@ export interface PermissionServiceDeps {
 }
 
 export interface ToolCallDescriptor {
+	id: string;
 	name: string;
 	arguments: unknown;
 }
