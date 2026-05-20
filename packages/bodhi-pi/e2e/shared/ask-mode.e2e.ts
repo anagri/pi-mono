@@ -8,12 +8,17 @@ import { useHarness } from "../helpers/use-harness.js";
 
 // Cross-runtime proof that ask mode runs the approval round-trip end-to-end: gpt-4o-mini in the
 // default ask mode is asked to write a file; the Client side auto-approves (allow_once); assert the
-// file landed and a `tool_approval_response{allow_once}` lifecycle event arrived. Skipped under
-// `http` — its SSE transport cannot carry the server→client `requestPermission` request (WS does).
+// file landed and a `tool_approval_response{allow_once}` lifecycle event arrived.
+//
+// Runs on the runtimes whose Client auto-approves programmatically (in-memory / cli / ws). Skipped on:
+//   - `http`: SSE cannot carry the server→client `requestPermission` request (WS covers HTTP).
+//   - `browser` / `chrome-ext`: these page-driven e2e drive raw ACP via the dev `acp-input`, not the
+//     chat composer, so the registry-backed approval can't be released by a typed `/approve`. Their
+//     composer-driven approval is covered by `e2e-ui/shared/ask-mode.spec.ts` (Playwright).
 
 const harness = useHarness();
 
-test.runIf(!isRuntime("http"))(
+test.runIf(isRuntime("in-memory") || isRuntime("cli") || isRuntime("ws"))(
 	"ask mode approves a real-LLM write and emits tool_approval_response{allow_once}",
 	async () => {
 		const model = getModel("openai", "gpt-4o-mini");

@@ -43,6 +43,8 @@ export const ALL_EVENT_TYPES: readonly BodhiPiEventType[] = [
 	"subagent_start",
 	"subagent_end",
 	"tool_blocked",
+	"tool_approval_request",
+	"tool_approval_response",
 ] as const;
 
 export interface EventRecorder {
