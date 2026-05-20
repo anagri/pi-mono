@@ -26,6 +26,26 @@ Per [modes.md § Capabilities](./modes.md#capabilities). PoCs demonstrate full f
 | browser | true | false |
 | chrome-ext (via shared browser bootstrap) | true | false |
 
+### Ask-mode approval (milestone 040)
+
+Ask mode suspends a tool call on a native `session/request_permission`. Per `test-apps/CLAUDE.md`,
+there is no approval modal — the Client side resolves it via one channel with two drivers:
+
+- **Vitest** drives it programmatically (`createTestHarness` `autoApproveAll` / `approvalResponses`).
+- **Playwright + manual** drive it through the chat composer. A runtime-neutral
+  `app-utils/approval-registry.ts` parks the `requestPermission` (the Client's handler delegates via
+  the new `ConnectCallbacks.onPermissionRequest`); the composer flips to an "awaiting approval"
+  placeholder (`[data-testid="composer"][data-awaiting-approval="true"]`) and stays editable; typing
+  `/approve [once|always]` or `/reject [once|always]` resolves it (`AppShell` maps verdict+scope to
+  the 4-option `optionId` set). browser + chrome-ext + http-frontend share this via the AppShell.
+
+| Host | Approval driving | Notes |
+|---|---|---|
+| browser / chrome-ext | composer `/approve`·`/reject` | lifecycle events ride the worker side-channel (`bootstrap-worker.ts` forwards `tool_approval_request`/`response`) |
+| http (WS) | composer `/approve`·`/reject` | `adapter-ws` passes `onPermissionRequest` into the WS `WireClient`; events ride `LIFECYCLE_EVENT_METHOD` |
+| http (SSE) | **unsupported** | SSE cannot carry a server→client `request_permission`; use the WS sibling for ask-mode. Documented gap; bridge deferred |
+| cli | auto-approve `allow_once` | the interactive REPL blocks on `await prompt()` mid-turn, so it cannot read a composer `/approve`; e2e drives via the harness Client instead |
+
 ## cli (`test-apps/cli/`)
 
 - **Entrypoint**: `src/cli.ts` (shebang Node entry). Three modes: interactive REPL, headless one-shot, RPC (ndjson over stdio).
