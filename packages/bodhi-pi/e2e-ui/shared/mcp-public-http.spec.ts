@@ -16,6 +16,11 @@ async function lastSystemEvent(page: import("@playwright/test").Page, event: str
 test("mcp public+http LLM prompt: agent uses get-sum(20, 22) and replies with 42", async ({ startApp, chat, page }) => {
 	await startApp();
 
+	// allow-all so the mcp tool call runs without an ask-mode approval prompt (tool behavior, not the
+	// approval flow — that's e2e-ui/shared/ask-mode.spec.ts).
+	await chat.send("/mode allow-all");
+	await expect.poll(() => chat.currentMode()).toBe("allow-all");
+
 	await chat.send(`/mcp add {"url":"${mcpEverythingUrl()}","auth":"public"}`);
 	const added = await lastSystemEvent(page, "added");
 	await expect(added).toBeVisible();

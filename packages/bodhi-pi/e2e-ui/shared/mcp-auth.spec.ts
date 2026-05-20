@@ -56,6 +56,11 @@ test("mcp http-param query LLM prompt: agent invokes whoami and assistant relays
 }) => {
 	await startApp();
 
+	// allow-all so the mcp tool call runs without an ask-mode approval prompt (this spec exercises mcp
+	// tool behavior, not the approval flow — that's e2e-ui/shared/ask-mode.spec.ts).
+	await chat.send("/mode allow-all");
+	await expect.poll(() => chat.currentMode()).toBe("allow-all");
+
 	const payload = JSON.stringify({
 		url: authMcpUrl(),
 		auth: "http-param",

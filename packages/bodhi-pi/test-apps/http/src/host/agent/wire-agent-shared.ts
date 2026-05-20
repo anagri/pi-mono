@@ -43,9 +43,11 @@ export interface WireAgentResult {
 }
 
 /**
- * Forwards every BodhiPiEvent — full payload, all 25 types — to the client via `extNotification`.
- * Diverges from production `bodhi-pi-http` deliberately: production downsamples to `LifecycleEventRecord`
- * (19 of 25 types); the test-app needs full visibility for e2e payload-field assertions.
+ * Forwards every BodhiPiEvent — full payload — to the client via `extNotification`, so the e2e/e2e-ui
+ * frontends get full event visibility. This is the rail the http/ws test-app FRONTENDS actually read
+ * (the core `event-wiring.ts` forwarder doesn't reach the per-turn-rebuilt http SSE frontend), so it
+ * must carry the lifecycle types too. The core forwarder ALSO emits the lifecycle subset, so over WS
+ * those surface twice — a benign test-app duplication that assertions tolerate (">= 1").
  */
 export function createForwardingEventHandlers(conn: AgentSideConnection, label: string): BodhiPiEventHandlers {
 	const post = (event: BodhiPiEvent): undefined => {
