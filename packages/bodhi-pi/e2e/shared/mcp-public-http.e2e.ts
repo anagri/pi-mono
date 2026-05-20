@@ -2,6 +2,7 @@ import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
+import { newAllowAllSession } from "../helpers/allow-all-session.js";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { useHarness } from "../helpers/use-harness.js";
@@ -24,7 +25,7 @@ test("mcp public+http: add → connect → include → tools → disconnect → 
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 
 	const added = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public" });
 	expect.soft(added.slug.length).toBeGreaterThan(0);
@@ -71,7 +72,7 @@ test("mcp public+http: LLM prompts agent to use get-sum(20, 22) and gets 42 stre
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 
 	const { slug } = await h.client.mcpAdd({ url: mcpEverythingUrl(), auth: "public" });
 	const connectResult = await h.client.mcpConnect({ slug });
@@ -127,7 +128,7 @@ test("mcp public+http: ACP-native `mcpServers: [name]` on session/new connects +
 	const url = mcpEverythingUrl();
 	const { slug } = await h.client.mcpAdd({ url, auth: "public", label: "everything-by-name" });
 
-	const { sessionId } = await h.clientConn.newSession({
+	const { sessionId } = await newAllowAllSession(h.clientConn, {
 		cwd: h.cwd,
 		mcpServers: [{ type: "http", name: slug, url, headers: [] }],
 	});
@@ -151,7 +152,7 @@ test("mcp public+http: unknown slug in session/new mcpServers is silently ignore
 	await h.clientConn.initialize(stdInitParams);
 
 	const url = mcpEverythingUrl();
-	const { sessionId } = await h.clientConn.newSession({
+	const { sessionId } = await newAllowAllSession(h.clientConn, {
 		cwd: h.cwd,
 		mcpServers: [{ type: "http", name: "unknown-slug-xyz", url, headers: [] }],
 	});

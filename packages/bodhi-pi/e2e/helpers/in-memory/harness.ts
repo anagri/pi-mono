@@ -31,6 +31,9 @@ export async function createInMemoryHarness(opts: E2EHarnessOptions): Promise<E2
 		kvStore,
 		scriptExecutor,
 		eventHandlers: handlers,
+		// Match the other reference hosts so e2e tests can switch a session to allow-all (the
+		// tool-behavior triage for ask-mode-by-default — see helpers/allow-all-session.ts).
+		allowsAllowAllMode: true,
 		...pickDefined({
 			getApiKey: opts.getApiKey,
 			systemPrompt: opts.systemPrompt,

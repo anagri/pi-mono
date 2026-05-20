@@ -2,6 +2,7 @@ import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
+import { newAllowAllSession } from "../helpers/allow-all-session.js";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { isRuntime } from "../helpers/runtime.js";
@@ -27,7 +28,7 @@ test.runIf(!isRuntime("in-memory"))(
 		);
 
 		await h.clientConn.initialize(stdInitParams);
-		const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+		const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 
 		// Step 1: echo via bash
 		h.updates.length = 0;

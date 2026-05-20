@@ -2,6 +2,7 @@ import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
+import { newAllowAllSession } from "../helpers/allow-all-session.js";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { useHarness } from "../helpers/use-harness.js";
@@ -26,7 +27,7 @@ test("input-transform with real LLM: ?quick prefix produces a short answer", asy
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 	const result = await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: "?quick what is 2 + 2" }],
@@ -49,7 +50,7 @@ test("pirate with real LLM: response uses pirate-style language", async () => {
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "Say hello in your own words." }] });
 
 	const text = chunkedAgentText(h.updates).toLowerCase();
@@ -72,7 +73,7 @@ test("redact-secrets with real LLM: API-key in tool output is scrubbed before be
 		"proj/leak.txt": "API_KEY=sk-PLAINTEXTSECRETXYZ123 should not leak",
 	});
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: `${h.cwd}/proj`, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: `${h.cwd}/proj`, mcpServers: [] });
 	await h.clientConn.prompt({
 		sessionId,
 		prompt: [
@@ -102,7 +103,7 @@ test("register-command extension: custom slash command expands and reaches the m
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({ sessionId, prompt: [{ type: "text", text: "/ext-greet" }] });
 	expect(chunkedAgentText(h.updates).toLowerCase()).toContain("hi");
 });
@@ -118,7 +119,7 @@ test("dynamic-tools with real LLM: model picks up bodhi_echo and uses it", async
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({
 		sessionId,
 		prompt: [
@@ -149,7 +150,7 @@ test("registerProvider with real Anthropic: switching to extension-supplied mode
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const newSess = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const newSess = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 	const sid = newSess.sessionId;
 
 	const opt = newSess.configOptions?.find((o) => o.id === "model");

@@ -3,6 +3,7 @@ import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { toolCallStarts } from "@test/helpers/tool-call-asserts.js";
 import { expect, test } from "vitest";
+import { newAllowAllSession } from "../helpers/allow-all-session.js";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { useHarness } from "../helpers/use-harness.js";
@@ -38,7 +39,7 @@ test("scripted skill: /skill:days-since-birthday invokes run_script and reports 
 	});
 
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 	await h.clientConn.prompt({
 		sessionId,
 		prompt: [{ type: "text", text: `/skill:days-since-birthday ${BIRTHDAY}` }],

@@ -2,6 +2,7 @@ import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
+import { newAllowAllSession } from "../helpers/allow-all-session.js";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { useHarness } from "../helpers/use-harness.js";
@@ -30,7 +31,7 @@ test("mcp http-param query: connect succeeds with ?api_key=… and whoami report
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 
 	const { slug } = await h.client.mcpAdd({
 		url: authMcpUrl(),
@@ -63,7 +64,7 @@ test("mcp http-param query: connect rejects when api_key is wrong", async () => 
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 
 	const { slug } = await h.client.mcpAdd({
 		url: authMcpUrl(),
@@ -84,7 +85,7 @@ test("mcp http-param query: LLM invokes whoami and gets 'authenticated via query
 		}),
 	);
 	await h.clientConn.initialize(stdInitParams);
-	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	const { sessionId } = await newAllowAllSession(h.clientConn, { cwd: h.cwd, mcpServers: [] });
 
 	const { slug } = await h.client.mcpAdd({
 		url: authMcpUrl(),
