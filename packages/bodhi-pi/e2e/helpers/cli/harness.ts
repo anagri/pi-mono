@@ -66,7 +66,7 @@ export async function createCliHarness(opts: E2EHarnessOptions): Promise<E2EHarn
 			sessionUpdate: async (params) => {
 				updates.push(params);
 			},
-			requestPermission: async () => ({ outcome: { outcome: "approved" } }),
+			requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "allow_once" } }),
 		}),
 		stream,
 	);

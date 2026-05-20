@@ -1,4 +1,4 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
+import type { RequestPermissionResponse, SessionNotification } from "@agentclientprotocol/sdk";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { BodhiPiLogger } from "@/acp/agent.js";
 import {
@@ -41,6 +41,14 @@ export interface TestHarnessOptions {
 	logger?: BodhiPiLogger;
 	supportsMcpStdio?: boolean;
 	mcpConnectionProvider?: McpConnectionProvider;
+	/**
+	 * Ask-mode approval driver. Default `true`: every `requestPermission` auto-resolves to
+	 * `allow_once`, so suites that don't care about the approval flow stay green. Approval-flow
+	 * tests set `false` and feed verdicts via `approvalResponses`.
+	 */
+	autoApproveAll?: boolean;
+	/** FIFO queue of verdicts consumed when `autoApproveAll` is `false`; empties to `cancelled`. */
+	approvalResponses?: RequestPermissionResponse[];
 }
 
 export interface TestHarness {
@@ -90,15 +98,22 @@ export function createTestHarness(opts: TestHarnessOptions): TestHarness {
 			...(opts.supportsMcpStdio !== undefined ? { supportsMcpStdio: opts.supportsMcpStdio } : {}),
 			...(opts.mcpConnectionProvider !== undefined ? { mcpConnectionProvider: opts.mcpConnectionProvider } : {}),
 		}),
-		() => ({
-			sessionUpdate: async (params) => {
-				updates.push(params);
-			},
-			requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-			extNotification: async (method, params) => {
-				extNotifications.push({ method, params });
-			},
-		}),
+		() => {
+			const approvalQueue = [...(opts.approvalResponses ?? [])];
+			const autoApproveAll = opts.autoApproveAll ?? true;
+			return {
+				sessionUpdate: async (params) => {
+					updates.push(params);
+				},
+				requestPermission: async () => {
+					if (autoApproveAll) return { outcome: { outcome: "selected", optionId: "allow_once" } };
+					return approvalQueue.shift() ?? { outcome: { outcome: "cancelled" } };
+				},
+				extNotification: async (method, params) => {
+					extNotifications.push({ method, params });
+				},
+			};
+		},
 	);
 	return { clientConn, updates, extNotifications, filesystem, sessionStore, kvStore };
 }

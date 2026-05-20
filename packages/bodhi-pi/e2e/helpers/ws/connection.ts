@@ -49,7 +49,7 @@ export async function openWsConnection(opts: WsConnectionOptions): Promise<WsCon
 		sessionUpdate: async (params) => {
 			opts.onUpdate(params);
 		},
-		requestPermission: async () => ({ outcome: { outcome: "approved" } }),
+		requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "allow_once" } }),
 		extNotification: async (method, params) => {
 			if (method === LIFECYCLE_EVENT_METHOD && onLifecycleEvent) {
 				onLifecycleEvent(params as unknown as BodhiPiEvent);

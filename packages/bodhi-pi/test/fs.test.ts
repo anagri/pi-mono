@@ -32,10 +32,17 @@ function newProvider(): FauxProviderRegistration {
 
 function harnessFor(
 	faux: FauxProviderRegistration,
-	opts?: { filesystem?: ReturnType<typeof createInMemoryFilesystem> },
+	opts?: { filesystem?: ReturnType<typeof createInMemoryFilesystem>; allowAll?: boolean },
 ) {
 	const model = faux.getModel() as Model<Api>;
-	return createTestHarness({ models: [model], defaultModelId: model.id, filesystem: opts?.filesystem });
+	return createTestHarness({
+		models: [model],
+		defaultModelId: model.id,
+		filesystem: opts?.filesystem,
+		...(opts?.allowAll
+			? { defaultMode: "allow-all" as const, allowsAllowAllMode: true, allowsAllowAllModeAsDefault: true }
+			: {}),
+	});
 }
 
 test("read returns file contents", async () => {
@@ -442,7 +449,9 @@ test("ls byte-truncation kicks in for a directory with many entries", async () =
 
 test("multiple tool calls in one prompt all surface as notifications in order", async () => {
 	const faux = newProvider();
-	const harness = harnessFor(faux);
+	// allow-all so the edit-category write doesn't add an ask-mode pending tool_call card that would
+	// inflate the start count this test asserts on.
+	const harness = harnessFor(faux, { allowAll: true });
 	// Prime two tool calls in sequence — pi-agent-core executes them sequentially
 	// and re-prompts the LLM after each round of results. We script that loop:
 	// turn 1: write,  turn 2 (after toolResult): read,  turn 3: "done".

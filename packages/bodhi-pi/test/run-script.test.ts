@@ -90,11 +90,15 @@ test("run_script invocation runs the script and emits tool_call/tool_call_update
 		fauxAssistantMessage("done"),
 	]);
 
+	// allow-all so the execute-category run_script call doesn't add an ask-mode pending tool_call card.
 	const harness = createTestHarness({
 		models: [modelOf(faux)],
 		defaultModelId: modelOf(faux).id,
 		filesystem,
 		scriptExecutor: createTestScriptExecutor(filesystem),
+		defaultMode: "allow-all",
+		allowsAllowAllMode: true,
+		allowsAllowAllModeAsDefault: true,
 	});
 
 	await harness.clientConn.initialize(stdInitParams);
