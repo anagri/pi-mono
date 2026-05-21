@@ -130,11 +130,26 @@ test-failfast:
     echo
     echo "✅ All steps passed."
 
-# Run @bodhiapp/bodhi-pi's vitest e2e suite (e2e/ folder).
-test-e2e:
+# Build pi-ai → pi-agent-core → bodhi-pi (upstream deps the test-apps compile against).
+_build-e2e-upstream:
+    npm --workspace @earendil-works/pi-ai run build
+    npm --workspace @earendil-works/pi-agent-core run build
+    npm --workspace @bodhiapp/bodhi-pi run build
+
+# Build every e2e test-app in dependency order (app-utils first, then its dependents).
+_build-e2e-test-apps:
+    npm --workspace @bodhiapp/bodhi-pi-test-app-utils run build
+    npm --workspace @bodhiapp/bodhi-pi-test-app-node-adapters run build
+    npm --workspace @bodhiapp/bodhi-pi-test-app-browser run build
+    npm --workspace @bodhiapp/bodhi-pi-test-app-cli run build
+    npm --workspace @bodhiapp/bodhi-pi-test-app-http run build:server
+    npm --workspace @bodhiapp/bodhi-pi-test-app-chrome-ext run build
+
+# Run @bodhiapp/bodhi-pi's vitest e2e suite (e2e/ folder). test:e2e builds the test-apps itself.
+test-e2e: _build-e2e-upstream
     npm --workspace @bodhiapp/bodhi-pi run test:e2e
 
 # Run @bodhiapp/bodhi-pi-e2e-ui's playwright suite (e2e-ui/ folder, all projects).
 # Pass extra Playwright flags after `--`, e.g. `just test-e2e-ui -- --headed --project=browser`.
-test-e2e-ui *ARGS:
+test-e2e-ui *ARGS: _build-e2e-upstream _build-e2e-test-apps
     npm --workspace @bodhiapp/bodhi-pi-e2e-ui test -- {{ARGS}}

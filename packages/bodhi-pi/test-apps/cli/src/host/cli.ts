@@ -39,6 +39,11 @@ const ALL_EVENT_TYPES = [
 	"session_navigate",
 	"session_fork",
 	"session_clone",
+	"mcp_status_change",
+	"mcp_tools_change",
+	"mcp_oauth_status_change",
+	"subagent_start",
+	"subagent_end",
 ] as const;
 
 /**

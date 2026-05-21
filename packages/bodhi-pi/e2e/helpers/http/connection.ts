@@ -26,10 +26,11 @@ export interface HttpConnectionOptions {
 	onLifecycleEvent?: (ev: BodhiPiEvent) => void;
 }
 
-const SSE_METHODS = new Set(["session/prompt", "session/load"]);
+const SSE_METHODS = new Set(["session/prompt", "session/load", "_bodhi-pi/subagent/run"]);
 
 // Ported from packages/bodhi-pi-http/src/frontend/lib/{acp-http-client,sse-parser}.ts.
-// `session/prompt` and `session/load` are SSE; everything else is JSON-on-JSON.
+// `session/prompt`, `session/load`, and `_bodhi-pi/subagent/run` stream SSE (must
+// match the server's SSE_METHODS in test-apps/http handler.ts); everything else is JSON-on-JSON.
 export class HttpAcpConnection implements BodhiPiAcpConnection {
 	private readonly baseUrl: string;
 	private readonly token: string;
