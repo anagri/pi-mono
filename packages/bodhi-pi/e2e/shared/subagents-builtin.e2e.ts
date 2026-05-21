@@ -1,10 +1,9 @@
-import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
-import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { loadScenarioFiles } from "../helpers/load-scenario.js";
+import { subagentApiKey, subagentModel } from "../helpers/models.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
@@ -16,12 +15,12 @@ interface ListedProfile {
 }
 
 test("built-in profiles are available without any .bodhi-pi/agents/ seed", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 
@@ -37,18 +36,19 @@ test("built-in profiles are available without any .bodhi-pi/agents/ seed", async
 });
 
 test("built-in explore profile spawned via _bodhi-pi/subagent/run reads a seeded file and finds the sentinel", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 	await h.setupFiles(await loadScenarioFiles("subagents-builtin"));
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await h.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: model.id });
 
 	const result = (await h.clientConn.extMethod("_bodhi-pi/subagent/run", {
 		sessionId,
@@ -63,18 +63,19 @@ test("built-in explore profile spawned via _bodhi-pi/subagent/run reads a seeded
 }, 60_000);
 
 test("parent LLM naturally invokes the built-in explore tool when asked, and the sentinel reaches the final response", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 	await h.setupFiles(await loadScenarioFiles("subagents-builtin"));
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await h.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: model.id });
 	await h.clientConn.prompt({
 		sessionId,
 		prompt: [

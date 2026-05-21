@@ -1,31 +1,28 @@
-import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
 import type { SubagentEndEvent, SubagentStartEvent } from "@/index.js";
-import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { loadScenarioFiles } from "../helpers/load-scenario.js";
+import { subagentApiKey, subagentModel } from "../helpers/models.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
 
 test("parallel subagent calls: parent LLM dispatches three counters via separate subagent tool calls in one assistant turn; children run concurrently (serverTime overlap) and aggregated results reach the final reply", async () => {
-	// Anthropic claude-haiku-4-5 is the model that reliably emits multiple tool
-	// calls in one assistant turn — reasoning models like gpt-5-mini chunk
-	// one-per-turn regardless of how strongly the prompt asks for parallel.
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 	await h.setupFiles(await loadScenarioFiles("subagents-parallel"));
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await h.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: model.id });
 	await h.clientConn.prompt({
 		sessionId,
 		prompt: [

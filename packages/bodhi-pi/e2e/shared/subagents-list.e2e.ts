@@ -1,9 +1,8 @@
-import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { expect, test } from "vitest";
-import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { loadScenarioFiles } from "../helpers/load-scenario.js";
+import { subagentApiKey, subagentModel } from "../helpers/models.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
@@ -18,12 +17,12 @@ interface ListedProfile {
 }
 
 test("/agents extMethod returns project profiles merged with built-ins, tagged by source", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 
@@ -45,12 +44,12 @@ test("/agents extMethod returns project profiles merged with built-ins, tagged b
 });
 
 test("/agents extMethod returns only built-ins when no .bodhi-pi/agents/ directory", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 

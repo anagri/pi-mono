@@ -2,11 +2,12 @@
 // providers, reading from process.env. global-setup.ts gates the env vars at
 // run start, so the `!` assertion is sound at test time.
 
-type KnownProvider = "openai" | "anthropic";
+type KnownProvider = "openai" | "anthropic" | "openrouter";
 
 const ENV_VAR: Record<KnownProvider, string> = {
 	openai: "OPENAI_API_KEY",
 	anthropic: "ANTHROPIC_API_KEY",
+	openrouter: "OPENROUTER_API_KEY",
 };
 
 export function envKeysFor(...providers: KnownProvider[]): (provider: string) => string | undefined {

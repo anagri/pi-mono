@@ -1,21 +1,20 @@
-import { getModel } from "@earendil-works/pi-ai";
 import { stdInitParams } from "@test/helpers/acp-constants.js";
 import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
-import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
 import { loadScenarioFiles } from "../helpers/load-scenario.js";
+import { subagentApiKey, subagentModel } from "../helpers/models.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 const harness = useHarness();
 
 test("subagent fork: parent reads a diff, spawns the reviewer fork sub-agent, child surfaces the sentinel from inherited transcript", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = subagentModel();
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: subagentApiKey,
 		}),
 	);
 
@@ -23,6 +22,7 @@ test("subagent fork: parent reads a diff, spawns the reviewer fork sub-agent, ch
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });
+	await h.clientConn.setSessionConfigOption({ sessionId, configId: "model", value: model.id });
 	await h.clientConn.prompt({
 		sessionId,
 		prompt: [
