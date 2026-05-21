@@ -22,7 +22,7 @@ test("parallel subagent calls: parent LLM dispatches three counters via separate
 			getApiKey: envKeysFor("anthropic"),
 		}),
 	);
-	await h.setupFiles(await loadScenarioFiles("subagents-batch"));
+	await h.setupFiles(await loadScenarioFiles("subagents-parallel"));
 
 	await h.clientConn.initialize(stdInitParams);
 	const { sessionId } = await h.clientConn.newSession({ cwd: h.cwd, mcpServers: [] });

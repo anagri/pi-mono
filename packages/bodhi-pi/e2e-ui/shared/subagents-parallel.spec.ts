@@ -5,7 +5,7 @@ test("parallel subagent calls: natural-language prompt triggers the LLM to dispa
 	startApp,
 	chat,
 }) => {
-	await startApp({ seedXml: scenarioSeedXml("subagents-batch") });
+	await startApp({ seedXml: scenarioSeedXml("subagents-parallel") });
 
 	await chat.send(
 		"Dispatch the word-count, line-count, and char-count sub-agents against sample.txt in parallel by issuing three separate `subagent` tool calls in the same assistant turn (one tool call per counter). After all three return, summarise each sub-agent's count in your final reply.",

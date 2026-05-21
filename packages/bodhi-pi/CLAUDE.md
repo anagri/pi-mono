@@ -156,7 +156,7 @@ First-party in `src/mcp/`. Decomposed into `McpService` (ACP methods + input dis
 - No `if (cond) { expect(...) }` — use narrowing helpers and `expect(val, "diag").toBe(...)`.
 - No milestone IDs in filenames (`chat.test.ts` not `m2_1_chat.test.ts`).
 - Shared helpers live in `test/helpers/` — never duplicate.
-- Tool-call tests: prefer `registerFauxProvider` over aimock (aimock SSE isn't always parsed for tool-call rounds).
+- Tool-call tests **in `test/`**: prefer `registerFauxProvider` over aimock (aimock SSE isn't always parsed for tool-call rounds). aimock is acceptable in `e2e/` + `e2e-ui/` (real-LLM suites; no faux tool-call scripting there).
 - `vitest.e2e.config.ts` does NOT use `mergeConfig` — composes `test.include` directly.
 - e2e: assert side-effects and stable substrings, not exact model text.
 - Per-feature e2e uses `gpt-4o-mini` (non-reasoning). Cross-provider parity lives in `e2e/chat.e2e.ts`.
