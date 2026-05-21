@@ -1,5 +1,7 @@
 import type { AvailableCommand, ClientSideConnection, SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
+	type BodhiPiClient,
+	createBodhiPiClient,
 	EXT_MCP_ADD,
 	EXT_MCP_CONNECT,
 	EXT_MCP_DISCONNECT,
@@ -16,16 +18,18 @@ import {
 	EXT_SUBAGENT_CHILDREN,
 	EXT_SUBAGENT_LIST,
 	EXT_SUBAGENT_RUN,
+	formatProviderAuth,
+	parseLoginArgs,
 	parseMcpAddArgs,
+	type SettingsScope,
 	type SubagentProfileSummary,
 } from "@bodhiapp/bodhi-pi";
 import { onOauthStatusEvent } from "./oauth-event-bus.ts";
 
 /**
- * Local slash dispatcher for the shared test-app UI. Operates on the raw
- * `ClientSideConnection` (not the publishable `BodhiPiClient`) so it stays
- * importable from the `e2e/` tree without violating the no-sibling-package
- * rule documented in `packages/bodhi-pi/e2e/CLAUDE.md`.
+ * Local slash dispatcher for the shared test-app UI (browser + http + chrome-ext).
+ * Session-management and auth commands drive the publishable `BodhiPiClient`;
+ * the MCP/OAuth flow keeps using `conn.extMethod` directly for its popup race.
  *
  * Precedence rule:
  *   1. Non-slash → caller forwards to session/prompt.
@@ -84,6 +88,7 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 
 	const parts = line.trim().split(/\s+/);
 	const cmd = parts[0];
+	const client = createBodhiPiClient(ctx.conn, { cwd: ctx.cwd });
 
 	switch (cmd) {
 		case "/model": {
@@ -329,6 +334,210 @@ export async function tryHandleSlash(line: string, ctx: SlashContext): Promise<S
 					"data-subagent-status": result.status,
 					"data-subagent-child-session-id": result.childSessionId,
 				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/compact": {
+			try {
+				const result = await client.compactSession({ sessionId: ctx.state.sessionId });
+				ctx.pushSystemMessage(`compacted (was ${result.tokensBefore} tokens):\n${result.summary}`, {
+					"data-session-event": "compacted",
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/entries": {
+			try {
+				const result = await client.listSessionEntries({ sessionId: ctx.state.sessionId });
+				const lines =
+					result.entries.length === 0
+						? ["(no entries)"]
+						: ["entries:", ...result.entries.map((e) => `  ${e.id}  ${e.role}  ${e.preview}`)];
+				ctx.pushSystemMessage(lines.join("\n"), {
+					"data-session-event": "entries",
+					"data-entry-count": String(result.entries.length),
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/tree": {
+			try {
+				const result = await client.getSessionTree({ sessionId: ctx.state.sessionId });
+				const lines = [
+					"tree:",
+					...result.nodes.map((n) => `  ${n.isLeaf ? "*" : " "} ${n.id}  ${n.type}  ${n.preview ?? ""}`),
+				];
+				ctx.pushSystemMessage(lines.join("\n"), {
+					"data-session-event": "tree",
+					"data-leaf-id": result.leafId ?? "",
+					"data-node-count": String(result.nodes.length),
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/goto": {
+			const targetEntryId = parts[1];
+			if (!targetEntryId) {
+				ctx.pushSystemMessage("usage: /goto <entry-id>");
+				return { handled: true };
+			}
+			try {
+				const result = await client.navigateSession({ sessionId: ctx.state.sessionId, targetEntryId });
+				ctx.pushSystemMessage(`moved to: ${result.leafId}`, {
+					"data-session-event": "navigated",
+					"data-leaf-id": result.leafId,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/name": {
+			const name = line.trim().slice(cmd.length).trim();
+			if (!name) {
+				ctx.pushSystemMessage("usage: /name <session name>");
+				return { handled: true };
+			}
+			try {
+				const result = await client.setSessionName({ sessionId: ctx.state.sessionId, name });
+				ctx.pushSystemMessage(`named: ${result.name}`, {
+					"data-session-event": "named",
+					"data-session-name": result.name,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/session": {
+			try {
+				const result = await client.getSessionStats({ sessionId: ctx.state.sessionId });
+				const lines = [
+					"session:",
+					`  messages:   ${result.messageCount}`,
+					`  tool calls: ${result.toolCallCount}`,
+					`  leaf:       ${result.leafId ?? "(none)"}`,
+				];
+				if (result.name) lines.push(`  name:       ${result.name}`);
+				ctx.pushSystemMessage(lines.join("\n"), {
+					"data-session-event": "stats",
+					"data-message-count": String(result.messageCount),
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/export": {
+			try {
+				const result = await client.exportSession({ sessionId: ctx.state.sessionId });
+				ctx.pushSystemMessage(result.content, {
+					"data-session-event": "exported",
+					"data-export-format": result.format,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/config": {
+			try {
+				const cfg = await client.getSessionConfig({ sessionId: ctx.state.sessionId });
+				const lines = [
+					"config:",
+					`  cwd:                ${cfg.cwd}`,
+					`  model:              ${cfg.currentModelId ?? "(none)"}`,
+					`  compaction.reserve: ${cfg.compaction.reserveTokens}`,
+					`  appendSystemPrompt: ${cfg.appendSystemPrompt ?? "(none)"}`,
+				];
+				ctx.pushSystemMessage(lines.join("\n"), { "data-session-event": "config" });
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/delete": {
+			const targetId = parts[1] ?? ctx.state.sessionId;
+			try {
+				await client.deleteSession({ sessionId: targetId });
+				ctx.pushSystemMessage(`deleted: ${targetId}`, {
+					"data-session-event": "deleted",
+					"data-session-id": targetId,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/settings":
+			return await handleSettingsSubcommand(parts.slice(1), client, ctx);
+
+		case "/login": {
+			const parsed = parseLoginArgs(line.trim().slice(cmd.length).trim());
+			if ("error" in parsed) {
+				ctx.pushSystemMessage(parsed.error);
+				return { handled: true };
+			}
+			try {
+				await client.addProvider(parsed.provider, parsed.config, { sessionId: ctx.state.sessionId });
+				ctx.pushSystemMessage(`logged in: ${parsed.provider}`, {
+					"data-auth-event": "login",
+					"data-auth-provider": parsed.provider,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/logout": {
+			const provider = parts[1];
+			if (!provider) {
+				ctx.pushSystemMessage("usage: /logout <provider>");
+				return { handled: true };
+			}
+			try {
+				await client.removeProvider(provider, { sessionId: ctx.state.sessionId });
+				ctx.pushSystemMessage(`logged out: ${provider}`, {
+					"data-auth-event": "logout",
+					"data-auth-provider": provider,
+				});
+			} catch (err) {
+				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+			}
+			return { handled: true };
+		}
+
+		case "/logins": {
+			try {
+				const providers = await client.listProviders();
+				if (providers.length === 0) {
+					ctx.pushSystemMessage("(no providers logged in)", { "data-auth-event": "logins-empty" });
+				} else {
+					const lines = ["logins:", ...providers.map((p) => `  ${p.provider}  ${formatProviderAuth(p.config)}`)];
+					ctx.pushSystemMessage(lines.join("\n"), {
+						"data-auth-event": "logins",
+						"data-auth-count": String(providers.length),
+					});
+				}
 			} catch (err) {
 				ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
 			}
@@ -638,6 +847,85 @@ async function handleMcpSubcommand(
 			}
 		} else {
 			ctx.pushSystemMessage(`unknown /mcp sub-command: ${sub}`);
+		}
+	} catch (err) {
+		ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
+	}
+	return { handled: true };
+}
+
+function parseScopeFlag(args: string[]): { scope?: SettingsScope; rest: string[] } {
+	const rest: string[] = [];
+	let scope: SettingsScope | undefined;
+	for (const a of args) {
+		if (a === "--global") scope = "global";
+		else if (a === "--project") scope = "project";
+		else if (a === "--session") scope = "session";
+		else rest.push(a);
+	}
+	return { ...(scope ? { scope } : {}), rest };
+}
+
+async function handleSettingsSubcommand(
+	args: string[],
+	client: BodhiPiClient,
+	ctx: SlashContext,
+): Promise<SlashOutcome> {
+	const sub = args[0];
+	const { scope, rest } = parseScopeFlag(args.slice(1));
+	try {
+		if (sub === "list") {
+			const result = await client.settings.list({ sessionId: ctx.state.sessionId, ...(scope ? { scope } : {}) });
+			ctx.pushSystemMessage(`settings (${result.scope}):\n${JSON.stringify(result.settings, null, 2)}`, {
+				"data-settings-event": "list",
+				"data-settings-scope": result.scope,
+			});
+		} else if (sub === "get") {
+			const key = rest[0];
+			if (!key) {
+				ctx.pushSystemMessage("usage: /settings get <key> [--global|--project|--session]");
+				return { handled: true };
+			}
+			const result = await client.settings.get({ sessionId: ctx.state.sessionId, key, ...(scope ? { scope } : {}) });
+			ctx.pushSystemMessage(
+				`${key} = ${JSON.stringify(result.value)} (effective ${JSON.stringify(result.effective)}, source ${result.source})`,
+				{ "data-settings-event": "get", "data-settings-key": key, "data-settings-source": result.source },
+			);
+		} else if (sub === "set") {
+			const key = rest[0];
+			const value = rest.slice(1).join(" ");
+			if (!key || value === "") {
+				ctx.pushSystemMessage("usage: /settings set <key> <value> [--global|--project|--session]");
+				return { handled: true };
+			}
+			const result = await client.settings.set({
+				sessionId: ctx.state.sessionId,
+				key,
+				value,
+				...(scope ? { scope } : {}),
+			});
+			ctx.pushSystemMessage(`set ${key} (${result.scope}) → effective ${JSON.stringify(result.effective)}`, {
+				"data-settings-event": "set",
+				"data-settings-key": key,
+				"data-settings-scope": result.scope,
+			});
+		} else if (sub === "unset") {
+			const key = rest[0];
+			if (!key) {
+				ctx.pushSystemMessage("usage: /settings unset <key> [--global|--project|--session]");
+				return { handled: true };
+			}
+			const result = await client.settings.unset({
+				sessionId: ctx.state.sessionId,
+				key,
+				...(scope ? { scope } : {}),
+			});
+			ctx.pushSystemMessage(`unset ${key} (${result.scope}) → effective ${JSON.stringify(result.effective)}`, {
+				"data-settings-event": "unset",
+				"data-settings-key": key,
+			});
+		} else {
+			ctx.pushSystemMessage("usage: /settings <list|get|set|unset> [args] [--global|--project|--session]");
 		}
 	} catch (err) {
 		ctx.pushSystemMessage(`error: ${(err as Error).message ?? String(err)}`);
