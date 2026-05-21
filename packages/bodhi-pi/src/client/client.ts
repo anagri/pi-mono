@@ -46,6 +46,9 @@ import {
 	EXT_SESSION_SETTINGS_UNSET,
 	EXT_SESSION_STATS,
 	EXT_SESSION_TREE,
+	EXT_SUBAGENT_CHILDREN,
+	EXT_SUBAGENT_LIST,
+	EXT_SUBAGENT_RUN,
 	MODEL_CONFIG_ID,
 } from "@/wire/constants.js";
 import { modelConfigFromOptions } from "./config-options.js";
@@ -95,6 +98,8 @@ import type {
 	ProviderAuth,
 	ProviderAuthEntry,
 	RemoveProviderOptions,
+	RunSubagentParams,
+	RunSubagentResult,
 	SessionConfigResult,
 	SessionEntriesResult,
 	SessionRef,
@@ -110,6 +115,8 @@ import type {
 	SettingsSetResult,
 	SettingsUnsetParams,
 	SettingsUnsetResult,
+	SubagentChildrenResult,
+	SubagentListResult,
 } from "./types.js";
 
 const INIT_PARAMS: InitializeRequest = {
@@ -491,6 +498,23 @@ export class BodhiPiClient {
 
 	getSessionConfig(params: SessionRef = {}): Promise<SessionConfigResult> {
 		return this.ext<SessionConfigResult>(EXT_SESSION_CONFIG, { sessionId: this.requireSession(params) });
+	}
+
+	runSubagent(params: RunSubagentParams): Promise<RunSubagentResult> {
+		return this.ext<RunSubagentResult>(EXT_SUBAGENT_RUN, {
+			sessionId: this.requireSession(params),
+			agent: params.agent,
+			task: params.task,
+			...pickDefined({ model: params.model }),
+		});
+	}
+
+	listSubagents(params: SessionRef = {}): Promise<SubagentListResult> {
+		return this.ext<SubagentListResult>(EXT_SUBAGENT_LIST, { sessionId: this.requireSession(params) });
+	}
+
+	subagentChildren(params: SessionRef = {}): Promise<SubagentChildrenResult> {
+		return this.ext<SubagentChildrenResult>(EXT_SUBAGENT_CHILDREN, { sessionId: this.requireSession(params) });
 	}
 
 	private kvSet(params: KvSetParams): Promise<KvSetResult> {

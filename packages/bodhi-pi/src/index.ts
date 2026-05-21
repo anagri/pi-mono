@@ -47,6 +47,8 @@ export type {
 	ProviderAuth,
 	ProviderAuthEntry,
 	RemoveProviderOptions,
+	RunSubagentParams,
+	RunSubagentResult,
 	SessionConfigResult,
 	SessionEntriesResult,
 	SessionStatsResult,
@@ -63,6 +65,8 @@ export type {
 	SettingsSetResult,
 	SettingsUnsetParams,
 	SettingsUnsetResult,
+	SubagentChildrenResult,
+	SubagentListResult,
 } from "./client/types.js";
 export type { PromptTemplate } from "./commands/prompt-templates.js";
 export {

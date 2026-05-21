@@ -17,6 +17,8 @@ import type {
 	SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk";
 import type { JsonValue } from "@/kv/kv-store.js";
+import type { SessionInfo } from "@/sessions/session-store.js";
+import type { SubagentProfileSummary } from "@/subagents/types.js";
 
 export interface BodhiPiAcpConnection {
 	initialize(params: InitializeRequest): Promise<InitializeResponse>;
@@ -415,3 +417,26 @@ export interface SettingsUnsetParams extends SessionRef {
 }
 
 export type SettingsUnsetResult = SettingsSetResult;
+
+export interface RunSubagentParams extends SessionRef {
+	agent: string;
+	task: string;
+	model?: string;
+}
+
+export interface RunSubagentResult {
+	childSessionId: string;
+	status: "completed" | "cancelled" | "failed";
+	durationMs: number;
+	toolCount: number;
+	summary?: string;
+	error?: string;
+}
+
+export interface SubagentListResult {
+	profiles: SubagentProfileSummary[];
+}
+
+export interface SubagentChildrenResult {
+	children: SessionInfo[];
+}
