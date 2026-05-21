@@ -62,6 +62,8 @@ export function getLastAssistantUsage(entries: SessionEntry[]): Usage | undefine
 	return undefined;
 }
 
+const IMAGE_CHARS_ESTIMATE = 4800;
+
 /**
  * Conservative chars/4 heuristic — used only for trailing-message estimates
  * after the last assistant `Usage`. Source of truth is the model's own usage.
@@ -81,7 +83,7 @@ export function estimateTokens(message: AgentMessage): number {
 	} else if (message.role === "toolResult") {
 		for (const b of message.content) {
 			if (b.type === "text") chars += b.text.length;
-			else if (b.type === "image") chars += 4800;
+			else if (b.type === "image") chars += IMAGE_CHARS_ESTIMATE;
 		}
 	}
 	return Math.ceil(chars / 4);

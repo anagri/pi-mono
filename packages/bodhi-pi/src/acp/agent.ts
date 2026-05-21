@@ -52,9 +52,8 @@ import {
 } from "@/sessions/session-bootstrap.js";
 import { SessionGraphService } from "@/sessions/session-graph-service.js";
 import { SessionInfoService } from "@/sessions/session-info-service.js";
-import type { ResolvedRetryOptions, SessionState } from "@/sessions/session-state.js";
+import type { SessionState } from "@/sessions/session-state.js";
 import type { SessionStore } from "@/sessions/session-store.js";
-import type { BodhiPiProjectSettings, ProviderOptionsEntry } from "@/settings/settings.js";
 import { SettingsService } from "@/settings/settings-service.js";
 import type { Skill } from "@/skills/skill.js";
 import { SubagentService } from "@/subagents/subagent-service.js";
@@ -134,19 +133,6 @@ export interface BodhiPiConfig {
 export interface BodhiPiLogger {
 	error(message: string, ...args: unknown[]): void;
 	warn(message: string, ...args: unknown[]): void;
-}
-
-function _resolveProviderStreamOptions(provider: string, merged: BodhiPiProjectSettings): ResolvedRetryOptions {
-	const perProvider: ProviderOptionsEntry | undefined = merged.providerOptions?.[provider];
-	const defaults = merged.retry;
-	const out: ResolvedRetryOptions = {};
-	const maxRetries = perProvider?.maxRetries ?? defaults?.maxRetries;
-	const timeoutMs = perProvider?.timeoutMs;
-	const maxRetryDelayMs = perProvider?.maxRetryDelayMs ?? defaults?.maxDelayMs;
-	if (maxRetries !== undefined) out.maxRetries = maxRetries;
-	if (timeoutMs !== undefined) out.timeoutMs = timeoutMs;
-	if (maxRetryDelayMs !== undefined) out.maxRetryDelayMs = maxRetryDelayMs;
-	return out;
 }
 
 function toAvailableCommand(t: PromptTemplate): AvailableCommand {

@@ -28,6 +28,7 @@ export const SUBAGENT_MAX_DEPTH = 2;
 export const SUBAGENT_SUMMARY_MAX_CHARS = 4000;
 /** Max chars shown in the parent's progress UI when a child invokes a tool. */
 export const SUBAGENT_PROGRESS_TOOL_PREVIEW_CHARS = 80;
+const SUBAGENT_PROGRESS_TEXT_PREVIEW_CHARS = 160;
 
 export interface SubagentServiceDeps {
 	sessions: Map<string, SessionState>;
@@ -125,7 +126,10 @@ export class SubagentService {
 				if (e.message.role !== "assistant") return;
 				const text = extractText(e.message).trim();
 				if (!text) return;
-				const snippet = text.length > 160 ? `${text.slice(0, 160)}…` : text;
+				const snippet =
+					text.length > SUBAGENT_PROGRESS_TEXT_PREVIEW_CHARS
+						? `${text.slice(0, SUBAGENT_PROGRESS_TEXT_PREVIEW_CHARS)}…`
+						: text;
 				run.onUpdate({
 					content: [{ type: "text", text: `[${run.profile.name}] ${snippet}` }],
 					details: {

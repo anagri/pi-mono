@@ -10,7 +10,6 @@ import {
 	getModels,
 	getProviders,
 	getSupportedThinkingLevels,
-	type KnownProvider,
 	type Model,
 	type ModelThinkingLevel,
 } from "@earendil-works/pi-ai";
@@ -142,7 +141,7 @@ export class ModelRegistry {
 			const key = await this.resolveProviderApiKey(provider);
 			if (!key) continue;
 			const baseUrl = await this.resolveProviderBaseUrl(provider);
-			for (const m of getModels(provider as KnownProvider) as Model<Api>[]) {
+			for (const m of getModels(provider) as Model<Api>[]) {
 				push(baseUrl ? { ...m, baseUrl } : m);
 			}
 		}
