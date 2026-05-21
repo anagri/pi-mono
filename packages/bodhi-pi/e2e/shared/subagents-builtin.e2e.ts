@@ -16,12 +16,12 @@ interface ListedProfile {
 }
 
 test("built-in profiles are available without any .bodhi-pi/agents/ seed", async () => {
-	const model = getModel("openai", "gpt-4o-mini");
+	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("openai"),
+			getApiKey: envKeysFor("anthropic"),
 		}),
 	);
 
@@ -37,12 +37,12 @@ test("built-in profiles are available without any .bodhi-pi/agents/ seed", async
 });
 
 test("built-in explore profile spawned via _bodhi-pi/subagent/run reads a seeded file and finds the sentinel", async () => {
-	const model = getModel("openai", "gpt-4o-mini");
+	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("openai"),
+			getApiKey: envKeysFor("anthropic"),
 		}),
 	);
 	await h.setupFiles(await loadScenarioFiles("subagents-builtin"));
@@ -63,12 +63,12 @@ test("built-in explore profile spawned via _bodhi-pi/subagent/run reads a seeded
 }, 60_000);
 
 test("parent LLM naturally invokes the built-in explore tool when asked, and the sentinel reaches the final response", async () => {
-	const model = getModel("openai", "gpt-4o-mini");
+	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("openai"),
+			getApiKey: envKeysFor("anthropic"),
 		}),
 	);
 	await h.setupFiles(await loadScenarioFiles("subagents-builtin"));

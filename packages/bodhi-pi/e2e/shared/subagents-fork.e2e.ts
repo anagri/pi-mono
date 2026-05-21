@@ -10,12 +10,12 @@ import { useHarness } from "../helpers/use-harness.js";
 const harness = useHarness();
 
 test("subagent fork: parent reads a diff, spawns the reviewer fork sub-agent, child surfaces the sentinel from inherited transcript", async () => {
-	const model = getModel("openai", "gpt-4o-mini");
+	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("openai"),
+			getApiKey: envKeysFor("anthropic"),
 		}),
 	);
 
