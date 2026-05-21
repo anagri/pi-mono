@@ -4,7 +4,6 @@ import { chunkedAgentText } from "@test/helpers/notifications.js";
 import { expect, test } from "vitest";
 import { envKeysFor } from "../helpers/api-keys.js";
 import { createE2EHarness } from "../helpers/harness.js";
-import { isRuntime } from "../helpers/runtime.js";
 import { useHarness } from "../helpers/use-harness.js";
 
 // End-to-end coverage for the session-lifecycle ACP methods beyond the
@@ -56,13 +55,7 @@ test("sessions: list, close (record kept), resume (history rehydrated), delete (
 	ids = list.sessions.map((s) => s.sessionId);
 	expect.soft(ids, "closed session still listed (record persists)").toContain(sidA);
 
-	// resumeSession rehydrates from the store; subsequent prompt has the
-	// earlier turn in context. Under http, the server resumes implicitly
-	// before every sessionId-bound request, so the explicit RPC is not
-	// exposed — rely on the next prompt to rehydrate.
-	if (!isRuntime("http")) {
-		await h.clientConn.resumeSession({ sessionId: sidA, cwd: h.cwd });
-	}
+	await h.clientConn.resumeSession({ sessionId: sidA, cwd: h.cwd });
 	h.updates.length = 0;
 	const recallResult = await h.clientConn.prompt({
 		sessionId: sidA,

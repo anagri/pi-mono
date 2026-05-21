@@ -1,5 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { BodhiPiProjectSettings } from "@/settings/settings.js";
+import { parseDottedKey, setAt, unsetAt } from "@/settings/settings-writer.js";
 import { buildEntryIndex } from "./_shared.js";
 import type { BranchSummaryEntry, CompactionEntry, CustomMessageEntry, SessionEntry } from "./entries.js";
 import type { SessionRecord } from "./session-store.js";
@@ -11,6 +13,7 @@ export interface SessionContext {
 	name: string | null;
 	/** Last persisted MCP inclusion snapshot. `null` when the session has never written one. */
 	mcpInclusion: string[] | null;
+	sessionOverrides: BodhiPiProjectSettings;
 }
 
 /**
@@ -82,7 +85,14 @@ export function buildSessionContext(
 	const entries = record.entries;
 	const targetLeaf = leafId !== undefined ? leafId : (record.leafId ?? null);
 	if (targetLeaf === null && entries.length === 0) {
-		return { messages: [], currentModelId: null, currentThinkingLevel: null, name: null, mcpInclusion: null };
+		return {
+			messages: [],
+			currentModelId: null,
+			currentThinkingLevel: null,
+			name: null,
+			mcpInclusion: null,
+			sessionOverrides: {},
+		};
 	}
 
 	const path = walkPath(entries, targetLeaf);
@@ -91,6 +101,7 @@ export function buildSessionContext(
 	let currentThinkingLevel: ModelThinkingLevel | null = null;
 	let name: string | null = null;
 	let mcpInclusion: string[] | null = null;
+	let sessionOverrides: BodhiPiProjectSettings = {};
 	let compaction: CompactionEntry | null = null;
 	for (const entry of path) {
 		if (entry.type === "model_change") {
@@ -101,6 +112,13 @@ export function buildSessionContext(
 			name = entry.name;
 		} else if (entry.type === "mcp_inclusion_set") {
 			mcpInclusion = entry.slugs.slice();
+		} else if (entry.type === "settings_change") {
+			const path = parseDottedKey(entry.key);
+			sessionOverrides = (
+				entry.op === "unset"
+					? unsetAt(sessionOverrides as Record<string, unknown>, path)
+					: setAt(sessionOverrides as Record<string, unknown>, path, entry.value)
+			) as BodhiPiProjectSettings;
 		} else if (entry.type === "compaction") {
 			compaction = entry;
 		}
@@ -133,5 +151,5 @@ export function buildSessionContext(
 		for (const entry of path) appendIfMessage(entry);
 	}
 
-	return { messages, currentModelId, currentThinkingLevel, name, mcpInclusion };
+	return { messages, currentModelId, currentThinkingLevel, name, mcpInclusion, sessionOverrides };
 }

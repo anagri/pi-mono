@@ -1,7 +1,9 @@
 import { RequestError } from "@agentclientprotocol/sdk";
+import { randomUUID } from "@/_internal/uuid.js";
 import type { EventDispatcher } from "@/events/dispatcher.js";
 import { createEvent } from "@/events/factory.js";
 import type { Filesystem } from "@/filesystem/filesystem.js";
+import type { AppendEntry } from "@/models/registry.js";
 import { requireLiveSession } from "@/sessions/resolution.js";
 import type { SessionState } from "@/sessions/session-state.js";
 import {
@@ -34,6 +36,7 @@ export interface SettingsServiceDeps {
 	homeDir?: string;
 	events: EventDispatcher;
 	sessions: Map<string, SessionState>;
+	appendEntry: AppendEntry;
 }
 
 export class SettingsService {
@@ -42,6 +45,7 @@ export class SettingsService {
 	private readonly homeDir: string | undefined;
 	private readonly events: EventDispatcher;
 	private readonly sessions: Map<string, SessionState>;
+	private readonly appendEntry: AppendEntry;
 
 	constructor(deps: SettingsServiceDeps) {
 		this.filesystem = deps.filesystem;
@@ -49,6 +53,7 @@ export class SettingsService {
 		this.homeDir = deps.homeDir;
 		this.events = deps.events;
 		this.sessions = deps.sessions;
+		this.appendEntry = deps.appendEntry;
 	}
 
 	register(): Array<[string, ExtHandler]> {
@@ -145,6 +150,14 @@ export class SettingsService {
 				path,
 				value,
 			) as BodhiPiProjectSettings;
+			await this.appendEntry(params.sessionId as string, session, {
+				type: "settings_change",
+				id: randomUUID(),
+				timestamp: Date.now(),
+				key,
+				value,
+				op: "set",
+			});
 		}
 
 		await this.events.emit(
@@ -183,6 +196,14 @@ export class SettingsService {
 				session.settings.sessionOverrides as Record<string, unknown>,
 				path,
 			) as BodhiPiProjectSettings;
+			await this.appendEntry(params.sessionId as string, session, {
+				type: "settings_change",
+				id: randomUUID(),
+				timestamp: Date.now(),
+				key,
+				value: null,
+				op: "unset",
+			});
 		}
 
 		await this.events.emit(

@@ -39,6 +39,13 @@ export interface McpInclusionEntry extends BaseEntry {
 	slugs: string[];
 }
 
+export interface SettingsChangeEntry extends BaseEntry {
+	type: "settings_change";
+	key: string;
+	value: unknown;
+	op: "set" | "unset";
+}
+
 export interface CompactionDetails {
 	readFiles: string[];
 	modifiedFiles: string[];
@@ -114,6 +121,7 @@ export type SessionEntry =
 	| ModelChangeEntry
 	| ThinkingChangeEntry
 	| McpInclusionEntry
+	| SettingsChangeEntry
 	| CompactionEntry
 	| BranchSummaryEntry
 	| SessionInfoEntry

@@ -17,7 +17,7 @@ export interface ResolvedRetryOptions {
 /**
  * Three-layer settings snapshot read at session bootstrap. Mutated only by `handleSettings*`
  * (session-scope) and re-loaded into `projectSettings` / `globalSettings` after the corresponding
- * file write. `sessionOverrides` is in-memory only.
+ * file write. `sessionOverrides` is in-memory; persisted+replayed via `settings_change` entries.
  */
 export interface SettingsState {
 	/** Global settings layer snapshot (Node hosts only); `null` when `BodhiPiConfig.homeDir` was omitted. */

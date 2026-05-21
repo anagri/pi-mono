@@ -238,6 +238,7 @@ export async function buildSessionState(
 		messages?: AgentMessage[];
 		leafId?: string | null;
 		initialThinkingLevel?: ModelThinkingLevel | null;
+		sessionOverrides?: BodhiPiProjectSettings;
 	},
 ): Promise<void> {
 	const { config, sessions, modelRegistry, compactionOrchestrator, events, extensionRunner } = deps;
@@ -319,7 +320,7 @@ export async function buildSessionState(
 			...(projectSettingsResult.parseError !== undefined
 				? { projectSettingsParseError: projectSettingsResult.parseError }
 				: {}),
-			sessionOverrides: {},
+			sessionOverrides: args.sessionOverrides ?? {},
 		},
 		runtime: {
 			piAgent,
@@ -366,6 +367,7 @@ export async function rehydrateSession(
 		messages: ctx.messages,
 		leafId,
 		initialThinkingLevel: ctx.currentThinkingLevel,
+		sessionOverrides: ctx.sessionOverrides,
 	});
 	return {
 		entries: record.entries,

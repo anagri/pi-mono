@@ -252,6 +252,7 @@ class BodhiPiAcpAgent implements AcpAgent {
 			...(config.homeDir ? { homeDir: config.homeDir } : {}),
 			events: this.events,
 			sessions: this.sessions,
+			appendEntry: this.appendEntry.bind(this),
 		});
 		this.sessionInfoService = new SessionInfoService({
 			sessions: this.sessions,
