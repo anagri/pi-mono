@@ -43,9 +43,12 @@ export interface WireAgentResult {
 }
 
 /**
- * Forwards every BodhiPiEvent — full payload, all 32 types — to the client via `extNotification`.
- * Diverges from production `bodhi-pi-http` deliberately: production downsamples to `LifecycleEventRecord`;
- * the test-app needs full visibility for e2e payload-field assertions.
+ * Forwards BodhiPiEvents to the client via `extNotification` for the e2e harness's event log.
+ * Deliberately omits the 5 mcp/subagent lifecycle events (mcp_status_change, mcp_tools_change,
+ * mcp_oauth_status_change, subagent_start, subagent_end): core `src/acp/event-wiring.ts` already
+ * forwards those via LIFECYCLE_EVENT_METHOD on the SAME extNotification channel, so re-forwarding
+ * them here would double them on http/ws. Production bodhi-pi-http downsamples further; the test-app
+ * keeps the rest at full payload for e2e field assertions.
  */
 export function createForwardingEventHandlers(conn: AgentSideConnection, label: string): BodhiPiEventHandlers {
 	const post = (event: BodhiPiEvent): undefined => {
@@ -82,11 +85,6 @@ export function createForwardingEventHandlers(conn: AgentSideConnection, label: 
 		session_navigate: [post],
 		session_fork: [post],
 		session_clone: [post],
-		mcp_status_change: [post],
-		mcp_tools_change: [post],
-		mcp_oauth_status_change: [post],
-		subagent_start: [post],
-		subagent_end: [post],
 	};
 }
 

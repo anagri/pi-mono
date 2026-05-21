@@ -10,12 +10,12 @@ import { useHarness } from "../helpers/use-harness.js";
 const harness = useHarness();
 
 test("subagent: parent LLM invokes the extractor profile and surfaces the summary", async () => {
-	const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+	const model = getModel("openai", "gpt-4o-mini");
 	const h = harness.set(
 		await createE2EHarness({
 			models: [model],
 			defaultModelId: model.id,
-			getApiKey: envKeysFor("anthropic"),
+			getApiKey: envKeysFor("openai"),
 		}),
 	);
 

@@ -64,10 +64,6 @@ export function wireInternalEventHandlers(deps: EventWiringDeps): void {
 	events.appendHandlers("mcp_oauth_status_change", [forwardLifecycle]);
 	events.appendHandlers("subagent_start", [forwardLifecycle]);
 	events.appendHandlers("subagent_end", [forwardLifecycle]);
-	events.appendHandlers("compaction_start", [forwardLifecycle]);
-	events.appendHandlers("compaction_end", [forwardLifecycle]);
-	events.appendHandlers("branch_summary_created", [forwardLifecycle]);
-	events.appendHandlers("session_navigate", [forwardLifecycle]);
 }
 
 /** Dotted-key paths whose changes reshape the model picker advertised in `configOptions`. */

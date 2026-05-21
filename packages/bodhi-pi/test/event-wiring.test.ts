@@ -26,7 +26,7 @@ function setup() {
 }
 
 describe("event-wiring LIFECYCLE_EVENT_METHOD forwarding", () => {
-	test("forwards compaction + branch-summary + navigate to the wire", async () => {
+	test("does NOT core-forward compaction/branch-summary/navigate (in-process only; test-app forwarders relay them for e2e)", async () => {
 		const { events, lifecycleTypes } = setup();
 		await events.emit(createEvent("compaction_start", { sessionId: "s1", reason: "manual" }));
 		await events.emit(
@@ -49,12 +49,7 @@ describe("event-wiring LIFECYCLE_EVENT_METHOD forwarding", () => {
 		await events.emit(
 			createEvent("session_navigate", { sessionId: "s1", fromLeafId: null, toLeafId: "l2", crossedBranches: true }),
 		);
-		expect(lifecycleTypes()).toEqual([
-			"compaction_start",
-			"compaction_end",
-			"branch_summary_created",
-			"session_navigate",
-		]);
+		expect(lifecycleTypes()).toEqual([]);
 	});
 
 	test("forwards mcp + subagent lifecycle, including the empty-sessionId oauth edge", async () => {
