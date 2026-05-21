@@ -80,9 +80,7 @@ async function tryHandleSlash(
 	}
 
 	if (cmd === "/agents") {
-		const res = (await client.ext("_bodhi-pi/subagent/list", { sessionId })) as {
-			profiles: Array<{ name: string; description: string }>;
-		};
+		const res = await client.listSubagents({ sessionId });
 		if (res.profiles.length === 0) return "(no sub-agent profiles in .bodhi-pi/agents/)";
 		return ["agents:", ...res.profiles.map((p) => `  ${p.name}  ${p.description}`)].join("\n");
 	}
@@ -90,9 +88,7 @@ async function tryHandleSlash(
 	if (cmd === "/subagent") {
 		const sub = parts[1];
 		if (sub === "children") {
-			const res = (await client.ext("_bodhi-pi/subagent/children", { sessionId })) as {
-				children: Array<{ sessionId: string; subagent?: { profileName: string } }>;
-			};
+			const res = await client.subagentChildren({ sessionId });
 			if (res.children.length === 0) return "(no sub-agent runs from this session)";
 			return [
 				"sub-agent runs:",
@@ -104,14 +100,7 @@ async function tryHandleSlash(
 			return "usage: /subagent <name> <task...>  |  /subagent children";
 		}
 		const task = line.trim().slice(`/subagent ${agent} `.length);
-		const res = (await client.ext("_bodhi-pi/subagent/run", { sessionId, agent, task })) as {
-			childSessionId: string;
-			status: string;
-			summary?: string;
-			durationMs: number;
-			toolCount: number;
-			error?: string;
-		};
+		const res = await client.runSubagent({ sessionId, agent, task });
 		const lines = [
 			`sub-agent ${agent}: ${res.status} (${res.durationMs}ms, ${res.toolCount} tool calls)`,
 			`childSessionId: ${res.childSessionId}`,

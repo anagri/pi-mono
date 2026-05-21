@@ -1,10 +1,12 @@
 import type { AvailableCommand, SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
 	type BodhiPiClient,
+	EXT_MCP_ADD,
 	formatProviderAuth,
 	type ModelOption,
 	modelConfigFromOptions,
 	parseLoginArgs,
+	parseMcpAddArgs,
 	type SessionStore,
 } from "@bodhiapp/bodhi-pi";
 import type { Renderer } from "./render.js";
@@ -527,6 +529,62 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
 			return false;
 		}
 
+		case "/mcps": {
+			const entries = await ctx.client.mcpList();
+			if (entries.length === 0) {
+				process.stdout.write("  (no MCPs configured)\n");
+			} else {
+				for (const e of entries) {
+					process.stdout.write(`  ${e.slug}  ${e.status}  ${e.transport}  ${e.url ?? e.command ?? ""}\n`);
+				}
+			}
+			return false;
+		}
+
+		case "/mcp": {
+			await handleMcpCommand(parts.slice(1), ctx);
+			return false;
+		}
+
+		case "/agents": {
+			const { profiles } = await ctx.client.listSubagents({ sessionId: ctx.state.sessionId });
+			if (profiles.length === 0) {
+				process.stdout.write("  (no sub-agent profiles in .bodhi-pi/agents/)\n");
+			} else {
+				for (const p of profiles) process.stdout.write(`  ${p.name}  ${p.description}\n`);
+			}
+			return false;
+		}
+
+		case "/subagent": {
+			const sub = parts[1];
+			if (sub === "children") {
+				const { children } = await ctx.client.subagentChildren({ sessionId: ctx.state.sessionId });
+				if (children.length === 0) {
+					process.stdout.write("  (no sub-agent runs from this session)\n");
+				} else {
+					for (const c of children) {
+						process.stdout.write(`  ${c.sessionId}  ${c.subagent?.profileName ?? "(unknown)"}\n`);
+					}
+				}
+				return false;
+			}
+			const agent = parts[1];
+			if (!agent || parts.length < 3) {
+				process.stdout.write("usage: /subagent <name> <task...>  |  /subagent children\n");
+				return false;
+			}
+			const task = line.trim().slice(`/subagent ${agent} `.length);
+			const result = await ctx.client.runSubagent({ sessionId: ctx.state.sessionId, agent, task });
+			process.stdout.write(
+				`sub-agent ${agent}: ${result.status} (${result.durationMs}ms, ${result.toolCount} tool calls)\n`,
+			);
+			process.stdout.write(`childSessionId: ${result.childSessionId}\n`);
+			if (result.summary) process.stdout.write(`\n${result.summary}\n`);
+			if (result.error) process.stdout.write(`\nerror: ${result.error}\n`);
+			return false;
+		}
+
 		case "/quit":
 		case "/exit":
 			return true;
@@ -545,4 +603,61 @@ function formatAge(ms: number): string {
 	const h = Math.floor(min / 60);
 	if (h < 24) return `${h}h ago`;
 	return `${Math.floor(h / 24)}d ago`;
+}
+
+async function handleMcpCommand(args: string[], ctx: CommandContext): Promise<void> {
+	const sub = args[0];
+	if (sub === "add") {
+		const parsed = parseMcpAddArgs(args.slice(1));
+		if (parsed.error || !parsed.value) {
+			process.stdout.write(`${parsed.error ?? "missing argument"}\n`);
+			return;
+		}
+		const result = await ctx.client.ext<{ slug: string }>(EXT_MCP_ADD, parsed.value);
+		process.stdout.write(`added: ${result.slug}\n`);
+		return;
+	}
+	const slug = args[1];
+	if (!sub || !slug) {
+		process.stdout.write("usage: /mcp <add|connect|disconnect|reconnect|remove|include|exclude|tools> [args…]\n");
+		return;
+	}
+	switch (sub) {
+		case "connect": {
+			const { tools } = await ctx.client.mcpConnect({ slug });
+			process.stdout.write(`connected ${slug}: ${tools.join(", ") || "(no tools)"}\n`);
+			break;
+		}
+		case "disconnect":
+			await ctx.client.mcpDisconnect({ slug });
+			process.stdout.write(`disconnected ${slug}\n`);
+			break;
+		case "reconnect": {
+			const { tools } = await ctx.client.mcpReconnect({ slug });
+			process.stdout.write(`reconnected ${slug}: ${tools.join(", ") || "(no tools)"}\n`);
+			break;
+		}
+		case "remove":
+			await ctx.client.mcpRemove({ slug });
+			process.stdout.write(`removed ${slug}\n`);
+			break;
+		case "include": {
+			const { tools } = await ctx.client.mcpInclude({ sessionId: ctx.state.sessionId, slug });
+			process.stdout.write(`included ${slug}: ${tools.join(", ") || "(no tools visible)"}\n`);
+			break;
+		}
+		case "exclude":
+			await ctx.client.mcpExclude({ sessionId: ctx.state.sessionId, slug });
+			process.stdout.write(`excluded ${slug}\n`);
+			break;
+		case "tools": {
+			const tools = await ctx.client.mcpTools({ sessionId: ctx.state.sessionId, slug });
+			process.stdout.write(
+				tools.length === 0 ? `(no tools for ${slug})\n` : `tools for ${slug}:\n  ${tools.join("\n  ")}\n`,
+			);
+			break;
+		}
+		default:
+			process.stdout.write(`unknown /mcp sub-command: ${sub}\n`);
+	}
 }
